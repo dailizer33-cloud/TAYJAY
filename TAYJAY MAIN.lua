@@ -200,7 +200,7 @@ pcall(function()
                if v.Name == guiName
                    or v.Name == "TayJay_DeltaMenu_V68_Pastel"
                    or v.Name == "TayJay_DeltaMenu_V69_Pastel"
-                   or v.Name == "TayJay_FPS_Booster_V72" then
+                   or v.Name == "TayJay_FPS_Booster_V72" or v.Name == "TayJayLockGui" or v.Name == "TayJayControlGui" then
                    pcall(function() v:Destroy() end)
                end
            end
@@ -216,6 +216,10 @@ SecureParentGui(screenGui)
 -- Previously this helper was declared below the first calls, which caused
 -- an attempt to call a nil global and stopped the script before the menu appeared.
 local activeConnections = {}
+local shutdownHooks = {}
+local function registerShutdownHook(callback)
+   if type(callback) == "function" then table.insert(shutdownHooks, callback) end
+end
 local function trackConnection(conn)
    if conn then table.insert(activeConnections, conn) end
    return conn
@@ -234,7 +238,8 @@ local function updateScreenScale()
                scaleObject.Name = "TayJayResponsiveScale"
                scaleObject.Parent = root
            end
-           scaleObject.Scale = scaleValue
+           local isPrimaryUI = root.Name == "TayJayMainMenu" or root.Name == "TayJayMainToggle"
+           scaleObject.Scale = scaleValue * (isPrimaryUI and 1 or 0.9)
        end
    end
 end
@@ -1018,7 +1023,7 @@ local groupDragging, groupDragInput, groupDragStart, groupStartPos = false, nil,
 local isWindowLocked = false
 local function beginGroupDrag(panel)
    panel.InputBegan:Connect(function(input)
-       if not isWindowLocked and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+       if not isWindowLocked and not _G.TAYJAY_UI.locked and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
            groupDragging = true; groupDragStart = input.Position; groupStartPos = deathNoteGroup.Position
            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then groupDragging = false end end)
        end
@@ -1029,7 +1034,7 @@ local function beginGroupDrag(panel)
 end
 beginGroupDrag(deathNoteMain)
 trackConnection(UserInputService.InputChanged:Connect(function(input)
-   if input == groupDragInput and groupDragging and not isWindowLocked then
+   if input == groupDragInput and groupDragging and not isWindowLocked and not _G.TAYJAY_UI.locked then
        local delta = input.Position - groupDragStart
        deathNoteGroup.Position = UDim2.new(
            groupStartPos.X.Scale, groupStartPos.X.Offset + delta.X,
@@ -1655,6 +1660,21 @@ task.spawn(function()
            placePlatformUnder(warpHome.Position)
        end
    end
+
+   registerShutdownHook(function()
+       states.KillAura = false
+       states.DNWarp = false
+       states.AutoWarp = false
+       _G.TAYJAY_FOLLOW = nil
+       _G.TAYJAY_STAY_REQUEST = nil
+       local character = LocalPlayer.Character
+       local root = character and character:FindFirstChild("HumanoidRootPart")
+       if warpWasOn and root then goHome(root) end
+       if warpPlatform then pcall(function() warpPlatform:Destroy() end); warpPlatform = nil end
+       warpHome, warpOwner, randomWarpTarget = nil, nil, nil
+       warpWasOn = false
+       stopShadowHunterVisuals()
+   end)
 
    while screenGui.Parent do
        task.wait(SHADOW_UPDATE_INTERVAL)
@@ -2933,6 +2953,8 @@ local function createBtn(order, text, key)
            deathNoteMain.Visible = isOn
            if isOn then task.defer(updatePlayerList) end
        elseif key == "ServerSelector" then serverFrame.Visible = isOn; if isOn and #sfList:GetChildren() <= 2 then loadPublicServers() end
+       elseif key == "ESP" then
+           if _G.TAYJAY_SET_ESP then _G.TAYJAY_SET_ESP(isOn) end
        end
    end)
    updateVisual(states[key])
@@ -2945,6 +2967,7 @@ createBtn(3, "3. 🌌 กระโดดไร้ขีดจำกัด (Inf J
 createBtn(4, "4. 🔍 มองทะลุ (X-Ray)", "Xray")
 createBtn(5, "5. ☠️ สมุดสั่งตาย (Death Note)", "DeathNote")
 createBtn(6, "6. 🌍 หาเซิร์ฟว่าง (Server Selector)", "ServerSelector")
+createBtn(7, "7. 👁 ESP ผู้เล่น (TayJay)", "ESP")
 
 trackConnection(list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() scroll.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 20) end))
 
@@ -3029,6 +3052,14 @@ local function applyEspToCharacter(character)
    local head = character:FindFirstChild("Head")
    local humanoid = character:FindFirstChildOfClass("Humanoid")
    if not head or not humanoid then return end
+   local mm2OverlayVisible = _G.TAYJAY_MM2_UI_VISIBLE ~= false
+   if not states.ESP and (not states.MM2RoleESP or not mm2OverlayVisible) then
+       local existingHighlight = character:FindFirstChild(ESP_HIGHLIGHT)
+       if existingHighlight then existingHighlight.Enabled = false end
+       local existingBillboard = head:FindFirstChild(ESP_NAME)
+       if existingBillboard then existingBillboard.Enabled = false end
+       return
+   end
 
    local highlight = character:FindFirstChild(ESP_HIGHLIGHT)
    if not highlight then
@@ -3050,6 +3081,7 @@ local function applyEspToCharacter(character)
            highlight.OutlineTransparency = 0.08
        end
    end
+   highlight.Enabled = states.ESP or (states.MM2RoleESP and mm2OverlayVisible)
 
    local billboard = head:FindFirstChild(ESP_NAME)
    if not billboard then
@@ -3094,6 +3126,7 @@ local function applyEspToCharacter(character)
        applyTayJayTextContrast(healthLabel)
    end
 
+   billboard.Enabled = states.ESP or (states.MM2RoleESP and mm2OverlayVisible)
    local player = Players:GetPlayerFromCharacter(character)
    local nameLabel = billboard:FindFirstChild("PlayerName")
    if nameLabel and player then
@@ -3122,6 +3155,27 @@ local function applyEspToCharacter(character)
        end))
    end
 end
+
+local function setTayJayESPEnabled(isOn)
+   states.ESP = isOn == true
+   local mm2OverlayVisible = _G.TAYJAY_MM2_UI_VISIBLE ~= false
+   for _, player in ipairs(Players:GetPlayers()) do
+       local character = player.Character
+       if character then
+           if states.ESP then
+               applyEspToCharacter(character)
+           else
+               local shouldKeepMM2 = states.MM2RoleESP == true and mm2OverlayVisible
+               local highlight = character:FindFirstChild(ESP_HIGHLIGHT)
+               if highlight then highlight.Enabled = shouldKeepMM2 end
+               local head = character:FindFirstChild("Head") or character.PrimaryPart
+               local billboard = head and head:FindFirstChild(ESP_NAME)
+               if billboard then billboard.Enabled = shouldKeepMM2 end
+           end
+       end
+   end
+end
+_G.TAYJAY_SET_ESP = setTayJayESPEnabled
 
 local function bindEspPlayer(player)
    if player == LocalPlayer then return end
@@ -3329,11 +3383,18 @@ do
    end
 
    local mm2ESPEnabled = false
+   registerShutdownHook(function()
+       mm2ESPEnabled = false
+       states.MM2RoleESP = false
+       clearMM2RoleESP()
+       mm2ListFrame.Visible = false
+   end)
    local function updateMM2RoleESP()
        for _, player in ipairs(Players:GetPlayers()) do
            if player ~= LocalPlayer and player.Character then
                local roleName, roleColor = getMM2PlayerRole(player)
                local character = player.Character
+               applyEspToCharacter(character)
                local highlight = character:FindFirstChild("TayJay_PlayerHighlight")
 
                if not highlight then
@@ -3343,11 +3404,19 @@ do
                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                    highlight.Parent = character
                end
-               highlight.Enabled = true
-               highlight.FillColor = roleColor
-               highlight.OutlineColor = roleColor
-               highlight.FillTransparency = 0.6
-               highlight.OutlineTransparency = 0.1
+               local roleUiVisible = _G.TAYJAY_MM2_UI_VISIBLE ~= false
+               highlight.Enabled = roleUiVisible or states.ESP == true
+               if roleUiVisible then
+                   highlight.FillColor = roleColor
+                   highlight.OutlineColor = roleColor
+                   highlight.FillTransparency = 0.6
+                   highlight.OutlineTransparency = 0.1
+               elseif states.ESP then
+                   highlight.FillColor = ESP_FILL
+                   highlight.OutlineColor = ESP_OUTLINE
+                   highlight.FillTransparency = 0.78
+                   highlight.OutlineTransparency = 0.08
+               end
 
                local head = character:FindFirstChild("Head") or character.PrimaryPart
                local billboard = head and head:FindFirstChild("TayJay_PlayerESP")
@@ -3370,6 +3439,7 @@ do
                    end
                    roleLabel.Text = roleName
                    roleLabel.TextColor3 = roleColor
+                   roleLabel.Visible = roleUiVisible
                end
            end
        end
@@ -3382,6 +3452,7 @@ do
            if character then
                local highlight = character:FindFirstChild("TayJay_PlayerHighlight")
                if highlight then
+                   highlight.Enabled = states.ESP == true
                    highlight.FillColor = ESP_FILL
                    highlight.OutlineColor = ESP_OUTLINE
                    highlight.FillTransparency = 0.78
@@ -3390,6 +3461,7 @@ do
                local head = character:FindFirstChild("Head") or character.PrimaryPart
                local billboard = head and head:FindFirstChild("TayJay_PlayerESP")
                if billboard then
+                   billboard.Enabled = states.ESP == true
                    local roleLabel = billboard:FindFirstChild("MM2RoleText")
                    if roleLabel then roleLabel:Destroy() end
                    billboard.Size = UDim2.new(0, 190, 0, 42)
@@ -3534,6 +3606,13 @@ end
 -- =========================================================
 -- 🌌 TAYJAY MIDNIGHT NEON THEME + CAMERA QUALITY OF LIFE
 -- =========================================================
+local originalCameraSettings = {}
+pcall(function()
+   originalCameraSettings.CameraMode = LocalPlayer.CameraMode
+   originalCameraSettings.CameraMaxZoomDistance = LocalPlayer.CameraMaxZoomDistance
+   originalCameraSettings.CameraMinZoomDistance = LocalPlayer.CameraMinZoomDistance
+   originalCameraSettings.DevCameraOcclusionMode = LocalPlayer.DevCameraOcclusionMode
+end)
 pcall(function()
    LocalPlayer.CameraMode = Enum.CameraMode.Classic
    LocalPlayer.CameraMaxZoomDistance = 70
@@ -3834,7 +3913,7 @@ local function updatePerfScale()
                scaleObject.Name = "TayJayPerfResponsiveScale"
                scaleObject.Parent = root
            end
-           scaleObject.Scale = scaleValue
+           scaleObject.Scale = scaleValue * 0.9
        end
    end
 end
@@ -4122,7 +4201,7 @@ local launcher = ui("TextButton", {
 corner(launcher, 25); stroke(launcher, Color3.fromRGB(255, 231, 92), 2.5)
 local launcherDragging, launcherDragStart, launcherStartPos = false, nil, nil
 v70Track(V70Perf.MonitorConnections, launcher.InputBegan:Connect(function(input)
-   if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+   if not _G.TAYJAY_UI.locked and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
        launcherDragging = true
        launcherDragStart = input.Position
        launcherStartPos = launcher.Position
@@ -4134,7 +4213,7 @@ v70Track(V70Perf.MonitorConnections, launcher.InputEnded:Connect(function(input)
    end
 end))
 v70Track(V70Perf.MonitorConnections, UserInputService.InputChanged:Connect(function(input)
-   if launcherDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+   if launcherDragging and not _G.TAYJAY_UI.locked and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
        local delta = input.Position - launcherDragStart
        launcher.Position = UDim2.new(launcherStartPos.X.Scale, launcherStartPos.X.Offset + delta.X,
            launcherStartPos.Y.Scale, launcherStartPos.Y.Offset + delta.Y)
@@ -4272,34 +4351,259 @@ local function fitFpsPanelText()
    for _, obj in ipairs(perfGui:GetDescendants()) do fitFpsText(obj) end
 end
 
--- 🔒 แถบล็อก: ล็อกหน้าต่างอยู่กับที่ (ปลดเพื่อลากด้วยการสัมผัส)
-do
-    local lockGui = Instance.new("ScreenGui")
-    lockGui.Name = "TayJayLockGui"; lockGui.ResetOnSpawn = false; lockGui.DisplayOrder = 1000
-    lockGui.IgnoreGuiInset = true
-    SecureParentGui(lockGui)
-    local bar = Instance.new("Frame", lockGui)
-    bar.Name = "TayJayLockBar"; bar.Size = UDim2.fromOffset(72, 44); bar.Position = UDim2.new(0, 12, 0.6, 0)
-    bar.BackgroundColor3 = GREEN.deep; bar.BorderSizePixel = 0
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 10)
-    local barEdge = Instance.new("UIStroke", bar); barEdge.Color = UI_LAYOUT.Accent.Main; barEdge.Thickness = 1.5
-    local lockBtn = Instance.new("TextButton", bar)
-    lockBtn.Size = UDim2.fromOffset(60, 34); lockBtn.Position = UDim2.fromOffset(6, 5)
-    lockBtn.BorderSizePixel = 0; lockBtn.Font = Enum.Font.GothamBold; lockBtn.TextSize = 13
-    lockBtn.TextColor3 = WHITE_TEXT
-    Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 8)
-    local function refreshLock()
-        local locked = _G.TAYJAY_UI.locked
-        lockBtn.Text = locked and "🔒 ล็อก" or "🔓 ลาก"
-        lockBtn.BackgroundColor3 = locked and Color3.fromRGB(255, 132, 24) or Color3.fromRGB(76, 158, 48)
-    end
-    lockBtn.Activated:Connect(function() _G.TAYJAY_UI.locked = not _G.TAYJAY_UI.locked; refreshLock() end)
-    trackConnection(screenGui.DescendantAdded:Connect(function(o)
-        if o:IsA("UIGradient") then o.Enabled = _G.TAYJAY_UI.effects == true end
-    end))
-    _G.TAYJAY_CLEAN_LOOK(screenGui)
-    refreshLock()
+-- 🔒 TAYJAY GLOBAL UI CONTROL: persistent controls for all three UI groups.
+local controlGui = Instance.new("ScreenGui")
+controlGui.Name = "TayJayControlGui"
+controlGui.ResetOnSpawn = false
+controlGui.DisplayOrder = 1000001
+controlGui.IgnoreGuiInset = true
+controlGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+SecureParentGui(controlGui)
+
+local bar = Instance.new("Frame", controlGui)
+bar.Name = "TayJayControlBar"
+bar.Size = UDim2.fromOffset(250, 42)
+bar.Position = UDim2.new(0, 12, 0.58, 0)
+bar.BackgroundColor3 = GREEN.deep
+bar.BorderSizePixel = 0
+bar.Active = true
+bar.ZIndex = 10000
+Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 10)
+local barEdge = Instance.new("UIStroke", bar)
+barEdge.Color = UI_LAYOUT.Accent.Main
+barEdge.Thickness = 1.5
+
+local controlButtons = {}
+local uiGroupState = {TAYJAY = true, MM2 = true, FPS = true}
+local savedRootVisibility = {}
+_G.TAYJAY_MM2_UI_VISIBLE = true
+
+local function createControlButton(name, text, x, width, color)
+    local button = Instance.new("TextButton", bar)
+    button.Name = name
+    button.Size = UDim2.fromOffset(width, 32)
+    button.Position = UDim2.fromOffset(x, 5)
+    button.BackgroundColor3 = color
+    button.BorderSizePixel = 0
+    button.Text = text
+    button.TextColor3 = WHITE_TEXT
+    button.TextStrokeColor3 = TEXT_OUTLINE
+    button.TextStrokeTransparency = 0.45
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 9
+    button.AutoButtonColor = true
+    button.ZIndex = 10001
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
+    controlButtons[name] = button
+    return button
 end
+
+local function refreshGroupButton(group)
+    local labels = {TAYJAY = "TAY", MM2 = "MM2", FPS = "FPS"}
+    local button = controlButtons[group]
+    if not button then return end
+    local visible = uiGroupState[group] == true
+    button.Text = labels[group] .. (visible and " ON" or " OFF")
+    button.BackgroundColor3 = visible and GREEN.on or GREEN.off
+end
+
+local function setRootVisible(root, visible)
+    if not root or not root.Parent then return end
+    if savedRootVisibility[root] == nil then savedRootVisibility[root] = root.Visible end
+    root.Visible = visible and savedRootVisibility[root] or false
+end
+
+local function setGroupVisible(group, visible)
+    uiGroupState[group] = visible == true
+    if group == "TAYJAY" then
+        for _, root in ipairs(screenGui:GetChildren()) do
+            if root:IsA("GuiObject") and root.Name ~= "TayJayMM2Dock" and root.Name ~= "TayJayMM2PlayerList" then
+                setRootVisible(root, uiGroupState[group])
+            end
+        end
+    elseif group == "MM2" then
+        setRootVisible(screenGui:FindFirstChild("TayJayMM2Dock"), uiGroupState[group])
+        setRootVisible(screenGui:FindFirstChild("TayJayMM2PlayerList"), uiGroupState[group])
+        _G.TAYJAY_MM2_UI_VISIBLE = uiGroupState[group]
+    elseif group == "FPS" then
+        perfGui.Enabled = uiGroupState[group]
+    end
+    refreshGroupButton(group)
+end
+
+createControlButton("TAYJAY", "TAY ON", 5, 46, GREEN.on).Activated:Connect(function()
+    setGroupVisible("TAYJAY", not uiGroupState.TAYJAY)
+end)
+createControlButton("MM2", "MM2 ON", 55, 46, GREEN.on).Activated:Connect(function()
+    setGroupVisible("MM2", not uiGroupState.MM2)
+end)
+createControlButton("FPS", "FPS ON", 105, 46, GREEN.on).Activated:Connect(function()
+    setGroupVisible("FPS", not uiGroupState.FPS)
+end)
+local lockBtn = createControlButton("GLOBAL_LOCK", "🔒", 155, 42, Color3.fromRGB(255, 132, 24))
+local function refreshLock()
+    local locked = _G.TAYJAY_UI.locked == true
+    _G.TAYJAY_UI.locked = locked
+    isWindowLocked = locked
+    groupDragging = false
+    for _, root in ipairs({screenGui, perfGui}) do
+        if root then
+            for _, object in ipairs(root:GetDescendants()) do
+                if object:GetAttribute("TayJayWindowLocked") ~= nil then
+                    object:SetAttribute("TayJayWindowLocked", locked)
+                    local localLock = object:FindFirstChild("WindowLockButton")
+                    if localLock then
+                        localLock.Text = locked and "🔒" or "🔓"
+                        localLock.BackgroundColor3 = locked and Color3.fromRGB(255, 132, 24) or Color3.fromRGB(76, 158, 48)
+                    end
+                end
+            end
+        end
+    end
+    if dnLock then
+        dnLock.Text = locked and "🔒" or "🔓"
+        dnLock.BackgroundColor3 = locked and Color3.fromRGB(255, 132, 24) or Color3.fromRGB(76, 158, 48)
+    end
+    lockBtn.Text = locked and "🔒" or "🔓"
+    lockBtn.BackgroundColor3 = locked and Color3.fromRGB(255, 132, 24) or Color3.fromRGB(76, 158, 48)
+end
+trackConnection(lockBtn.Activated:Connect(function()
+    _G.TAYJAY_UI.locked = not _G.TAYJAY_UI.locked
+    refreshLock()
+end))
+local stopBtn = createControlButton("STOP_SCRIPT", "STOP", 201, 44, Color3.fromRGB(190, 45, 45))
+
+local function shutdownTayJay()
+    if _G.TAYJAY_SHUTDOWN_IN_PROGRESS then return end
+    _G.TAYJAY_SHUTDOWN_IN_PROGRESS = true
+
+    -- Switch all script features OFF before restoring their saved game state.
+    local featureKeys = {"Speed", "Fly", "InfJump", "Noclip", "Xray", "ESP",
+        "DeathNote", "KillAura", "NormalKillAura", "MonsterWarp", "ServerSelector",
+        "MM2RoleESP", "AutoWarp", "DNWarp"}
+    for _, key in ipairs(featureKeys) do
+        if key == "KillAura" or key == "NormalKillAura" or key == "MonsterWarp" or key == "MM2RoleESP" then
+            states[key] = false
+        elseif uiSyncRegistry[key] then
+            pcall(function() syncButtonState(key, false) end)
+        else
+            states[key] = false
+        end
+    end
+
+    pcall(function() if stopFlying then stopFlying(false) end end)
+    pcall(function() if stopMonsterWarp then stopMonsterWarp(true) end end)
+    pcall(function() setNoclip(false) end)
+    pcall(function()
+        for part, oldTransparency in pairs(xrayCache) do
+            if part and part.Parent then part.LocalTransparencyModifier = oldTransparency end
+            xrayCache[part] = nil
+        end
+    end)
+
+    for _, cleanup in ipairs(shutdownHooks) do pcall(cleanup) end
+    table.clear(shutdownHooks)
+
+    -- Remove any delayed warp platforms left by the movement controllers.
+    for _, object in ipairs(workspace:GetDescendants()) do
+        if object.Name == "TayJayWarpPlatform" or object.Name == "TayJayMonsterWarpPlatform" then
+            pcall(function() object:Destroy() end)
+        end
+    end
+
+    -- Restore transparency saved by Death Note and Monster Warp.
+    for object, saved in pairs(originalTransparencies) do
+        if object and object.Parent and saved then
+            pcall(function()
+                if saved.kind == "part" then
+                    object.LocalTransparencyModifier = saved.value
+                elseif saved.kind == "decal" then
+                    object.Transparency = saved.value
+                end
+            end)
+        end
+        originalTransparencies[object] = nil
+    end
+
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid and originalWalkSpeed ~= nil then
+        pcall(function() humanoid.WalkSpeed = originalWalkSpeed end)
+    end
+    originalWalkSpeed = nil
+
+    pcall(function()
+        LocalPlayer.CameraMode = originalCameraSettings.CameraMode
+        LocalPlayer.CameraMaxZoomDistance = originalCameraSettings.CameraMaxZoomDistance
+        LocalPlayer.CameraMinZoomDistance = originalCameraSettings.CameraMinZoomDistance
+        LocalPlayer.DevCameraOcclusionMode = originalCameraSettings.DevCameraOcclusionMode
+    end)
+
+    states.KillAura = false
+    states.NormalKillAura = false
+    states.MonsterWarp = false
+    states.MM2RoleESP = false
+    states.ESP = false
+    _G.TAYJAY_FOLLOW = nil
+    _G.TAYJAY_STAY_REQUEST = nil
+    _G.TAYJAY_WARP_STAY = nil
+    _G.TAYJAY_WARP_HOLD = nil
+    _G.TAYJAY_WARP_HOLD_UNTIL = nil
+    pcall(function() if updateKaBtnDisplay then updateKaBtnDisplay() end end)
+
+    -- Remove shared player ESP objects after MM2 cleanup has run.
+    for _, player in ipairs(Players:GetPlayers()) do
+        local playerCharacter = player.Character
+        if playerCharacter then
+            local highlight = playerCharacter:FindFirstChild("TayJay_PlayerHighlight")
+            if highlight then pcall(function() highlight:Destroy() end) end
+            local head = playerCharacter:FindFirstChild("Head") or playerCharacter.PrimaryPart
+            local billboard = head and head:FindFirstChild("TayJay_PlayerESP")
+            if billboard then pcall(function() billboard:Destroy() end) end
+        end
+    end
+    for _, part in ipairs(circleParts) do
+        if part and part.Parent then pcall(function() part:Destroy() end) end
+    end
+    table.clear(circleParts)
+
+    -- Restore graphics changes and the FPS cap before destroying the FPS UI.
+    pcall(function() if V70Perf and V70Perf.Cleanup then V70Perf.Cleanup() end end)
+
+    for _, connection in ipairs(activeConnections) do
+        pcall(function() connection:Disconnect() end)
+    end
+    table.clear(activeConnections)
+    if _tjLogConnection then
+        pcall(function() _tjLogConnection:Disconnect() end)
+        _tjLogConnection = nil
+    end
+
+    if perfGui and perfGui.Parent then pcall(function() perfGui:Destroy() end) end
+    if screenGui and screenGui.Parent then pcall(function() screenGui:Destroy() end) end
+    if controlGui and controlGui.Parent then pcall(function() controlGui:Destroy() end) end
+    if _tjBootGui and _tjBootGui.Parent then pcall(function() _tjBootGui:Destroy() end) end
+    _tjBootGui, _tjBootLabel = nil, nil
+
+    _G.TAYJAY_SET_ESP = nil
+    _G.TAYJAY_MM2_UI_VISIBLE = nil
+    _G.TAYJAY_UI = nil
+    _G.TAYJAY_CLEAN_LOOK = nil
+    _G.TAYJAY_DIAGNOSTIC = nil
+    _G.TAYJAY_DN_REPAINT = nil
+    _G.TAYJAY_V70_PERF = nil
+    _G.TAYJAY_SHUTDOWN_IN_PROGRESS = nil
+end
+
+trackConnection(stopBtn.Activated:Connect(shutdownTayJay))
+trackConnection(screenGui.DescendantAdded:Connect(function(o)
+    if o:IsA("UIGradient") then o.Enabled = _G.TAYJAY_UI.effects == true end
+end))
+_G.TAYJAY_CLEAN_LOOK(screenGui)
+refreshLock()
+refreshGroupButton("TAYJAY")
+refreshGroupButton("MM2")
+refreshGroupButton("FPS")
 
 applyTayJayTextPass(screenGui)
 -- ย่อตัวหนังสือทุกป้ายในหน้าต่างให้พอดีกรอบ (กันทับกัน) ยกเว้นโลโก้และปุ่มวงกลม
