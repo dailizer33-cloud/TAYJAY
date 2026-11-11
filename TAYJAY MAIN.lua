@@ -1412,10 +1412,47 @@ local function updateKaBtnDisplay()
 end
 updateKaBtnDisplay()
 
+-- Central arbitration: only one character-position controller may run at a time.
+local suppressWarpReturn = false
+local baseSyncButtonState = syncButtonState
+local resolvingExclusiveMode = false
+local exclusiveConflicts = {
+    Fly = {"KillAura", "NormalKillAura", "DNWarp", "AutoWarp", "MonsterWarp"},
+    KillAura = {"Fly", "NormalKillAura", "DNWarp", "AutoWarp", "MonsterWarp"},
+    NormalKillAura = {"KillAura"},
+    DNWarp = {"Fly", "KillAura", "AutoWarp", "MonsterWarp"},
+    AutoWarp = {"Fly", "KillAura", "DNWarp", "MonsterWarp"},
+    MonsterWarp = {"Fly", "KillAura", "DNWarp", "AutoWarp"}
+}
+local function resolveExclusiveMode(nextKey)
+    if resolvingExclusiveMode then return end
+    resolvingExclusiveMode = true
+    for _, oldKey in ipairs(exclusiveConflicts[nextKey] or {}) do
+        if states[oldKey] then
+            if oldKey == "MonsterWarp" then
+                if stopMonsterWarp then stopMonsterWarp(false) else states.MonsterWarp = false end
+            elseif oldKey == "KillAura" or oldKey == "NormalKillAura" then
+                if oldKey == "KillAura" then suppressWarpReturn = true end
+                states[oldKey] = false
+                updateKaBtnDisplay()
+            else
+                if oldKey == "DNWarp" or oldKey == "AutoWarp" then suppressWarpReturn = true end
+                baseSyncButtonState(oldKey, false)
+            end
+        end
+    end
+    resolvingExclusiveMode = false
+end
+syncButtonState = function(key, isOn)
+    if isOn then resolveExclusiveMode(key) end
+    baseSyncButtonState(key, isOn)
+end
+
 do
    -- WARP (ปุ่มวงกลม): สุ่มหาเป้าหมายในระยะ 200 studs ไม่ต้องเลือกในสมุดสั่งตาย
    trackConnection(kaCircleBtn.Activated:Connect(function()
        local turningOn = not states.KillAura
+       if turningOn then resolveExclusiveMode("KillAura") end
        if turningOn and stopMonsterWarp and states.MonsterWarp then
            stopMonsterWarp(true)
        end
@@ -1431,7 +1468,9 @@ do
 
    -- WALK: โจมตีระยะใกล้ (ไม่เปลี่ยน)
    trackConnection(kaNormalBtn.Activated:Connect(function()
-       states.NormalKillAura = not states.NormalKillAura
+       local turningOn = not states.NormalKillAura
+       if turningOn then resolveExclusiveMode("NormalKillAura") end
+       states.NormalKillAura = turningOn
        if states.NormalKillAura then states.KillAura = false end
        updateKaBtnDisplay()
    end))
@@ -1701,7 +1740,13 @@ task.spawn(function()
        end
        -- ปิด WARP: กลับจุดยืนและลบพื้นกันตก
        if warpWasOn and not warpActive then
-           if _G.TAYJAY_WARP_STAY then _G.TAYJAY_WARP_STAY = false else goHome(myRootNow) end
+           if suppressWarpReturn then
+               suppressWarpReturn = false
+           elseif _G.TAYJAY_WARP_STAY then
+               _G.TAYJAY_WARP_STAY = false
+           else
+               goHome(myRootNow)
+           end
            destroyPlatform()
            warpHome, warpOwner, randomWarpTarget = nil, nil, nil
            warpWasOn = false
@@ -2495,6 +2540,7 @@ local okMW, errMW = pcall(function()
            return
        end
        if monsterWarpStarting then return end
+       resolveExclusiveMode("MonsterWarp")
        monsterWarpStarting = true
 
        -- Only one warp controller may move the local character at a time.
@@ -4366,7 +4412,7 @@ SecureParentGui(controlGui)
 
 local bar = Instance.new("Frame", controlGui)
 bar.Name = "TayJayControlBar"
-bar.Size = UDim2.fromOffset(300, 52)
+bar.Size = UDim2.fromOffset(270, 46)
 bar.Position = UDim2.fromOffset(12, 102)
 bar.BackgroundColor3 = GREEN.deep
 bar.BorderSizePixel = 0
@@ -4385,8 +4431,8 @@ _G.TAYJAY_MM2_UI_VISIBLE = true
 local function createControlButton(name, text, x, width, color)
     local button = Instance.new("TextButton", bar)
     button.Name = name
-    button.Size = UDim2.fromOffset(width, 40)
-    button.Position = UDim2.fromOffset(x, 6)
+    button.Size = UDim2.fromOffset(width * 0.9, 36)
+    button.Position = UDim2.fromOffset(x * 0.9, 5)
     button.BackgroundColor3 = color
     button.BorderSizePixel = 0
     button.Text = text
