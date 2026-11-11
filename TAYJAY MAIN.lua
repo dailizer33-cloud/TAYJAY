@@ -926,7 +926,7 @@ local function toggleFlyState()
 
    -- Restore the proven FLY GUI V3-style controller:
    -- camera-facing BodyGyro + directional BodyVelocity on RenderStepped.
-   flyLoop = trackConnection(RunService.RenderStepped:Connect(function()
+   flyLoop = trackConnection(RunService.RenderStepped:Connect(function(dt)
        if not flyNowe then return end
        if not char.Parent or not hum.Parent or hum.Health <= 0 or not root.Parent or not flyPart.Parent then
            stopFlying()
@@ -947,7 +947,7 @@ local function toggleFlyState()
        end
 
        if verticalInput ~= 0 then
-           local frameScale = math.clamp(RunService.RenderStepped:Wait() and 1 or 1, 0, 1)
+           local frameScale = math.clamp(dt * 60, 0, 2)
            char:TranslateBy(Vector3.new(0, verticalInput * flySpeeds * frameScale, 0))
        end
    end))
