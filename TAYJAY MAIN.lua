@@ -491,7 +491,7 @@ end
 -- =========================================================
 local UI_LAYOUT = {
    MainMenu     = UDim2.fromScale(0.1030, 0.1960), -- เมนูหลัก TAYJAY (ตำแหน่งตามภาพอ้างอิง)
-   PlayerList   = UDim2.fromScale(0.2180, 0.5670), -- ตารางผู้เล่นช่วงล่างค่อนไปทางซ้ายตามภาพ
+   PlayerList   = UDim2.fromScale(0.3000, 0.5670), -- ตารางผู้เล่นช่วงล่างค่อนไปทางกลางเพื่อไม่ชนเมนูหลักที่ขยาย
    TargetPanel  = UDim2.fromScale(0.3219, 0.8370), -- กรอบ Select target / TARGET (ย้ายลงให้พ้นตารางผู้เล่นที่สูงขึ้น)
    FlyBottom    = UDim2.fromScale(0.6387, 0.9921), -- กรอบ FLY CONTROL (AnchorPoint 0,1 = มุมซ้ายล่าง)
    WarpCenter   = UDim2.fromScale(0.1728, 0.6150), -- ปุ่มวงกลม WARP เดิมสำหรับผู้เล่น
