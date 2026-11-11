@@ -1432,7 +1432,16 @@ local function resolveExclusiveMode(nextKey)
     for _, oldKey in ipairs(exclusiveConflicts[nextKey] or {}) do
         if states[oldKey] then
             if oldKey == "MonsterWarp" then
-                if stopMonsterWarp then stopMonsterWarp(true) else states.MonsterWarp = false end
+                -- Switching to Fly must stop M-WARP at the current position, not return home.
+                if stopMonsterWarp then
+                    stopMonsterWarp(nextKey ~= "Fly")
+                else
+                    states.MonsterWarp = false
+                end
+            elseif oldKey == "Fly" then
+                -- WARP / M-WARP takes over immediately; release the flight controller first.
+                if flyNowe then stopFlying() end
+                baseSyncButtonState(oldKey, false)
             elseif oldKey == "KillAura" or oldKey == "NormalKillAura" then
                 states[oldKey] = false
                 updateKaBtnDisplay()
@@ -1445,7 +1454,10 @@ local function resolveExclusiveMode(nextKey)
    if nextKey == "Fly" or nextKey == "KillAura" or nextKey == "DNWarp"
        or nextKey == "AutoWarp" or nextKey == "MonsterWarp" then
        local stopOldPlayerWarp = _G.TAYJAY_STOP_PLAYER_WARP
-       if type(stopOldPlayerWarp) == "function" then pcall(stopOldPlayerWarp) end
+       if type(stopOldPlayerWarp) == "function" then
+           -- Fly takeover keeps the exact current WARP position instead of snapping home.
+           pcall(stopOldPlayerWarp, nextKey == "Fly")
+       end
    end
 end
 syncButtonState = function(key, isOn)
@@ -1708,18 +1720,20 @@ task.spawn(function()
    end
 
    -- Synchronously finish the previous player-WARP controller before another movement mode starts.
-   _G.TAYJAY_STOP_PLAYER_WARP = function()
+   _G.TAYJAY_STOP_PLAYER_WARP = function(keepCurrentPosition)
        if not warpWasOn then return end
        local character = LocalPlayer.Character
        local root = character and character:FindFirstChild("HumanoidRootPart")
        if _G.TAYJAY_WARP_STAY then
            _G.TAYJAY_WARP_STAY = false
-       else
+       elseif not keepCurrentPosition then
            goHome(root)
        end
        destroyPlatform()
        warpHome, warpOwner, randomWarpTarget = nil, nil, nil
        warpWasOn = false
+       -- Restore visual state immediately instead of waiting for the background scan loop.
+       stopShadowHunterVisuals()
    end
 
    registerShutdownHook(function()
