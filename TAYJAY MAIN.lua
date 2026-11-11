@@ -716,9 +716,7 @@ do
    flyClose.TextSize = 13
    Instance.new("UICorner", flyClose).CornerRadius = UDim.new(1, 0)
    
-   trackConnection(flyClose.Activated:Connect(function()
-       syncButtonState("Fly", false) -- เมื่อกดกากบาท จะปิดหน้าต่างและซิงค์เมนูหลักเป็น OFF
-   end))
+   flyClose.Visible = false -- หน้าต่าง Fly ปิดได้จากเมนูหลักเท่านั้น
 end
 
 local flyOnOf = flyUi.button("FlyToggle", UDim2.fromOffset(10, 42), UDim2.new(1, -20, 0, 38), flyUi.navy, "", 15)
@@ -844,6 +842,7 @@ trackConnection(flyEmergencyStop.Activated:Connect(function()
    end
    if flyNowe then
        stopFlying()
+       syncButtonState("Fly", false)
        FlyFrame.Visible = true
    end
 end))
@@ -872,6 +871,7 @@ local function toggleFlyState()
 
    if flyNowe then
        stopFlying()
+       syncButtonState("Fly", false)
        FlyFrame.Visible = true
        return
    end
@@ -1413,7 +1413,6 @@ end
 updateKaBtnDisplay()
 
 -- Central arbitration: only one character-position controller may run at a time.
-local suppressWarpReturn = false
 local baseSyncButtonState = syncButtonState
 local resolvingExclusiveMode = false
 local exclusiveConflicts = {
@@ -1430,13 +1429,11 @@ local function resolveExclusiveMode(nextKey)
     for _, oldKey in ipairs(exclusiveConflicts[nextKey] or {}) do
         if states[oldKey] then
             if oldKey == "MonsterWarp" then
-                if stopMonsterWarp then stopMonsterWarp(false) else states.MonsterWarp = false end
+                if stopMonsterWarp then stopMonsterWarp(true) else states.MonsterWarp = false end
             elseif oldKey == "KillAura" or oldKey == "NormalKillAura" then
-                if oldKey == "KillAura" then suppressWarpReturn = true end
                 states[oldKey] = false
                 updateKaBtnDisplay()
             else
-                if oldKey == "DNWarp" or oldKey == "AutoWarp" then suppressWarpReturn = true end
                 baseSyncButtonState(oldKey, false)
             end
         end
@@ -1740,13 +1737,7 @@ task.spawn(function()
        end
        -- ปิด WARP: กลับจุดยืนและลบพื้นกันตก
        if warpWasOn and not warpActive then
-           if suppressWarpReturn then
-               suppressWarpReturn = false
-           elseif _G.TAYJAY_WARP_STAY then
-               _G.TAYJAY_WARP_STAY = false
-           else
-               goHome(myRootNow)
-           end
+           if _G.TAYJAY_WARP_STAY then _G.TAYJAY_WARP_STAY = false else goHome(myRootNow) end
            destroyPlatform()
            warpHome, warpOwner, randomWarpTarget = nil, nil, nil
            warpWasOn = false
@@ -2995,7 +2986,9 @@ local function createBtn(order, text, key)
                if hum and originalWalkSpeed ~= nil then hum.WalkSpeed = originalWalkSpeed end
                originalWalkSpeed = nil
            end
-       elseif key == "Fly" then FlyFrame.Visible = isOn; if not isOn and flyNowe then stopFlying(false) end
+       elseif key == "Fly" then
+           if isOn then FlyFrame.Visible = true end
+           if not isOn and flyNowe then stopFlying(false) end
        elseif key == "DeathNote" then
            deathNoteGroup.Visible = isOn
            deathNoteMain.Visible = isOn
@@ -3006,7 +2999,21 @@ local function createBtn(order, text, key)
        end
    end)
    updateVisual(states[key])
-   trackConnection(btn.Activated:Connect(function() syncButtonState(key, not states[key]) end))
+   trackConnection(btn.Activated:Connect(function()
+       if key == "Fly" then
+           if states.Fly then
+               syncButtonState("Fly", false)
+               FlyFrame.Visible = false
+           elseif FlyFrame.Visible then
+               FlyFrame.Visible = false
+           else
+               syncButtonState("Fly", true)
+               FlyFrame.Visible = true
+           end
+       else
+           syncButtonState(key, not states[key])
+       end
+   end))
 end
 
 createBtn(1, "1. 🚀 ความเร็ว (Speed)", "Speed")
