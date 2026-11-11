@@ -2876,7 +2876,7 @@ local function applyCompactTabletLayout()
    local viewport = camera.ViewportSize
    local narrow = viewport.X < 900
    if narrow then
-      mainFrame.Size = UDim2.fromOffset(250, 360)
+      mainFrame.Size = UDim2.fromOffset(250, 400)
       mainFrame.Position = UDim2.new(0, 8, 0, 104)
       deathNoteGroup.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH)
       deathNoteGroup.Position = UDim2.new(0, 268, 0, 104)
