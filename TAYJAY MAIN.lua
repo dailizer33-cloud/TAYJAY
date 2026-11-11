@@ -1894,8 +1894,8 @@ local okMW, errMW = pcall(function()
    monsterPanel.Position = UI_LAYOUT.MonsterTargetPanel
    monsterPanel.BackgroundColor3 = GREEN.dark
    monsterPanel.BackgroundTransparency = 0.03
-   monsterPanel.Visible = false
-   Instance.new("UICorner", monsterPanel).CornerRadius = UDim.new(0, 12)
+   local monsterPanelVisible = true -- table visibility is controlled by main TAYJAY menu\n
+   monsterPanel.Visible = monsterPanelVisible\n   Instance.new("UICorner", monsterPanel).CornerRadius = UDim.new(0, 12)
    local monsterPanelStroke = Instance.new("UIStroke", monsterPanel)
    monsterPanelStroke.Name = "TayJayWindowAccent"
    monsterPanelStroke.Color = Color3.fromRGB(255, 145, 70)
@@ -2503,13 +2503,14 @@ local okMW, errMW = pcall(function()
 
    local function refreshMonsterFilterUI()
        local isMonster = monsterFilterMode == "Monster"
-       monsterFilterBtn.BackgroundColor3 = isMonster and MONSTER_COLOR or Color3.fromRGB(65, 74, 63)
+       monsterFilterBtn.Text = states.MonsterWarp and "👾 MONSTER: ON" or "👾 MONSTER: OFF"
+       monsterFilterBtn.BackgroundColor3 = states.MonsterWarp and GREEN.on or GREEN.off
        npcFilterBtn.BackgroundColor3 = (not isMonster) and NPC_COLOR or Color3.fromRGB(65, 74, 63)
        orbitBtn.BackgroundColor3 = monsterOrbitOn and Color3.fromRGB(39, 174, 119) or Color3.fromRGB(65, 74, 63)
        orbitBtn.TextTransparency = monsterOrbitOn and 0 or 0.35
        dodgeBtn.BackgroundColor3 = monsterDodgeOn and Color3.fromRGB(39, 174, 119) or Color3.fromRGB(65, 74, 63)
        dodgeBtn.TextTransparency = monsterDodgeOn and 0 or 0.35
-       monsterFilterBtn.TextTransparency = isMonster and 0 or 0.35
+       monsterFilterBtn.TextTransparency = 0
        npcFilterBtn.TextTransparency = (not isMonster) and 0 or 0.35
        monsterHealthFill.BackgroundColor3 = isMonster and MONSTER_COLOR or NPC_COLOR
        monsterPanelStroke.Color = isMonster and MONSTER_COLOR or NPC_COLOR
@@ -2526,8 +2527,7 @@ local okMW, errMW = pcall(function()
        monsterWarpButton.BackgroundColor3 = on and GREEN.on or GREEN.off
        monsterWarpStroke.Color = on and Color3.fromRGB(255, 210, 90) or (monsterFilterMode == "NPC" and NPC_COLOR or MONSTER_COLOR)
        monsterWarpButton.Text = '<font size="25">👾</font>\n<font size="13">M-WARP</font>\n<font size="10">' .. (on and "ON" or "OFF") .. '</font>'
-       monsterPanel.Visible = on
-       refreshMonsterFilterUI()
+       monsterPanel.Visible = monsterPanelVisible\n       monsterWarpButton.Visible = false\n       refreshMonsterFilterUI()
        if not on then
            setMonsterPanelStatus("👾 MONSTER WARP: OFF", "ปิดอยู่ • กด M-WARP เพื่อเริ่มค้นหา", 0, 1)
        end
@@ -2736,17 +2736,14 @@ local okMW, errMW = pcall(function()
        if states.DNWarp then syncButtonState("DNWarp", false) end
        if states.AutoWarp then syncButtonState("AutoWarp", false) end
        updateKaBtnDisplay()
-       monsterPanel.Visible = true
-       setMonsterPanelStatus("👾 MONSTER WARP: SWITCHING", "กำลังหยุดระบบ WARP ผู้เล่นก่อนเริ่มค้นหา Monster...", 0, 1)
+              setMonsterPanelStatus("👾 MONSTER WARP: SWITCHING", "กำลังหยุดระบบ WARP ผู้เล่นก่อนเริ่มค้นหา Monster...", 0, 1)
        task.wait(0.20)
 
        local character = LocalPlayer.Character
        local root = character and character:FindFirstChild("HumanoidRootPart")
        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
        if not character or not root or not humanoid or humanoid.Health <= 0 then
-           monsterWarpStarting = false
-           monsterPanel.Visible = false
-           setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ไม่พบตัวละครที่พร้อมใช้งาน", 0, 1)
+           monsterWarpStarting = false\n           setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ไม่พบตัวละครที่พร้อมใช้งาน", 0, 1)
            return
        end
 
@@ -2786,7 +2783,7 @@ local okMW, errMW = pcall(function()
                "เปลี่ยนตัวกรองเป็น " .. modeLabel() .. " • กำลังเลือกเป้าหมายใหม่...", 0, 1)
        end
    end
-   trackConnection(monsterFilterBtn.Activated:Connect(function() setMonsterFilter("Monster") end))
+   trackConnection(monsterFilterBtn.Activated:Connect(function()\n        if states.MonsterWarp then stopMonsterWarp(true) else setMonsterFilter("Monster"); startMonsterWarp() end\n    end))
    trackConnection(npcFilterBtn.Activated:Connect(function() setMonsterFilter("NPC") end))
    trackConnection(dodgeBtn.Activated:Connect(function()
        monsterDodgeOn = not monsterDodgeOn
@@ -2962,9 +2959,7 @@ local okMW, errMW = pcall(function()
        if states.MonsterWarp then stopMonsterWarp(false) end
    end)
 
-   updateMonsterWarpVisual()
-end)
-if not okMW then
+   _G.TAYJAY_MONSTER_PANEL_SET_VISIBLE = function(value)\n       monsterPanelVisible = value == true\n       monsterPanel.Visible = monsterPanelVisible\n       return monsterPanelVisible\n   end\n   _G.TAYJAY_MONSTER_PANEL_GET_VISIBLE = function() return monsterPanelVisible end\n   updateMonsterWarpVisual()\nend)\nif not okMW then
    pcall(function() warn("[TAYJAY M-WARP] initialization failed: " .. tostring(errMW)) end)
    pcall(function()
        if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "M-WARP: " .. tostring(errMW)) end
@@ -3269,9 +3264,39 @@ createBtn(4, "4. 🔍 มองทะลุ (X-Ray)", "Xray")
 createBtn(5, "5. ☠️ สมุดสั่งตาย (Death Note)", "DeathNote")
 createBtn(6, "6. 🌍 Server Selector", "ServerSelector")
 createBtn(7, "7. ESP", "ESP")
+local monsterMenuButton = Instance.new("TextButton", scroll)
+monsterMenuButton.Name = "TayJayMonsterMenuButton"
+monsterMenuButton.LayoutOrder = 8
+monsterMenuButton.Size = UDim2.new(0.5, -5, 0, 38)
+monsterMenuButton.BackgroundColor3 = GREEN.on
+monsterMenuButton.Text = "8. 👾 Monster : ON"
+monsterMenuButton.TextColor3 = WHITE_TEXT
+monsterMenuButton.TextStrokeColor3 = TEXT_OUTLINE
+monsterMenuButton.TextStrokeTransparency = 0.35
+monsterMenuButton.Font = Enum.Font.GothamBold
+monsterMenuButton.TextScaled = true
+local monsterMenuTextSize = Instance.new("UITextSizeConstraint", monsterMenuButton)
+monsterMenuTextSize.MaxTextSize = 14
+monsterMenuTextSize.MinTextSize = 9
+Instance.new("UICorner", monsterMenuButton).CornerRadius = UDim.new(0, 11)
+local monsterMenuEdge = Instance.new("UIStroke", monsterMenuButton)
+monsterMenuEdge.Color = GREEN.neon
+monsterMenuEdge.Thickness = 1.4
+local monsterMenuVisible = true
+local function refreshMonsterMenuButton()
+    monsterMenuButton.Text = "8. 👾 Monster : " .. (monsterMenuVisible and "ON" or "OFF")
+    monsterMenuButton.BackgroundColor3 = monsterMenuVisible and GREEN.on or GREEN.off
+    monsterMenuEdge.Color = monsterMenuVisible and GREEN.neon or Color3.fromRGB(255, 115, 75)
+end
+trackConnection(monsterMenuButton.Activated:Connect(function()
+    monsterMenuVisible = not monsterMenuVisible
+    if type(_G.TAYJAY_MONSTER_PANEL_SET_VISIBLE) == "function" then _G.TAYJAY_MONSTER_PANEL_SET_VISIBLE(monsterMenuVisible) end
+    refreshMonsterMenuButton()
+end))
+refreshMonsterMenuButton()
 local stopAllButton = Instance.new("TextButton", scroll)
 stopAllButton.Name = "TayJayStopAllButton"
-stopAllButton.LayoutOrder = 8
+stopAllButton.LayoutOrder = 9
 stopAllButton.Size = UDim2.new(0.5, -5, 0, 38)
 stopAllButton.BackgroundColor3 = Color3.fromRGB(176, 36, 48)
 stopAllButton.Text = "STOP ALL"
@@ -4899,8 +4924,7 @@ _G.TAYJAY_STOP_ALL = function()
     pcall(function() if quickGui then quickGui:Destroy() end end)
     _G.TAYJAY_V70_PERF=nil
     _G.TAYJAY_MM2_STOP=nil
-    _G.TAYJAY_MONSTER_STOP=nil
-    _G.TAYJAY_STOP_ALL=nil
+    _G.TAYJAY_MONSTER_STOP=nil\n    _G.TAYJAY_MONSTER_PANEL_SET_VISIBLE=nil\n    _G.TAYJAY_MONSTER_PANEL_GET_VISIBLE=nil\n    _G.TAYJAY_STOP_ALL=nil
     print("[TAYJAY] STOP ALL completed: features restored, connections disconnected, UI removed.")
 end
 
