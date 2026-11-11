@@ -2949,7 +2949,7 @@ end)
 if not okMonster then
    pcall(function() warn("[TAYJAY MONSTER] initialization failed: " .. tostring(errMonster)) end)
    pcall(function()
-       if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "MONSTER: " .. tostring(errMW)) end
+       if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "MONSTER: " .. tostring(errMonster)) end
    end)
 end
 end
