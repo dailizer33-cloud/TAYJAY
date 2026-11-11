@@ -1867,32 +1867,13 @@ end)
 -- pcall ทำให้ถ้า M-WARP พัง ส่วนอื่นของสคริปต์ยังทำงานต่อ และรายงานสาเหตุขึ้นจอ
 do
 local okMW, errMW = pcall(function()
-   local monsterWarpButton = Instance.new("TextButton", screenGui)
-   monsterWarpButton.Name = "TayJayMonsterWarpBtn"
-   monsterWarpButton.AnchorPoint = Vector2.new(0.5, 0.5)
-   monsterWarpButton.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
-   monsterWarpButton.Position = UI_LAYOUT.MonsterWarpCenter
-   monsterWarpButton.BackgroundColor3 = GREEN.off
-   monsterWarpButton.RichText = true
-   monsterWarpButton.Text = '<font size="25">👾</font>\n<font size="13">M-WARP</font>\n<font size="10">OFF</font>'
-   monsterWarpButton.TextColor3 = WHITE_TEXT
-   monsterWarpButton.Font = Enum.Font.GothamBlack
-   monsterWarpButton.TextSize = 15
-   monsterWarpButton.Active = true
-   monsterWarpButton.AutoButtonColor = true
-   Instance.new("UICorner", monsterWarpButton).CornerRadius = UDim.new(1, 0)
-   local monsterWarpStroke = Instance.new("UIStroke", monsterWarpButton)
-   monsterWarpStroke.Color = Color3.fromRGB(255, 145, 70)
-   monsterWarpStroke.Thickness = 2.5
-   makeDraggable(monsterWarpButton)
-
    local monsterPanel = Instance.new("Frame", screenGui)
    monsterPanel.Name = "TayJayMonsterTargetPanel"
-   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 128)
+   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 158)
    monsterPanel.Position = UI_LAYOUT.MonsterTargetPanel
    monsterPanel.BackgroundColor3 = GREEN.dark
    monsterPanel.BackgroundTransparency = 0.03
-   monsterPanel.Visible = false
+   monsterPanel.Visible = true
    Instance.new("UICorner", monsterPanel).CornerRadius = UDim.new(0, 12)
    local monsterPanelStroke = Instance.new("UIStroke", monsterPanel)
    monsterPanelStroke.Name = "TayJayWindowAccent"
@@ -1978,8 +1959,8 @@ local okMW, errMW = pcall(function()
 
    local monsterInfo = Instance.new("TextLabel", monsterPanel)
    monsterInfo.Name = "MonsterTargetInfo"
-   monsterInfo.Size = UDim2.new(1, -18, 0, 28)
-   monsterInfo.Position = UDim2.fromOffset(9, 93)
+   monsterInfo.Size = UDim2.new(1, -18, 0, 27)
+   monsterInfo.Position = UDim2.fromOffset(9, 91)
    monsterInfo.BackgroundTransparency = 1
    monsterInfo.Text = "ปิดอยู่ • กด M-WARP เพื่อเริ่มค้นหา"
    monsterInfo.TextColor3 = WHITE_TEXT
@@ -2410,12 +2391,30 @@ local okMW, errMW = pcall(function()
            or string.format('<font color="#9AA79A">%s (ไม่ตี)</font>  |  <font color="#7FD6FF"><b>%s</b></font>', monsterTxt, npcTxt)
    end
 
+   local monsterWarpToggle = Instance.new("TextButton", monsterPanel)
+   monsterWarpToggle.Name = "MonsterWarpToggleButton"
+   monsterWarpToggle.Size = UDim2.new(1, -18, 0, 25)
+   monsterWarpToggle.Position = UDim2.fromOffset(9, 126)
+   monsterWarpToggle.BackgroundColor3 = GREEN.off
+   monsterWarpToggle.Text = "M-WARP  •  OFF"
+   monsterWarpToggle.TextColor3 = WHITE_TEXT
+   monsterWarpToggle.TextStrokeColor3 = TEXT_OUTLINE
+   monsterWarpToggle.TextStrokeTransparency = 0.45
+   monsterWarpToggle.Font = Enum.Font.GothamBold
+   monsterWarpToggle.TextSize = 12
+   monsterWarpToggle.AutoButtonColor = true
+   monsterWarpToggle.Active = true
+   Instance.new("UICorner", monsterWarpToggle).CornerRadius = UDim.new(0, 7)
+   local monsterWarpToggleStroke = Instance.new("UIStroke", monsterWarpToggle)
+   monsterWarpToggleStroke.Color = MONSTER_COLOR
+   monsterWarpToggleStroke.Thickness = 1.5
+
    local function updateMonsterWarpVisual()
        local on = states.MonsterWarp == true
-       monsterWarpButton.BackgroundColor3 = on and GREEN.on or GREEN.off
-       monsterWarpStroke.Color = on and Color3.fromRGB(255, 210, 90) or (monsterFilterMode == "NPC" and NPC_COLOR or MONSTER_COLOR)
-       monsterWarpButton.Text = '<font size="25">👾</font>\n<font size="13">M-WARP</font>\n<font size="10">' .. (on and "ON" or "OFF") .. '</font>'
-       monsterPanel.Visible = on
+       monsterWarpToggle.BackgroundColor3 = on and GREEN.on or GREEN.off
+       monsterWarpToggleStroke.Color = on and Color3.fromRGB(255, 210, 90) or (monsterFilterMode == "NPC" and NPC_COLOR or MONSTER_COLOR)
+       monsterWarpToggle.Text = "M-WARP  •  " .. (on and "ON" or "OFF")
+       monsterPanel.Visible = true
        refreshMonsterFilterUI()
        if not on then
            setMonsterPanelStatus("👾 MONSTER WARP: OFF", "ปิดอยู่ • กด M-WARP เพื่อเริ่มค้นหา", 0, 1)
@@ -2569,7 +2568,7 @@ local okMW, errMW = pcall(function()
        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
        if not character or not root or not humanoid or humanoid.Health <= 0 then
            monsterWarpStarting = false
-           monsterPanel.Visible = false
+           monsterPanel.Visible = true
            setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ไม่พบตัวละครที่พร้อมใช้งาน", 0, 1)
            return
        end
@@ -2618,7 +2617,7 @@ local okMW, errMW = pcall(function()
        refreshMonsterFilterUI()
    end))
 
-   trackConnection(monsterWarpButton.Activated:Connect(startMonsterWarp))
+   trackConnection(monsterWarpToggle.Activated:Connect(startMonsterWarp))
    trackConnection(workspace.DescendantAdded:Connect(function(obj)
        if obj:IsA("Model") or obj:IsA("Humanoid") then
            monsterScanDirty = true
