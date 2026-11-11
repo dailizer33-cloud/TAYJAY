@@ -2723,7 +2723,8 @@ local okMonster, errMonster = pcall(function()
        local root = character and character:FindFirstChild("HumanoidRootPart")
        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
        if not character or not root or not humanoid or humanoid.Health <= 0 then
-           monsterWarpStarting = false\n           setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ไม่พบตัวละครที่พร้อมใช้งาน", 0, 1)
+           monsterWarpStarting = false
+           setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ไม่พบตัวละครที่พร้อมใช้งาน", 0, 1)
            return
        end
 
@@ -2763,7 +2764,8 @@ local okMonster, errMonster = pcall(function()
                "เปลี่ยนตัวกรองเป็น " .. modeLabel() .. " • กำลังเลือกเป้าหมายใหม่...", 0, 1)
        end
    end
-   trackConnection(monsterFilterBtn.Activated:Connect(function()\n        if states.MonsterWarp then stopMonsterWarp(true) else setMonsterFilter("Monster"); startMonsterWarp() end\n    end))
+   trackConnection(monsterFilterBtn.Activated:Connect(function()
+        if states.MonsterWarp then stopMonsterWarp(true) else setMonsterFilter("Monster"); startMonsterWarp() end\n    end))
    trackConnection(npcFilterBtn.Activated:Connect(function() setMonsterFilter("NPC") end))
    trackConnection(dodgeBtn.Activated:Connect(function()
        monsterDodgeOn = not monsterDodgeOn
@@ -3687,7 +3689,8 @@ do
                local currentCharacter = LocalPlayer.Character
                local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
                if currentTargetRoot and currentRoot then
-                   _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.12 -- Fly คงสถานะบิน แต่ไม่เขียนตำแหน่งทับระหว่าง Warp\n                   currentRoot.CFrame = currentTargetRoot.CFrame * CFrame.new(0, 0, 2.5)
+                   _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.12 -- Fly คงสถานะบิน แต่ไม่เขียนตำแหน่งทับระหว่าง Warp
+                   currentRoot.CFrame = currentTargetRoot.CFrame * CFrame.new(0, 0, 2.5)
                    local targetHumanoid = currentTargetCharacter:FindFirstChildOfClass("Humanoid")
                    if targetHumanoid and targetHumanoid.Health > 0 then
                        tryAttackTarget(currentTargetCharacter)
