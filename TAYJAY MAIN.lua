@@ -859,7 +859,7 @@ local function beginVerticalHold(button, direction)
 end
 
 local function toggleFlyState()
-   if isBusy and not flyNowe then return end
+   -- Fly may be toggled while Warp/MM2 movement is active.
    local char = LocalPlayer.Character
    local hum = char and char:FindFirstChildOfClass("Humanoid")
    local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -1731,7 +1731,7 @@ task.spawn(function()
 
        if not shadowEnabled then
            stopShadowHunterVisuals()
-       elseif isBusy or (states.DNWarp and (states.Fly or flyNowe)) then
+       elseif isBusy then
            if shadowHiddenCharacter then
                setInvisibility(shadowHiddenCharacter, false)
                shadowHiddenCharacter = nil
@@ -3806,7 +3806,7 @@ do
    end
 
    local function teleportAndAttack(targetPlayer)
-       if isBusy or flyNowe or states.Fly or targetPlayer == LocalPlayer then return end
+       if isBusy or targetPlayer == LocalPlayer then return end
 
        local character = LocalPlayer.Character
        local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -3840,7 +3840,7 @@ do
                local currentCharacter = LocalPlayer.Character
                local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
                if currentTargetRoot and currentRoot then
-                   currentRoot.CFrame = currentTargetRoot.CFrame * CFrame.new(0, 0, 2.5)
+                   _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.12 -- Fly คงสถานะบิน แต่ไม่เขียนตำแหน่งทับระหว่าง Warp\n                   currentRoot.CFrame = currentTargetRoot.CFrame * CFrame.new(0, 0, 2.5)
                    local targetHumanoid = currentTargetCharacter:FindFirstChildOfClass("Humanoid")
                    if targetHumanoid and targetHumanoid.Health > 0 then
                        tryAttackTarget(currentTargetCharacter)
