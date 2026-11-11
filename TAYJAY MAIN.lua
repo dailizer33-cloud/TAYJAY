@@ -490,8 +490,8 @@ end
 --   X = ซ้าย→ขวา , Y = บน→ล่าง
 -- =========================================================
 local UI_LAYOUT = {
-   MainMenu     = UDim2.fromScale(0.0815, 0.1171), -- เมนูหลัก TAYJAY (มุมซ้ายบนของกรอบ)
-   PlayerList   = UDim2.fromScale(0.3242, 0.4600), -- ตาราง "ผู้เล่นทั้งหมด"
+   MainMenu     = UDim2.fromScale(0.1030, 0.1960), -- เมนูหลัก TAYJAY (ตำแหน่งตามภาพอ้างอิง)
+   PlayerList   = UDim2.fromScale(0.2180, 0.5670), -- ตารางผู้เล่นช่วงล่างค่อนไปทางซ้ายตามภาพ
    TargetPanel  = UDim2.fromScale(0.3219, 0.8370), -- กรอบ Select target / TARGET (ย้ายลงให้พ้นตารางผู้เล่นที่สูงขึ้น)
    FlyBottom    = UDim2.fromScale(0.6387, 0.9921), -- กรอบ FLY CONTROL (AnchorPoint 0,1 = มุมซ้ายล่าง)
    WarpCenter   = UDim2.fromScale(0.1728, 0.6150), -- ปุ่มวงกลม WARP เดิมสำหรับผู้เล่น
@@ -499,7 +499,9 @@ local UI_LAYOUT = {
    MonsterWarpCenter = UDim2.fromScale(0.3020, 0.6150), -- ปุ่ม WARP แยกสำหรับ Monster
    MonsterTargetPanel = UDim2.fromScale(0.5600, 0.8370), -- สถานะ Monster Warp แยกจาก Target ผู้เล่น
    MM2Dock      = UDim2.fromScale(0.8350, 0.4630), -- กรอบปุ่มดาบ/สมุด (MM2)
-   PanelW       = 224, -- ความกว้างมาตรฐานของหน้าต่างหลัก (เท่ากันหมด; ไม่กว้างกว่านี้เพราะจะชนกับ NOCLIP/FLYในภาพ)
+   PanelW       = 224, -- ความกว้างมาตรฐานของหน้าต่างรอง
+    MainW        = 286, -- เมนู TAYJAY กว้างขึ้นเพื่อแสดงคำสั่งครบในหน้าเดียว
+    MainH        = 400, -- ความสูงสำหรับปุ่มคำสั่งทั้ง 7 รายการ
    FlyH         = 224, -- ความสูงกล่อง FLY (ดีไซน์ใหม่)
    NoclipCenter = UDim2.fromScale(0.1000, 0.7000), -- ปุ่มวงกลม NOCLIP (AnchorPoint 0.5,0.5 = จุดกึ่งกลาง)
    SpeedStep    = 2, -- ปุ่มบวก/ลบความเร็วเดิน ครั้งละกี่หน่วย
@@ -516,8 +518,8 @@ local UI_LAYOUT = {
        Server = Color3.fromRGB(90, 170, 255),  -- หาเซิร์ฟว่าง: ฟ้าน้ำเงิน
        Stay    = Color3.fromRGB(72, 222, 242),  -- ปุ่ม WARP ไป (ไม่กลับ): ฟ้าอ่อน
    },
-   FPSPanel     = UDim2.fromScale(0.7309, 0.0430), -- กรอบ TAYJAY FPS BOOSTER
-   FPSLauncher  = UDim2.fromScale(0.9217, 0.3631), -- ปุ่ม ⚡ เขียว เปิด/ปิด FPS Booster
+   FPSPanel     = UDim2.fromScale(0.8400, 0.0120), -- กรอบ TAYJAY FPS BOOSTER มุมขวาบน
+   FPSLauncher  = UDim2.fromScale(0.0140, 0.3050), -- ปุ่ม ⚡ เปิด/ปิด FPS Booster ฝั่งซ้าย
    ToggleSize   = 68,  -- เส้นผ่านศูนย์กลางปุ่ม ⚡ เมนูหลัก (เดิม 48)
    ActionSize   = 66,  -- ลดปุ่ม WARP / WALK ลงเล็กน้อย
    NoclipSize   = 72,  -- คงขนาดปุ่ม NOCLIP เดิม
@@ -905,7 +907,7 @@ local function toggleFlyState()
    hum.PlatformStand = true
    pcall(function() hum:ChangeState(Enum.HumanoidStateType.Swimming) end)
 
-   local flyPart = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or root
+   local flyPart = root -- ยึดตัวควบคุมกับ HumanoidRootPart เพื่อลดการเลื่อนตัวจากจุดศูนย์กลาง
 
    bg = Instance.new("BodyGyro")
    bg.Name = "TayJayFlyGyro"
@@ -919,7 +921,7 @@ local function toggleFlyState()
    bv.Name = "TayJayFlyVelocity"
    bv.P = 9e4
    bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-   bv.Velocity = Vector3.new(0, 0.1, 0)
+   bv.Velocity = Vector3.zero
    bv.Parent = flyPart
 
    flyLoop = trackConnection(RunService.Heartbeat:Connect(function(dt)
@@ -943,7 +945,7 @@ local function toggleFlyState()
            char:TranslateBy(Vector3.new(0, verticalInput * flySpeeds * frameScale, 0))
        end
 
-       bv.Velocity = Vector3.new(0, 0.1, 0)
+       bv.Velocity = Vector3.zero
        local look = camera.CFrame.LookVector
        local flatLook = Vector3.new(look.X, 0, look.Z)
        if flatLook.Magnitude > 0.001 then
@@ -2721,7 +2723,7 @@ end)
 -- 🌐 SERVER SELECTOR
 -- =========================================================
 local serverFrame = Instance.new("Frame", screenGui)
-serverFrame.Name = "TayJayServerSelector"; serverFrame.Size = UDim2.new(0, UI_LAYOUT.PanelW, 0, UI_LAYOUT.PanelH); serverFrame.Position = UDim2.new(1, -272, 0.5, -155); serverFrame.BackgroundColor3 = Color3.fromRGB(48, 166, 76); serverFrame.Visible = false
+serverFrame.Name = "TayJayServerSelector"; serverFrame.Size = UDim2.new(0, UI_LAYOUT.PanelW, 0, UI_LAYOUT.PanelH); serverFrame.Position = UDim2.fromScale(0.7250, 0.3480); serverFrame.BackgroundColor3 = Color3.fromRGB(48, 166, 76); serverFrame.Visible = false
 Instance.new("UICorner", serverFrame).CornerRadius = UDim.new(0, 14); local serverFrameStroke = Instance.new("UIStroke", serverFrame); serverFrameStroke.Name = "TayJayWindowAccent"; serverFrameStroke.Thickness = 2.5; serverFrameStroke.Color = UI_LAYOUT.Accent.Server
 makeDraggable(serverFrame)
 
@@ -2842,7 +2844,7 @@ trackConnection(sfRefresh.Activated:Connect(loadPublicServers))
 -- =========================================================
 local toggleBtn = Instance.new("TextButton", screenGui)
 toggleBtn.Name = "TayJayMainToggle"
-toggleBtn.Size = UDim2.fromOffset(UI_LAYOUT.ToggleSize, UI_LAYOUT.ToggleSize); toggleBtn.Position = UDim2.new(0, 12, 0.18, 0)
+toggleBtn.Size = UDim2.fromOffset(UI_LAYOUT.ToggleSize, UI_LAYOUT.ToggleSize); toggleBtn.Position = UDim2.fromScale(0.0120, 0.2000)
 toggleBtn.BackgroundColor3 = GREEN.mid; toggleBtn.Text = ""; toggleBtn.AutoButtonColor = true
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
 local toggleRing = Instance.new("UIStroke", toggleBtn)
@@ -2863,7 +2865,7 @@ toggleLogo.Text = "⚡"; toggleLogo.Font = Enum.Font.GothamBlack; toggleLogo.Tex
 
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Name = "TayJayMainMenu"
-mainFrame.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH); mainFrame.Position = UI_LAYOUT.MainMenu; mainFrame.BackgroundColor3 = GREEN.dark; mainFrame.Visible = true; mainFrame.Active = true
+mainFrame.Size = UDim2.fromOffset(UI_LAYOUT.MainW, UI_LAYOUT.MainH); mainFrame.Position = UI_LAYOUT.MainMenu; mainFrame.BackgroundColor3 = GREEN.dark; mainFrame.Visible = true; mainFrame.Active = true
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 18); local mainMenuStroke = Instance.new("UIStroke", mainFrame); mainMenuStroke.Name = "TayJayWindowAccent"; mainMenuStroke.Color = UI_LAYOUT.Accent.Main; mainMenuStroke.Thickness = 2.5
 makeDraggable(mainFrame)
 trackConnection(toggleBtn.Activated:Connect(function() mainFrame.Visible = not mainFrame.Visible end))
@@ -2874,12 +2876,12 @@ local function applyCompactTabletLayout()
    local viewport = camera.ViewportSize
    local narrow = viewport.X < 900
    if narrow then
-      mainFrame.Size = UDim2.fromOffset(204, 236)
+      mainFrame.Size = UDim2.fromOffset(250, 360)
       mainFrame.Position = UDim2.new(0, 8, 0, 104)
-      deathNoteGroup.Size = UDim2.fromOffset(204, 236)
-      deathNoteGroup.Position = UDim2.new(0, 220, 0, 104)
+      deathNoteGroup.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH)
+      deathNoteGroup.Position = UDim2.new(0, 268, 0, 104)
    else
-      mainFrame.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH)
+      mainFrame.Size = UDim2.fromOffset(UI_LAYOUT.MainW, UI_LAYOUT.MainH)
       mainFrame.Position = UI_LAYOUT.MainMenu
       deathNoteGroup.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH)
       deathNoteGroup.Position = UI_LAYOUT.PlayerList
@@ -2923,16 +2925,16 @@ local list = Instance.new("UIListLayout", scroll); list.SortOrder = Enum.SortOrd
 
 local function createBtn(order, text, key)
    local btn = Instance.new("TextButton", scroll)
-   btn.Size = UDim2.new(1, -4, 0, 38); btn.BackgroundColor3 = GREEN.off; btn.Text = text .. " : OFF"; btn.TextColor3 = WHITE_TEXT; btn.Font = Enum.Font.GothamBold; btn.LayoutOrder = order
+   btn.Size = UDim2.new(1, -4, 0, 40); btn.BackgroundColor3 = GREEN.off; btn.Text = text .. " : OFF"; btn.TextColor3 = WHITE_TEXT; btn.Font = Enum.Font.GothamBold; btn.LayoutOrder = order
    btn.TextScaled = true; btn.TextWrapped = false
    local btnSize = Instance.new("UITextSizeConstraint", btn); btnSize.MaxTextSize = 14; btnSize.MinTextSize = 9
-   Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 11); local btnEdge = Instance.new("UIStroke", btn); btnEdge.Color = GREEN.warning; btnEdge.Thickness = 1.2
+   Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 11); local btnEdge = Instance.new("UIStroke", btn); btnEdge.Color = GREEN.warning; btnEdge.Thickness = 2.0; btnEdge.Transparency = 0
 
    local function updateVisual(isOn)
        btn.BackgroundColor3 = isOn and GREEN.on or GREEN.off
        btn.TextColor3 = WHITE_TEXT
        btn.TextStrokeTransparency = 0.48
-       btnEdge.Color = isOn and GREEN.neon or Color3.fromRGB(255, 115, 75)
+       btnEdge.Color = isOn and Color3.fromRGB(105, 255, 224) or Color3.fromRGB(255, 205, 74)
        btn.Text = text .. (isOn and " : ON" or " : OFF")
    end
 
@@ -3997,6 +3999,7 @@ end
 local function rowLabel(text, detail)
    local row = ui("Frame", {Size=UDim2.new(1,-4,0,50), BackgroundColor3=Color3.fromRGB(25, 52, 28), BorderSizePixel=0}, content)
    corner(row, 8)
+   stroke(row, Color3.fromRGB(75, 205, 235), 1.4)
    ui("TextLabel", {Size=UDim2.new(1,-12,0,20), Position=UDim2.fromOffset(9,3), BackgroundTransparency=1,
        Text=text, TextColor3= WHITE_TEXT, Font=Enum.Font.GothamBold, TextSize=14,
        TextXAlignment=Enum.TextXAlignment.Left}, row)
@@ -4010,6 +4013,7 @@ local function actionButton(parent, text, width, callback)
        BackgroundColor3=accent, Text=text, TextColor3= WHITE_TEXT, Font=Enum.Font.GothamBold,
        TextSize=13, BorderSizePixel=0}, parent)
    corner(b, 7)
+   stroke(b, Color3.fromRGB(255, 225, 92), 1.8)
    v70Track(V70Perf.ContentConnections, b.Activated:Connect(callback))
    return b
 end
@@ -4362,8 +4366,8 @@ SecureParentGui(controlGui)
 
 local bar = Instance.new("Frame", controlGui)
 bar.Name = "TayJayControlBar"
-bar.Size = UDim2.fromOffset(250, 42)
-bar.Position = UDim2.new(0, 12, 0.58, 0)
+bar.Size = UDim2.fromOffset(300, 52)
+bar.Position = UDim2.fromOffset(12, 102)
 bar.BackgroundColor3 = GREEN.deep
 bar.BorderSizePixel = 0
 bar.Active = true
@@ -4381,8 +4385,8 @@ _G.TAYJAY_MM2_UI_VISIBLE = true
 local function createControlButton(name, text, x, width, color)
     local button = Instance.new("TextButton", bar)
     button.Name = name
-    button.Size = UDim2.fromOffset(width, 32)
-    button.Position = UDim2.fromOffset(x, 5)
+    button.Size = UDim2.fromOffset(width, 40)
+    button.Position = UDim2.fromOffset(x, 6)
     button.BackgroundColor3 = color
     button.BorderSizePixel = 0
     button.Text = text
@@ -4390,7 +4394,7 @@ local function createControlButton(name, text, x, width, color)
     button.TextStrokeColor3 = TEXT_OUTLINE
     button.TextStrokeTransparency = 0.45
     button.Font = Enum.Font.GothamBold
-    button.TextSize = 9
+    button.TextSize = 11
     button.AutoButtonColor = true
     button.ZIndex = 10001
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
@@ -4431,16 +4435,16 @@ local function setGroupVisible(group, visible)
     refreshGroupButton(group)
 end
 
-createControlButton("TAYJAY", "TAY ON", 5, 46, GREEN.on).Activated:Connect(function()
+createControlButton("TAYJAY", "TAY ON", 6, 52, GREEN.on).Activated:Connect(function()
     setGroupVisible("TAYJAY", not uiGroupState.TAYJAY)
 end)
-createControlButton("MM2", "MM2 ON", 55, 46, GREEN.on).Activated:Connect(function()
+createControlButton("MM2", "MM2 ON", 64, 52, GREEN.on).Activated:Connect(function()
     setGroupVisible("MM2", not uiGroupState.MM2)
 end)
-createControlButton("FPS", "FPS ON", 105, 46, GREEN.on).Activated:Connect(function()
+createControlButton("FPS", "FPS ON", 122, 52, GREEN.on).Activated:Connect(function()
     setGroupVisible("FPS", not uiGroupState.FPS)
 end)
-local lockBtn = createControlButton("GLOBAL_LOCK", "🔒", 155, 42, Color3.fromRGB(255, 132, 24))
+local lockBtn = createControlButton("GLOBAL_LOCK", "🔒", 180, 50, Color3.fromRGB(255, 132, 24))
 local function refreshLock()
     local locked = _G.TAYJAY_UI.locked == true
     _G.TAYJAY_UI.locked = locked
@@ -4471,7 +4475,7 @@ trackConnection(lockBtn.Activated:Connect(function()
     _G.TAYJAY_UI.locked = not _G.TAYJAY_UI.locked
     refreshLock()
 end))
-local stopBtn = createControlButton("STOP_SCRIPT", "STOP", 201, 44, Color3.fromRGB(190, 45, 45))
+local stopBtn = createControlButton("STOP_SCRIPT", "STOP", 236, 58, Color3.fromRGB(190, 45, 45))
 
 local function shutdownTayJay()
     if _G.TAYJAY_SHUTDOWN_IN_PROGRESS then return end
