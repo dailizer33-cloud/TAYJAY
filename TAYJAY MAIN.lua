@@ -2765,7 +2765,8 @@ local okMonster, errMonster = pcall(function()
        end
    end
    trackConnection(monsterFilterBtn.Activated:Connect(function()
-        if states.MonsterWarp then stopMonsterWarp(true) else setMonsterFilter("Monster"); startMonsterWarp() end\n    end))
+        if states.MonsterWarp then stopMonsterWarp(true) else setMonsterFilter("Monster"); startMonsterWarp() end
+    end))
    trackConnection(npcFilterBtn.Activated:Connect(function() setMonsterFilter("NPC") end))
    trackConnection(dodgeBtn.Activated:Connect(function()
        monsterDodgeOn = not monsterDodgeOn
