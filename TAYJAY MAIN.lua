@@ -2958,36 +2958,10 @@ end
 end
 
 -- =========================================================
--- RAPID BITE: TEMPORARILY DISABLED
--- Keep the compact button visible, but do not scan PlayerGui, fire
--- game button connections, send virtual input, or run a Heartbeat loop.
--- This isolates RAPID BITE while preserving all unrelated modules.
+-- RAPID BITE UI HIDDEN
+-- Do not create the floating RAPID button.
+-- RAPID BITE remains disabled; unrelated modules are unchanged.
 -- =========================================================
-do
-   local okRB, errRB = pcall(function()
-       local button = Instance.new("TextButton", screenGui)
-       button.Name = "TayJayRapidBiteBtn"
-       button.AnchorPoint = Vector2.new(0.5, 0.5)
-       button.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
-       button.Position = UI_LAYOUT.RapidBiteCenter
-       button.BackgroundColor3 = Color3.fromRGB(105, 105, 105)
-       button.RichText = true
-       button.Text = '<font size="25">⚔</font>\n<font size="13">RAPID</font>\n<font size="9">DISABLED</font>'
-       button.TextColor3 = WHITE_TEXT
-       button.Font = Enum.Font.GothamBlack
-       button.TextSize = 15
-       button.Active = false
-       button.AutoButtonColor = false
-       Instance.new("UICorner", button).CornerRadius = UDim.new(1, 0)
-       local stroke = Instance.new("UIStroke", button)
-       stroke.Color = Color3.fromRGB(150, 150, 150)
-       stroke.Thickness = 2
-       makeDraggable(button)
-   end)
-   if not okRB then
-       pcall(function() warn("[TAYJAY RAPID] disabled-button setup failed: " .. tostring(errRB)) end)
-   end
-end
 
 task.spawn(function()
    while screenGui.Parent do
