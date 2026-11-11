@@ -2398,7 +2398,7 @@ local okMW, errMW = pcall(function()
        monsterFilterBtn.BackgroundColor3 = on and GREEN.on or GREEN.off
        monsterFilterBtn.Text = "👾 MONSTER  •  " .. (on and "ON" or "OFF")
        if not on then
-           setMonsterPanelStatus("👾 MONSTER WARP: OFF", "ปิดอยู่ • กด M-WARP เพื่อเริ่มค้นหา", 0, 1)
+           setMonsterPanelStatus("👾 MONSTER WARP: OFF", "ปิดอยู่ • กด MONSTER เพื่อเริ่มค้นหา", 0, 1)
        end
    end
 
@@ -2588,7 +2588,6 @@ local okMW, errMW = pcall(function()
                "เปลี่ยนตัวกรองเป็น " .. modeLabel() .. " • กำลังเลือกเป้าหมายใหม่...", 0, 1)
        end
    end
-   trackConnection(monsterFilterBtn.Activated:Connect(function() setMonsterFilter("Monster") end))
    trackConnection(npcFilterBtn.Activated:Connect(function() setMonsterFilter("NPC") end))
    trackConnection(orbitBtn.Activated:Connect(function()
        monsterOrbitOn = not monsterOrbitOn
