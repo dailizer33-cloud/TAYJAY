@@ -1439,6 +1439,11 @@ local function resolveExclusiveMode(nextKey)
         end
     end
     resolvingExclusiveMode = false
+   if nextKey == "Fly" or nextKey == "KillAura" or nextKey == "DNWarp"
+       or nextKey == "AutoWarp" or nextKey == "MonsterWarp" then
+       local stopOldPlayerWarp = _G.TAYJAY_STOP_PLAYER_WARP
+       if type(stopOldPlayerWarp) == "function" then pcall(stopOldPlayerWarp) end
+   end
 end
 syncButtonState = function(key, isOn)
     if isOn then resolveExclusiveMode(key) end
@@ -1699,12 +1704,28 @@ task.spawn(function()
        end
    end
 
+   -- Synchronously finish the previous player-WARP controller before another movement mode starts.
+   _G.TAYJAY_STOP_PLAYER_WARP = function()
+       if not warpWasOn then return end
+       local character = LocalPlayer.Character
+       local root = character and character:FindFirstChild("HumanoidRootPart")
+       if _G.TAYJAY_WARP_STAY then
+           _G.TAYJAY_WARP_STAY = false
+       else
+           goHome(root)
+       end
+       destroyPlatform()
+       warpHome, warpOwner, randomWarpTarget = nil, nil, nil
+       warpWasOn = false
+   end
+
    registerShutdownHook(function()
        states.KillAura = false
        states.DNWarp = false
        states.AutoWarp = false
        _G.TAYJAY_FOLLOW = nil
        _G.TAYJAY_STAY_REQUEST = nil
+       _G.TAYJAY_STOP_PLAYER_WARP = nil
        local character = LocalPlayer.Character
        local root = character and character:FindFirstChild("HumanoidRootPart")
        if warpWasOn and root then goHome(root) end
