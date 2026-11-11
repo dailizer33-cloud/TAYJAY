@@ -940,19 +940,20 @@ local function toggleFlyState()
        local camera = workspace.CurrentCamera
        if not camera or not bg or not bg.Parent or not bv or not bv.Parent then return end
 
-       -- Face the camera and continuously counter gravity, including while idle.
+       -- Adapt the tested Fly GUI V3 movement pattern for the existing tablet UI.
+       -- tpwalking is the single horizontal movement worker; do not spawn parallel loops.
+       -- BodyVelocity is reserved for vertical hold/UP-DOWN so it cannot fight TranslateBy.
+       local moveDir = hum.MoveDirection
+       if moveDir.Magnitude > 0 then
+           char:TranslateBy(moveDir * flySpeeds)
+       end
+
+       -- Keep the V3 BodyGyro camera-facing behavior.
        bg.CFrame = camera.CFrame
 
-       -- Humanoid.MoveDirection is world-space (including mobile joystick input).
-       -- UP/DOWN buttons control the vertical axis.
-       local moveDir = hum.MoveDirection
-       local horizontal = Vector3.new(moveDir.X, 0, moveDir.Z)
-       local flightSpeed = 50 * flySpeeds
-       bv.Velocity = Vector3.new(
-           horizontal.X * flightSpeed,
-           verticalInput * flightSpeed,
-           horizontal.Z * flightSpeed
-       )
+       -- V3 uses a small upward BodyVelocity while PlatformStand is active.
+       -- UP/DOWN controls are applied to the same vertical force.
+       bv.Velocity = Vector3.new(0, 0.1 + (verticalInput * 50 * flySpeeds), 0)
    end))
 end
 
