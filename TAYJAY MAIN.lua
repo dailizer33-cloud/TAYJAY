@@ -2718,6 +2718,10 @@ local okMW, errMW = pcall(function()
        updateMonsterWarpVisual()
    end
 
+   _G.TAYJAY_MONSTER_STOP = function()
+       stopMonsterWarp(true)
+   end
+
    local function startMonsterWarp()
        if states.MonsterWarp then
            stopMonsterWarp(true)
@@ -4993,6 +4997,14 @@ _G.TAYJAY_STOP_ALL = function()
     for key in pairs(states) do pcall(function() syncButtonState(key,false) end) end
     pcall(function() stopFlying(false) end)
     pcall(function() setNoclip(false) end)
+    pcall(function() if _G.TAYJAY_MONSTER_STOP then _G.TAYJAY_MONSTER_STOP() end end)
+    states.KillAura = false
+    states.NormalKillAura = false
+    states.AutoWarp = false
+    states.DNWarp = false
+    pcall(updateKaBtnDisplay)
+    _G.TAYJAY_POS_LOCK_UNTIL = nil
+    _G.TAYJAY_FOLLOW = nil
     pcall(function() if _G.TAYJAY_MM2_STOP then _G.TAYJAY_MM2_STOP() end end)
     pcall(v70RestoreAll)
     pcall(v70RestoreFPSCap)
@@ -5017,6 +5029,19 @@ _G.TAYJAY_STOP_ALL = function()
     pcall(function() if V70Perf and V70Perf.Cleanup then V70Perf.Cleanup() end end)
     for _,connection in ipairs(activeConnections) do pcall(function() connection:Disconnect() end) end
     table.clear(activeConnections)
+    pcall(function() if _tjLogConnection then _tjLogConnection:Disconnect(); _tjLogConnection=nil end end)
+    pcall(function() if _tjBootGui then _tjBootGui:Destroy(); _tjBootGui=nil; _tjBootLabel=nil end end)
+    pcall(function()
+        if type(gethui)=="function" then
+            local hidden=gethui()
+            for _,child in ipairs(hidden:GetChildren()) do
+                if child.Name==guiName or child.Name=="TayJay_FPS_Booster_V72"
+                    or child.Name=="TayJayLockGui" or child.Name=="TayJayQuickVisibility" then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        end
+    end)
     for _,parent in ipairs({CoreGui,LocalPlayer:FindFirstChildOfClass("PlayerGui")}) do
         if parent then
             for _,child in ipairs(parent:GetChildren()) do
@@ -5033,6 +5058,7 @@ _G.TAYJAY_STOP_ALL = function()
     pcall(function() if quickGui then quickGui:Destroy() end end)
     _G.TAYJAY_V70_PERF=nil
     _G.TAYJAY_MM2_STOP=nil
+    _G.TAYJAY_MONSTER_STOP=nil
     _G.TAYJAY_STOP_ALL=nil
     print("[TAYJAY] STOP ALL completed: features restored, connections disconnected, UI removed.")
 end
