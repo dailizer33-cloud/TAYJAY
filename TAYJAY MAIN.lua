@@ -928,10 +928,9 @@ local function toggleFlyState()
    bv.Velocity = Vector3.zero
    bv.Parent = flyPart
 
-   -- Single tpwalking worker adapted from FLY GUI V3.
-   -- The original V3 spawned `speeds` parallel loops; this shared worker applies
-   -- the speed multiplier once, avoiding duplicate TranslateBy movement.
-   flyLoop = trackConnection(RunService.Heartbeat:Connect(function(dt)
+   -- One shared tpwalking worker: BodyGyro + BodyVelocity provide the
+   -- actual flight force. Do not combine TranslateBy with BodyVelocity.
+   flyLoop = trackConnection(RunService.Heartbeat:Connect(function()
        if not flyNowe or not tpwalking then return end
        if not char.Parent or not hum.Parent or hum.Health <= 0 or not root.Parent or not flyPart.Parent then
            stopFlying()
@@ -941,23 +940,19 @@ local function toggleFlyState()
        local camera = workspace.CurrentCamera
        if not camera or not bg or not bg.Parent or not bv or not bv.Parent then return end
 
-       -- Match Fly GUI V3 camera-facing orientation and hold position against gravity.
+       -- Face the camera and continuously counter gravity, including while idle.
        bg.CFrame = camera.CFrame
-       bv.Velocity = Vector3.zero
 
-       local frameScale = math.clamp(dt * 60, 0, 2)
+       -- Humanoid.MoveDirection is world-space (including mobile joystick input).
+       -- UP/DOWN buttons control the vertical axis.
        local moveDir = hum.MoveDirection
-       if moveDir.Magnitude > 0.001 then
-           local horizontalDirection = Vector3.new(moveDir.X, 0, moveDir.Z)
-           if horizontalDirection.Magnitude > 0.001 then
-               char:TranslateBy(horizontalDirection.Unit * (flySpeeds * frameScale))
-           end
-       end
-
-       -- Existing UP/DOWN touch buttons remain the vertical controls.
-       if verticalInput ~= 0 then
-           char:TranslateBy(Vector3.new(0, verticalInput * flySpeeds * frameScale, 0))
-       end
+       local horizontal = Vector3.new(moveDir.X, 0, moveDir.Z)
+       local flightSpeed = 50 * flySpeeds
+       bv.Velocity = Vector3.new(
+           horizontal.X * flightSpeed,
+           verticalInput * flightSpeed,
+           horizontal.Z * flightSpeed
+       )
    end))
 end
 
