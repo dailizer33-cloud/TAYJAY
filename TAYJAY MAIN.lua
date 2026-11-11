@@ -924,7 +924,9 @@ local function toggleFlyState()
    bv.Velocity = Vector3.zero
    bv.Parent = flyPart
 
-   flyLoop = trackConnection(RunService.Heartbeat:Connect(function(dt)
+   -- Restore the proven FLY GUI V3-style controller:
+   -- camera-facing BodyGyro + directional BodyVelocity on RenderStepped.
+   flyLoop = trackConnection(RunService.RenderStepped:Connect(function()
        if not flyNowe then return end
        if not char.Parent or not hum.Parent or hum.Health <= 0 or not root.Parent or not flyPart.Parent then
            stopFlying()
@@ -932,24 +934,21 @@ local function toggleFlyState()
        end
 
        local camera = workspace.CurrentCamera
-       if not camera then return end
+       if not camera or not bg or not bg.Parent or not bv or not bv.Parent then return end
 
-       local move = hum.MoveDirection
-       if move.Magnitude > 0.001 then
-           local frameScale = math.clamp(dt * 60, 0, 2)
-           char:TranslateBy(move * flySpeeds * frameScale)
+       bg.CFrame = camera.CFrame
+
+       local moveDir = hum.MoveDirection
+       if moveDir.Magnitude > 0.001 then
+           bv.Velocity = moveDir * (config.WalkSpeed + (flySpeeds * 15))
+       else
+           -- Keep a small neutral lift, matching the original V3-style hover.
+           bv.Velocity = Vector3.new(0, 0.1, 0)
        end
 
        if verticalInput ~= 0 then
-           local frameScale = math.clamp(dt * 60, 0, 2)
+           local frameScale = math.clamp(RunService.RenderStepped:Wait() and 1 or 1, 0, 1)
            char:TranslateBy(Vector3.new(0, verticalInput * flySpeeds * frameScale, 0))
-       end
-
-       bv.Velocity = Vector3.zero
-       local look = camera.CFrame.LookVector
-       local flatLook = Vector3.new(look.X, 0, look.Z)
-       if flatLook.Magnitude > 0.001 then
-           bg.CFrame = CFrame.lookAt(flyPart.Position, flyPart.Position + flatLook.Unit)
        end
    end))
 end
