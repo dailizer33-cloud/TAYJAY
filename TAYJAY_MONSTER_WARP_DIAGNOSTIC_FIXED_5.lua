@@ -349,7 +349,7 @@ local isBusy = false
 local states = {
    Speed = false, Fly = false, InfJump = false, Noclip = false, 
    Xray = false, ESP = true, DeathNote = false, KillAura = false, NormalKillAura = false, MonsterWarp = false,
-   ServerSelector = false, MM2RoleESP = false, AutoWarp = false, DNWarp = false
+   ServerSelector = false, MM2RoleESP = false, AutoWarp = false, DNWarp = false, MonsterPanel = true
 }
 
 local uiSyncRegistry = {}
@@ -1874,6 +1874,7 @@ local okMW, errMW = pcall(function()
    monsterPanel.BackgroundColor3 = GREEN.dark
    monsterPanel.BackgroundTransparency = 0.03
    monsterPanel.Visible = true
+   _G.TAYJAY_MONSTER_PANEL = monsterPanel
    Instance.new("UICorner", monsterPanel).CornerRadius = UDim.new(0, 12)
    local monsterPanelStroke = Instance.new("UIStroke", monsterPanel)
    monsterPanelStroke.Name = "TayJayWindowAccent"
@@ -1962,7 +1963,7 @@ local okMW, errMW = pcall(function()
    monsterInfo.Size = UDim2.new(1, -18, 0, 27)
    monsterInfo.Position = UDim2.fromOffset(9, 91)
    monsterInfo.BackgroundTransparency = 1
-   monsterInfo.Text = "ปิดอยู่ • กด M-WARP เพื่อเริ่มค้นหา"
+   monsterInfo.Text = "พร้อมใช้งาน • กด MONSTER เพื่อเริ่ม/หยุด M-WARP"
    monsterInfo.TextColor3 = WHITE_TEXT
    monsterInfo.TextStrokeColor3 = TEXT_OUTLINE
    monsterInfo.TextStrokeTransparency = 0.48
@@ -2391,31 +2392,11 @@ local okMW, errMW = pcall(function()
            or string.format('<font color="#9AA79A">%s (ไม่ตี)</font>  |  <font color="#7FD6FF"><b>%s</b></font>', monsterTxt, npcTxt)
    end
 
-   local monsterWarpToggle = Instance.new("TextButton", monsterPanel)
-   monsterWarpToggle.Name = "MonsterWarpToggleButton"
-   monsterWarpToggle.Size = UDim2.new(1, -18, 0, 25)
-   monsterWarpToggle.Position = UDim2.fromOffset(9, 126)
-   monsterWarpToggle.BackgroundColor3 = GREEN.off
-   monsterWarpToggle.Text = "M-WARP  •  OFF"
-   monsterWarpToggle.TextColor3 = WHITE_TEXT
-   monsterWarpToggle.TextStrokeColor3 = TEXT_OUTLINE
-   monsterWarpToggle.TextStrokeTransparency = 0.45
-   monsterWarpToggle.Font = Enum.Font.GothamBold
-   monsterWarpToggle.TextSize = 12
-   monsterWarpToggle.AutoButtonColor = true
-   monsterWarpToggle.Active = true
-   Instance.new("UICorner", monsterWarpToggle).CornerRadius = UDim.new(0, 7)
-   local monsterWarpToggleStroke = Instance.new("UIStroke", monsterWarpToggle)
-   monsterWarpToggleStroke.Color = MONSTER_COLOR
-   monsterWarpToggleStroke.Thickness = 1.5
-
    local function updateMonsterWarpVisual()
        local on = states.MonsterWarp == true
-       monsterWarpToggle.BackgroundColor3 = on and GREEN.on or GREEN.off
-       monsterWarpToggleStroke.Color = on and Color3.fromRGB(255, 210, 90) or (monsterFilterMode == "NPC" and NPC_COLOR or MONSTER_COLOR)
-       monsterWarpToggle.Text = "M-WARP  •  " .. (on and "ON" or "OFF")
-       monsterPanel.Visible = true
        refreshMonsterFilterUI()
+       monsterFilterBtn.BackgroundColor3 = on and GREEN.on or GREEN.off
+       monsterFilterBtn.Text = "👾 MONSTER  •  " .. (on and "ON" or "OFF")
        if not on then
            setMonsterPanelStatus("👾 MONSTER WARP: OFF", "ปิดอยู่ • กด M-WARP เพื่อเริ่มค้นหา", 0, 1)
        end
@@ -2559,7 +2540,6 @@ local okMW, errMW = pcall(function()
        if states.DNWarp then syncButtonState("DNWarp", false) end
        if states.AutoWarp then syncButtonState("AutoWarp", false) end
        updateKaBtnDisplay()
-       monsterPanel.Visible = true
        setMonsterPanelStatus("👾 MONSTER WARP: SWITCHING", "กำลังหยุดระบบ WARP ผู้เล่นก่อนเริ่มค้นหา Monster...", 0, 1)
        task.wait(0.20)
 
@@ -2568,7 +2548,6 @@ local okMW, errMW = pcall(function()
        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
        if not character or not root or not humanoid or humanoid.Health <= 0 then
            monsterWarpStarting = false
-           monsterPanel.Visible = true
            setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ไม่พบตัวละครที่พร้อมใช้งาน", 0, 1)
            return
        end
@@ -2617,7 +2596,10 @@ local okMW, errMW = pcall(function()
        refreshMonsterFilterUI()
    end))
 
-   trackConnection(monsterWarpToggle.Activated:Connect(startMonsterWarp))
+   trackConnection(monsterFilterBtn.Activated:Connect(function()
+       setMonsterFilter("Monster")
+       startMonsterWarp()
+   end))
    trackConnection(workspace.DescendantAdded:Connect(function(obj)
        if obj:IsA("Model") or obj:IsA("Humanoid") then
            monsterScanDirty = true
@@ -3019,6 +3001,8 @@ local function createBtn(order, text, key)
            deathNoteMain.Visible = isOn
            if isOn then task.defer(updatePlayerList) end
        elseif key == "ServerSelector" then serverFrame.Visible = isOn; if isOn and #sfList:GetChildren() <= 2 then loadPublicServers() end
+       elseif key == "MonsterPanel" then
+           if _G.TAYJAY_MONSTER_PANEL then _G.TAYJAY_MONSTER_PANEL.Visible = isOn end
        end
    end)
    updateVisual(states[key])
@@ -3031,6 +3015,7 @@ createBtn(3, "3. 🌌 กระโดดไร้ขีดจำกัด (Inf J
 createBtn(4, "4. 🔍 มองทะลุ (X-Ray)", "Xray")
 createBtn(5, "5. ☠️ สมุดสั่งตาย (Death Note)", "DeathNote")
 createBtn(6, "6. 🌍 หาเซิร์ฟว่าง (Server Selector)", "ServerSelector")
+createBtn(7, "7. 👾 หน้าต่าง Monster", "MonsterPanel")
 
 trackConnection(list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() scroll.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 20) end))
 
