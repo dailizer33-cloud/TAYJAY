@@ -3163,7 +3163,7 @@ local function applyCompactTabletLayout()
        deathNoteGroup.Size = UDim2.fromOffset(224, 300)
        deathNoteGroup.Position = UDim2.new(0, 360, 0, 104)
    else
-      mainFrame.Size = UDim2.fromOffset(344, 320)
+      mainFrame.Size = UDim2.fromOffset(286, 370)
       mainFrame.Position = UI_LAYOUT.MainMenu
       deathNoteGroup.Size = UDim2.fromOffset(224, 300)
       deathNoteGroup.Position = UI_LAYOUT.PlayerList
