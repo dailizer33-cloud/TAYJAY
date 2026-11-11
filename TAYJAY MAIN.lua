@@ -759,6 +759,8 @@ flyUi.setVisual(false)
 
 local flySpeeds = 1
 local flyNowe = false
+-- Shared tpwalking worker: one Heartbeat connection handles all horizontal movement.
+local tpwalking = false
 local bg, bv, flyLoop
 local verticalInput = 0
 local savedHumanoid = nil
@@ -790,6 +792,7 @@ end
 
 local function stopFlying(syncState)
    flyNowe = false
+   tpwalking = false
    verticalInput = 0
 
    flyUi.setVisual(false)
@@ -883,6 +886,7 @@ local function toggleFlyState()
    end
 
    flyNowe = true
+   tpwalking = true
    syncButtonState("Fly", true)
    FlyFrame.Visible = true
    flyUi.setVisual(true)
@@ -924,11 +928,11 @@ local function toggleFlyState()
    bv.Velocity = Vector3.zero
    bv.Parent = flyPart
 
-   -- FLY GUI V3 movement pattern adapted to the existing TAYJAY tablet controls.
-   -- MoveDirection is translated once per Heartbeat; speed level scales movement
-   -- without creating multiple parallel movement tasks.
+   -- Single tpwalking worker adapted from FLY GUI V3.
+   -- The original V3 spawned `speeds` parallel loops; this shared worker applies
+   -- the speed multiplier once, avoiding duplicate TranslateBy movement.
    flyLoop = trackConnection(RunService.Heartbeat:Connect(function(dt)
-       if not flyNowe then return end
+       if not flyNowe or not tpwalking then return end
        if not char.Parent or not hum.Parent or hum.Health <= 0 or not root.Parent or not flyPart.Parent then
            stopFlying()
            return
