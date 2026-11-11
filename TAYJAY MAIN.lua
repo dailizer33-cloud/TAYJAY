@@ -4578,7 +4578,8 @@ local function renderSearch(query)
     section("RESULTS")
     local count = 0
     for _, entry in ipairs(buildCatalog()) do
-        if string.find(string.lower(entry.name .. " " .. entry.detail), query, 1, true) then
+        -- Preset changes are intentionally available only in the FPS tab.
+        if string.sub(entry.id, 1, 5) ~= "mode:" and string.find(string.lower(entry.name .. " " .. entry.detail), query, 1, true) then
             count = count + 1
             drawEntry(entry, function() renderSearch(query) end)
         end
