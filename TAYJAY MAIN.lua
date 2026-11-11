@@ -4066,6 +4066,13 @@ do
    end)
 end
 
+-- Capture original camera values before applying this script's camera defaults.
+local originalCameraSettings = {
+    CameraMode=LocalPlayer.CameraMode,
+    CameraMaxZoomDistance=LocalPlayer.CameraMaxZoomDistance,
+    CameraMinZoomDistance=LocalPlayer.CameraMinZoomDistance,
+    DevCameraOcclusionMode=LocalPlayer.DevCameraOcclusionMode
+}
 -- =========================================================
 -- 🌌 TAYJAY MIDNIGHT NEON THEME + CAMERA QUALITY OF LIFE
 -- =========================================================
@@ -4903,11 +4910,20 @@ local tayjayRoots = {
 }
 local mm2Roots = {"TayJayMM2Dock", "TayJayMM2PlayerList"}
 local visibility = {TAYJAY=true, MM2=true, FPS=true}
+local tayjayVisibilityCache, mm2VisibilityCache = {}, {}
 local quickButtons = {}
-local function setRootGroup(names, visible)
+local function setRootGroup(names, visible, cache)
+    cache = cache or {}
     for _, name in ipairs(names) do
         local root = getRoot(name)
-        if root and root:IsA("GuiObject") then root.Visible = visible end
+        if root and root:IsA("GuiObject") then
+            if visible then
+                if cache[name] ~= nil then root.Visible = cache[name]; cache[name] = nil end
+            else
+                if cache[name] == nil then cache[name] = root.Visible end
+                root.Visible = false
+            end
+        end
     end
 end
 local function refreshQuickButton(key)
@@ -4920,8 +4936,8 @@ local function refreshQuickButton(key)
 end
 local function setVisibility(key, value)
     visibility[key] = value == true
-    if key == "TAYJAY" then setRootGroup(tayjayRoots,visibility[key])
-    elseif key == "MM2" then setRootGroup(mm2Roots,visibility[key])
+    if key == "TAYJAY" then setRootGroup(tayjayRoots,visibility[key],tayjayVisibilityCache)
+    elseif key == "MM2" then setRootGroup(mm2Roots,visibility[key],mm2VisibilityCache)
     elseif key == "FPS" then perfGui.Enabled = visibility[key] end
     refreshQuickButton(key)
 end
@@ -4971,12 +4987,6 @@ local function strengthenControlEdges(guiRoot)
 end
 strengthenControlEdges(screenGui)
 strengthenControlEdges(perfGui)
-local originalCameraSettings = {
-    CameraMode=LocalPlayer.CameraMode,
-    CameraMaxZoomDistance=LocalPlayer.CameraMaxZoomDistance,
-    CameraMinZoomDistance=LocalPlayer.CameraMinZoomDistance,
-    DevCameraOcclusionMode=LocalPlayer.DevCameraOcclusionMode
-}
 _G.TAYJAY_STOP_ALL = function()
     if _G.TAYJAY_STOPPED then return end
     _G.TAYJAY_STOPPED=true
