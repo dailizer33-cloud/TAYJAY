@@ -3151,14 +3151,14 @@ mainFrame.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH); mainFrame
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 18); local mainMenuStroke = Instance.new("UIStroke", mainFrame); mainMenuStroke.Name = "TayJayWindowAccent"; mainMenuStroke.Color = UI_LAYOUT.Accent.Main; mainMenuStroke.Thickness = 2.5
 makeDraggable(mainFrame)
 trackConnection(toggleBtn.Activated:Connect(function() mainFrame.Visible = not mainFrame.Visible end))
--- Compact tablet layout: main menu and Death Note share a tidy two-column row.
+-- Compact tablet layout: the TAYJAY menu uses one column; Death Note remains beside it.
 local function applyCompactTabletLayout()
    local camera = workspace.CurrentCamera
    if not camera then return end
    local viewport = camera.ViewportSize
    local narrow = viewport.X < 900
    if narrow then
-      mainFrame.Size = UDim2.fromOffset(344, 320)
+      mainFrame.Size = UDim2.fromOffset(286, 370)
        mainFrame.Position = UDim2.new(0, 8, 0, 104)
        deathNoteGroup.Size = UDim2.fromOffset(224, 300)
        deathNoteGroup.Position = UDim2.new(0, 360, 0, 104)
@@ -3205,13 +3205,13 @@ local scroll = Instance.new("ScrollingFrame", mainFrame)
 scroll.Size = UDim2.new(1, -14, 1, -62); scroll.Position = UDim2.new(0, 7, 0, 56); scroll.BackgroundTransparency = 1; scroll.ScrollBarThickness = 6; scroll.ScrollBarImageColor3 = GREEN.neon
 local list = Instance.new("UIGridLayout", scroll)
 list.SortOrder = Enum.SortOrder.LayoutOrder
-list.CellSize = UDim2.new(0.5, -5, 0, 38)
-list.CellPadding = UDim2.fromOffset(8, 6)
-list.FillDirectionMaxCells = 2
+list.CellSize = UDim2.new(1, -4, 0, 34)
+list.CellPadding = UDim2.fromOffset(0, 5)
+list.FillDirectionMaxCells = 1
 
 local function createBtn(order, text, key)
    local btn = Instance.new("TextButton", scroll)
-   btn.Size = UDim2.new(0.5, -5, 0, 38); btn.BackgroundColor3 = GREEN.off; btn.Text = text .. " : OFF"; btn.TextColor3 = WHITE_TEXT; btn.Font = Enum.Font.GothamBold; btn.LayoutOrder = order
+   btn.Size = UDim2.new(1, -4, 0, 34); btn.BackgroundColor3 = GREEN.off; btn.Text = text .. " : OFF"; btn.TextColor3 = WHITE_TEXT; btn.Font = Enum.Font.GothamBold; btn.LayoutOrder = order
    btn.TextScaled = true; btn.TextWrapped = false
    local btnSize = Instance.new("UITextSizeConstraint", btn); btnSize.MaxTextSize = 14; btnSize.MinTextSize = 9
    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 11); local btnEdge = Instance.new("UIStroke", btn); btnEdge.Color = GREEN.warning; btnEdge.Thickness = 1.2
@@ -3257,7 +3257,7 @@ createBtn(7, "7. ESP", "ESP")
 local monsterMenuButton = Instance.new("TextButton", scroll)
 monsterMenuButton.Name = "TayJayMonsterMenuButton"
 monsterMenuButton.LayoutOrder = 8
-monsterMenuButton.Size = UDim2.new(0.5, -5, 0, 38)
+monsterMenuButton.Size = UDim2.new(1, -4, 0, 34)
 monsterMenuButton.BackgroundColor3 = GREEN.on
 monsterMenuButton.Text = "8. 👾 Monster : ON"
 monsterMenuButton.TextColor3 = WHITE_TEXT
@@ -3287,7 +3287,7 @@ refreshMonsterMenuButton()
 local stopAllButton = Instance.new("TextButton", scroll)
 stopAllButton.Name = "TayJayStopAllButton"
 stopAllButton.LayoutOrder = 9
-stopAllButton.Size = UDim2.new(0.5, -5, 0, 38)
+stopAllButton.Size = UDim2.new(1, -4, 0, 38)
 stopAllButton.BackgroundColor3 = Color3.fromRGB(176, 36, 48)
 stopAllButton.Text = "STOP ALL"
 stopAllButton.TextColor3 = WHITE_TEXT
