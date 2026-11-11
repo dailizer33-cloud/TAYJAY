@@ -924,9 +924,10 @@ local function toggleFlyState()
    bv.Velocity = Vector3.zero
    bv.Parent = flyPart
 
-   -- Restore the proven FLY GUI V3-style controller:
-   -- camera-facing BodyGyro + directional BodyVelocity on RenderStepped.
-   flyLoop = trackConnection(RunService.RenderStepped:Connect(function(dt)
+   -- FLY GUI V3 movement pattern adapted to the existing TAYJAY tablet controls.
+   -- MoveDirection is translated once per Heartbeat; speed level scales movement
+   -- without creating multiple parallel movement tasks.
+   flyLoop = trackConnection(RunService.Heartbeat:Connect(function(dt)
        if not flyNowe then return end
        if not char.Parent or not hum.Parent or hum.Health <= 0 or not root.Parent or not flyPart.Parent then
            stopFlying()
@@ -936,18 +937,21 @@ local function toggleFlyState()
        local camera = workspace.CurrentCamera
        if not camera or not bg or not bg.Parent or not bv or not bv.Parent then return end
 
+       -- Match Fly GUI V3 camera-facing orientation and hold position against gravity.
        bg.CFrame = camera.CFrame
+       bv.Velocity = Vector3.zero
 
+       local frameScale = math.clamp(dt * 60, 0, 2)
        local moveDir = hum.MoveDirection
        if moveDir.Magnitude > 0.001 then
-           bv.Velocity = moveDir * (config.WalkSpeed + (flySpeeds * 15))
-       else
-           -- Keep a small neutral lift, matching the original V3-style hover.
-           bv.Velocity = Vector3.new(0, 0.1, 0)
+           local horizontalDirection = Vector3.new(moveDir.X, 0, moveDir.Z)
+           if horizontalDirection.Magnitude > 0.001 then
+               char:TranslateBy(horizontalDirection.Unit * (flySpeeds * frameScale))
+           end
        end
 
+       -- Existing UP/DOWN touch buttons remain the vertical controls.
        if verticalInput ~= 0 then
-           local frameScale = math.clamp(dt * 60, 0, 2)
            char:TranslateBy(Vector3.new(0, verticalInput * flySpeeds * frameScale, 0))
        end
    end))
