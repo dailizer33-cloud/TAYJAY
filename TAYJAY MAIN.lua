@@ -929,7 +929,7 @@ local function toggleFlyState()
        local camera = workspace.CurrentCamera
        if not camera then return end
 
-       -- M-WARP / WARP ล็อกตัวละครบนเป้าหมายอยู่: Fly ทำหน้าที่ "ท่าบิน" (ไม่ตก/ไม่ล้ม) แต่ไม่ขยับตัวละครซ้ำ
+       -- MONSTER / WARP ล็อกตัวละครบนเป้าหมายอยู่: Fly ทำหน้าที่ "ท่าบิน" (ไม่ตก/ไม่ล้ม) แต่ไม่ขยับตัวละครซ้ำ
        -- ไม่งั้นสองระบบเขียนตำแหน่งแย่งกันทุกเฟรม = กระตุก (ตัวล็อกถูกต่ออายุทุกเฟรมโดย monsterGlueStep / ลูปตาม WARP)
        local mwLockUntil = _G.TAYJAY_POS_LOCK_UNTIL
        local mwLocked = mwLockUntil ~= nil and os.clock() < mwLockUntil
@@ -1866,27 +1866,10 @@ end)
 -- =========================================================
 -- ห่อด้วย do + pcall (ไม่ใช้ "(function() ... end)()" ที่ขึ้นต้นบรรทัดใหม่ เพราะ Luau มองว่าเป็น
 -- Ambiguous syntax และ Lua จะอ่านเป็นการเรียกผลลัพธ์ของ task.spawn(...) ซ้อน → สคริปต์ล้มทั้งไฟล์)
--- pcall ทำให้ถ้า M-WARP พัง ส่วนอื่นของสคริปต์ยังทำงานต่อ และรายงานสาเหตุขึ้นจอ
+-- pcall ทำให้ถ้า MONSTER พัง ส่วนอื่นของสคริปต์ยังทำงานต่อ และรายงานสาเหตุขึ้นจอ
 do
 local okMW, errMW = pcall(function()
-   local monsterWarpButton = Instance.new("TextButton", screenGui)
-   monsterWarpButton.Name = "TayJayMonsterWarpBtn"
-   monsterWarpButton.AnchorPoint = Vector2.new(0.5, 0.5)
-   monsterWarpButton.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
-   monsterWarpButton.Position = UI_LAYOUT.MonsterWarpCenter
-   monsterWarpButton.BackgroundColor3 = GREEN.off
-   monsterWarpButton.RichText = true
-   monsterWarpButton.Text = '<font size="25">👾</font>\n<font size="13">M-WARP</font>\n<font size="10">OFF</font>'
-   monsterWarpButton.TextColor3 = WHITE_TEXT
-   monsterWarpButton.Font = Enum.Font.GothamBlack
-   monsterWarpButton.TextSize = 15
-   monsterWarpButton.Active = true
-   monsterWarpButton.AutoButtonColor = true
-   Instance.new("UICorner", monsterWarpButton).CornerRadius = UDim.new(1, 0)
-   local monsterWarpStroke = Instance.new("UIStroke", monsterWarpButton)
-   monsterWarpStroke.Color = Color3.fromRGB(255, 145, 70)
-   monsterWarpStroke.Thickness = 2.5
-   makeDraggable(monsterWarpButton)
+
 
    local monsterPanel = Instance.new("Frame", screenGui)
    monsterPanel.Name = "TayJayMonsterTargetPanel"
@@ -1894,8 +1877,9 @@ local okMW, errMW = pcall(function()
    monsterPanel.Position = UI_LAYOUT.MonsterTargetPanel
    monsterPanel.BackgroundColor3 = GREEN.dark
    monsterPanel.BackgroundTransparency = 0.03
-   local monsterPanelVisible = true -- table visibility is controlled by main TAYJAY menu\n
-   monsterPanel.Visible = monsterPanelVisible\n   Instance.new("UICorner", monsterPanel).CornerRadius = UDim.new(0, 12)
+   local monsterPanelVisible = true -- table visibility is controlled by main TAYJAY menu
+   monsterPanel.Visible = monsterPanelVisible
+   Instance.new("UICorner", monsterPanel).CornerRadius = UDim.new(0, 12)
    local monsterPanelStroke = Instance.new("UIStroke", monsterPanel)
    monsterPanelStroke.Name = "TayJayWindowAccent"
    monsterPanelStroke.Color = Color3.fromRGB(255, 145, 70)
@@ -1996,7 +1980,7 @@ local okMW, errMW = pcall(function()
    monsterInfo.Size = UDim2.new(1, -18, 0, 28)
    monsterInfo.Position = UDim2.fromOffset(9, 119)
    monsterInfo.BackgroundTransparency = 1
-   monsterInfo.Text = "ปิดอยู่ • กด M-WARP เพื่อเริ่มค้นหา"
+   monsterInfo.Text = "ปิดอยู่ • กด MONSTER เพื่อเริ่มค้นหา"
    monsterInfo.TextColor3 = WHITE_TEXT
    monsterInfo.TextStrokeColor3 = TEXT_OUTLINE
    monsterInfo.TextStrokeTransparency = 0.48
@@ -2438,7 +2422,7 @@ local okMW, errMW = pcall(function()
        monsterUnknownSummary = table.concat(names, ", ")
        if monsterUnknownSummary ~= "" and monsterUnknownSummary ~= monsterUnknownPrinted then
            monsterUnknownPrinted = monsterUnknownSummary
-           print("[TAYJAY M-WARP] unclassified models with HP: " .. monsterUnknownSummary)
+           print("[TAYJAY MONSTER] unclassified models with HP: " .. monsterUnknownSummary)
        end
        monsterScanDirty = false
        monsterLastScan = os.clock()
@@ -2524,12 +2508,10 @@ local okMW, errMW = pcall(function()
 
    local function updateMonsterWarpVisual()
        local on = states.MonsterWarp == true
-       monsterWarpButton.BackgroundColor3 = on and GREEN.on or GREEN.off
-       monsterWarpStroke.Color = on and Color3.fromRGB(255, 210, 90) or (monsterFilterMode == "NPC" and NPC_COLOR or MONSTER_COLOR)
-       monsterWarpButton.Text = '<font size="25">👾</font>\n<font size="13">M-WARP</font>\n<font size="10">' .. (on and "ON" or "OFF") .. '</font>'
-       monsterPanel.Visible = monsterPanelVisible\n       monsterWarpButton.Visible = false\n       refreshMonsterFilterUI()
+       monsterPanel.Visible = monsterPanelVisible
+       refreshMonsterFilterUI()
        if not on then
-           setMonsterPanelStatus("👾 MONSTER WARP: OFF", "ปิดอยู่ • กด M-WARP เพื่อเริ่มค้นหา", 0, 1)
+           setMonsterPanelStatus("👾 MONSTER: OFF", "ปิดอยู่ • กด MONSTER ในตารางเพื่อเริ่มค้นหา", 0, 1)
        end
    end
 
@@ -2607,7 +2589,7 @@ local okMW, errMW = pcall(function()
                local key = string.lower(name)
                if learnedDangerAnims[key] == nil then
                    learnedDangerAnims[key] = 0
-                   print("[TAYJAY M-WARP] learned dangerous animation: " .. name)
+                   print("[TAYJAY MONSTER] learned dangerous animation: " .. name)
                end
                learnedDangerAnims[key] = learnedDangerAnims[key] + 1
            end
@@ -2655,7 +2637,7 @@ local okMW, errMW = pcall(function()
        if not character or character ~= monsterOwner then return end
        local myRoot = character:FindFirstChild("HumanoidRootPart")
        if not myRoot then return end
-       _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.3 -- บอก Fly ว่าตอนนี้ M-WARP คุมตำแหน่งอยู่
+       _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.3 -- บอก Fly ว่าตอนนี้ MONSTER คุมตำแหน่งอยู่
        local destination = targetRoot.CFrame * MONSTER_FOLLOW_OFFSET
        local orbiting = monsterOrbitOn and monsterFilterMode == "Monster"
        local nowClock = os.clock()
@@ -2796,7 +2778,6 @@ local okMW, errMW = pcall(function()
        refreshMonsterFilterUI()
    end))
 
-   trackConnection(monsterWarpButton.Activated:Connect(startMonsterWarp))
    trackConnection(workspace.DescendantAdded:Connect(function(obj)
        if obj:IsA("Model") or obj:IsA("Humanoid") then
            monsterScanDirty = true
@@ -2959,10 +2940,17 @@ local okMW, errMW = pcall(function()
        if states.MonsterWarp then stopMonsterWarp(false) end
    end)
 
-   _G.TAYJAY_MONSTER_PANEL_SET_VISIBLE = function(value)\n       monsterPanelVisible = value == true\n       monsterPanel.Visible = monsterPanelVisible\n       return monsterPanelVisible\n   end\n   _G.TAYJAY_MONSTER_PANEL_GET_VISIBLE = function() return monsterPanelVisible end\n   updateMonsterWarpVisual()\nend)\nif not okMW then
-   pcall(function() warn("[TAYJAY M-WARP] initialization failed: " .. tostring(errMW)) end)
+   _G.TAYJAY_MONSTER_PANEL_SET_VISIBLE = function(value)
+       monsterPanelVisible = value == true
+       monsterPanel.Visible = monsterPanelVisible
+       return monsterPanelVisible
+   end
+   _G.TAYJAY_MONSTER_PANEL_GET_VISIBLE = function() return monsterPanelVisible end
+   updateMonsterWarpVisual()
+end)\nif not okMW then
+   pcall(function() warn("[TAYJAY MONSTER] initialization failed: " .. tostring(errMW)) end)
    pcall(function()
-       if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "M-WARP: " .. tostring(errMW)) end
+       if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "MONSTER: " .. tostring(errMW)) end
    end)
 end
 end
@@ -4924,7 +4912,10 @@ _G.TAYJAY_STOP_ALL = function()
     pcall(function() if quickGui then quickGui:Destroy() end end)
     _G.TAYJAY_V70_PERF=nil
     _G.TAYJAY_MM2_STOP=nil
-    _G.TAYJAY_MONSTER_STOP=nil\n    _G.TAYJAY_MONSTER_PANEL_SET_VISIBLE=nil\n    _G.TAYJAY_MONSTER_PANEL_GET_VISIBLE=nil\n    _G.TAYJAY_STOP_ALL=nil
+    _G.TAYJAY_MONSTER_STOP=nil
+    _G.TAYJAY_MONSTER_PANEL_SET_VISIBLE=nil
+    _G.TAYJAY_MONSTER_PANEL_GET_VISIBLE=nil
+    _G.TAYJAY_STOP_ALL=nil
     print("[TAYJAY] STOP ALL completed: features restored, connections disconnected, UI removed.")
 end
 
