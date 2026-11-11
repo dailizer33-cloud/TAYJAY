@@ -258,6 +258,7 @@ local PROTECTED_BRAND_NAMES = {
    KillAuraCircleBtn = true,
    KillAuraNormalBtn = true,
    TayJayMonsterWarpBtn = true,
+   TayJayRapidBiteBtn = true,
 }
 local function isProtectedMainBrandPart(obj)
    if not obj then return false end
@@ -349,7 +350,7 @@ local isBusy = false
 local states = {
    Speed = false, Fly = false, InfJump = false, Noclip = false, 
    Xray = false, ESP = true, DeathNote = false, KillAura = false, NormalKillAura = false, MonsterWarp = false,
-   ServerSelector = false, MM2RoleESP = false, AutoWarp = false, DNWarp = false, MonsterPanel = true
+   ServerSelector = false, MM2RoleESP = false, AutoWarp = false, DNWarp = false
 }
 
 local uiSyncRegistry = {}
@@ -492,6 +493,7 @@ local UI_LAYOUT = {
    WarpCenter   = UDim2.fromScale(0.1728, 0.6150), -- ปุ่มวงกลม WARP เดิมสำหรับผู้เล่น
    WalkCenter   = UDim2.fromScale(0.2389, 0.6978), -- ปุ่มวงกลม WALK เดิม
    MonsterWarpCenter = UDim2.fromScale(0.3020, 0.6150), -- ปุ่ม WARP แยกสำหรับ Monster
+   RapidBiteCenter = UDim2.fromScale(0.3650, 0.6150),   -- ปุ่มตีรัว (RAPID) แยกอิสระ
    MonsterTargetPanel = UDim2.fromScale(0.5600, 0.8370), -- สถานะ Monster Warp แยกจาก Target ผู้เล่น
    MM2Dock      = UDim2.fromScale(0.8350, 0.4630), -- กรอบปุ่มดาบ/สมุด (MM2)
    PanelW       = 224, -- ความกว้างมาตรฐานของหน้าต่างหลัก (เท่ากันหมด; ไม่กว้างกว่านี้เพราะจะชนกับ NOCLIP/FLYในภาพ)
@@ -1867,14 +1869,32 @@ end)
 -- pcall ทำให้ถ้า M-WARP พัง ส่วนอื่นของสคริปต์ยังทำงานต่อ และรายงานสาเหตุขึ้นจอ
 do
 local okMW, errMW = pcall(function()
+   local monsterWarpButton = Instance.new("TextButton", screenGui)
+   monsterWarpButton.Name = "TayJayMonsterWarpBtn"
+   monsterWarpButton.AnchorPoint = Vector2.new(0.5, 0.5)
+   monsterWarpButton.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
+   monsterWarpButton.Position = UI_LAYOUT.MonsterWarpCenter
+   monsterWarpButton.BackgroundColor3 = GREEN.off
+   monsterWarpButton.RichText = true
+   monsterWarpButton.Text = '<font size="25">👾</font>\n<font size="13">M-WARP</font>\n<font size="10">OFF</font>'
+   monsterWarpButton.TextColor3 = WHITE_TEXT
+   monsterWarpButton.Font = Enum.Font.GothamBlack
+   monsterWarpButton.TextSize = 15
+   monsterWarpButton.Active = true
+   monsterWarpButton.AutoButtonColor = true
+   Instance.new("UICorner", monsterWarpButton).CornerRadius = UDim.new(1, 0)
+   local monsterWarpStroke = Instance.new("UIStroke", monsterWarpButton)
+   monsterWarpStroke.Color = Color3.fromRGB(255, 145, 70)
+   monsterWarpStroke.Thickness = 2.5
+   makeDraggable(monsterWarpButton)
+
    local monsterPanel = Instance.new("Frame", screenGui)
    monsterPanel.Name = "TayJayMonsterTargetPanel"
-   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 158)
+   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 154)
    monsterPanel.Position = UI_LAYOUT.MonsterTargetPanel
    monsterPanel.BackgroundColor3 = GREEN.dark
    monsterPanel.BackgroundTransparency = 0.03
-   monsterPanel.Visible = true
-   _G.TAYJAY_MONSTER_PANEL = monsterPanel
+   monsterPanel.Visible = false
    Instance.new("UICorner", monsterPanel).CornerRadius = UDim.new(0, 12)
    local monsterPanelStroke = Instance.new("UIStroke", monsterPanel)
    monsterPanelStroke.Name = "TayJayWindowAccent"
@@ -1946,10 +1966,23 @@ local okMW, errMW = pcall(function()
    local npcFilterBtn = makeFilterButton("FilterNpcBtn", "🧑 NPC", 2)
    local orbitBtn = makeFilterButton("MonsterOrbitBtn", "🌀 ORBIT", 3)
 
+   local dodgeBtn = Instance.new("TextButton", monsterPanel)
+   dodgeBtn.Name = "MonsterDodgeBtn"
+   dodgeBtn.Size = UDim2.new(1, -18, 0, 22)
+   dodgeBtn.Position = UDim2.fromOffset(9, 75)
+   dodgeBtn.BackgroundColor3 = Color3.fromRGB(65, 74, 63)
+   dodgeBtn.Text = "🛡 AUTO-DODGE สกิลมอนสเตอร์"
+   dodgeBtn.TextColor3 = WHITE_TEXT
+   dodgeBtn.Font = Enum.Font.GothamBold
+   dodgeBtn.TextSize = 11
+   dodgeBtn.AutoButtonColor = true
+   dodgeBtn.Active = true
+   Instance.new("UICorner", dodgeBtn).CornerRadius = UDim.new(0, 7)
+
    local monsterCountLabel = Instance.new("TextLabel", monsterPanel)
    monsterCountLabel.Name = "MonsterFilterCount"
    monsterCountLabel.Size = UDim2.new(1, -18, 0, 14)
-   monsterCountLabel.Position = UDim2.fromOffset(9, 76)
+   monsterCountLabel.Position = UDim2.fromOffset(9, 102)
    monsterCountLabel.BackgroundTransparency = 1
    monsterCountLabel.RichText = true
    monsterCountLabel.Text = "👾 Monster: 0  |  🧑 NPC: 0"
@@ -1960,10 +1993,10 @@ local okMW, errMW = pcall(function()
 
    local monsterInfo = Instance.new("TextLabel", monsterPanel)
    monsterInfo.Name = "MonsterTargetInfo"
-   monsterInfo.Size = UDim2.new(1, -18, 0, 27)
-   monsterInfo.Position = UDim2.fromOffset(9, 91)
+   monsterInfo.Size = UDim2.new(1, -18, 0, 28)
+   monsterInfo.Position = UDim2.fromOffset(9, 119)
    monsterInfo.BackgroundTransparency = 1
-   monsterInfo.Text = "พร้อมใช้งาน • กด MONSTER เพื่อเริ่ม/หยุด M-WARP"
+   monsterInfo.Text = "ปิดอยู่ • กด M-WARP เพื่อเริ่มค้นหา"
    monsterInfo.TextColor3 = WHITE_TEXT
    monsterInfo.TextStrokeColor3 = TEXT_OUTLINE
    monsterInfo.TextStrokeTransparency = 0.48
@@ -1983,7 +2016,13 @@ local okMW, errMW = pcall(function()
        "monster", "mob", "enemy", "boss", "creature", "ant", "beetle",
        "spider", "scorpion", "worm", "bug", "moth", "larva", "mantis",
        "crab", "slime", "dragon", "zombie", "insect", "mothstand", "void moth",
-       "voidmoth", "蝎"
+       "voidmoth", "蝎",
+       -- แมลงเพิ่มเติม (เกม Bug Evolution): เช่น GiantVoidMosquito, Hornet, Wasp
+       "mosquito", "hornet", "wasp", "bee", "centipede", "millipede", "roach", "cockroach",
+       "termite", "locust", "cicada", "cricket", "grasshopper", "dragonfly", "caterpillar",
+       "tarantula", "leech", "aphid", "firefly", "ladybug", "stinkbug",
+       -- คำที่มักใช้เรียกบอส
+       "giant", "king", "queen", "elder", "alpha", "titan", "colossal", "overlord", "ancient", "apex", "mega"
    }
    -- NPC = ตัวละครที่ไม่ใช่ศัตรู (ร้านค้า/เควสต์/ผู้ช่วย ฯลฯ) → แยกเป็นกลุ่ม NPC เสมอ
    local NPC_NAME_HINTS = {
@@ -2024,6 +2063,8 @@ local okMW, errMW = pcall(function()
    local monsterNoticeText, monsterNoticeUntil = "", 0
    local monsterCollisionSaved = {}
    local monsterNoclipList = {}
+   local monsterUnknownSummary, monsterUnknownPrinted = "", ""
+   local monsterEnterAt = 0 -- เวลาที่เข้าสิงเป้าหมายปัจจุบัน
    local monsterScanDirty = true
    local monsterLastScan = 0
    local monsterCurrent = nil
@@ -2051,8 +2092,25 @@ local okMW, errMW = pcall(function()
    local MONSTER_ORBIT_SPEED = 2.6    -- ความเร็วเชิงมุม (rad/วินาที)
    local MONSTER_ORBIT_BREATH = 1.2   -- รัศมีแกว่งเข้า-ออก (studs) ให้จังหวะไม่คงที่
    local MONSTER_ORBIT_BOB = 0.8      -- แกว่งขึ้น-ลง (studs)
+   local MONSTER_ENTER_SECONDS = 0.6  -- เข้า "สิงร่าง" (อยู่กลางตัวมอนสเตอร์) ก่อน แล้วค่อยขยายวงออกถึงรัศมีเต็มในเวลานี้
+   -- AUTO-DODGE: อ่านท่าที่มอนสเตอร์กำลังเล่น (AnimationTrack) ถ้าเป็นท่าโจมตี/สกิล → ลอยหนีขึ้นข้างบนชั่วคราว
+   local MONSTER_DODGE_HEIGHT = 45     -- หนีขึ้นสูงจากตัวมอนสเตอร์ (studs)
+   local MONSTER_DODGE_MAX_SECONDS = 2.5
+   local MONSTER_DODGE_PAD = 0.35      -- อยู่ข้างบนต่ออีกเล็กน้อยหลังท่าจบ
+   local DODGE_ANIM_HINTS = {
+       "attack", "skill", "slam", "bite", "cast", "strike", "smash", "charge", "spit", "shoot",
+       "ability", "special", "blast", "roar", "swipe", "sting", "pounce", "ultimate", "burst", "nova", "beam", "dash"
+   }
+   local DODGE_IGNORE_HINTS = {
+       "idle", "walk", "run", "move", "fly", "hover", "hit", "hurt", "damage", "death", "die",
+       "spawn", "stun", "react", "flinch", "emote", "land", "jump", "fall"
+   }
+   local monsterDodgeOn = true
+   local monsterDodgeUntil, monsterDodgeWhy, monsterWasDodging = 0, "", false
+   local monsterLastMyHealth = nil
+   local learnedDangerAnims = {} -- ชื่อท่า (ตัวพิมพ์เล็ก) → จำนวนครั้งที่โดนตีระหว่างท่านี้
 
-   local function getMonsterRoot(model, humanoid)
+   local function getMonsterRoot(model, humanoid, allowLargest)
        if humanoid then
            local ok, root = pcall(function() return humanoid.RootPart end)
            if ok and root and root:IsA("BasePart") then return root end
@@ -2064,8 +2122,19 @@ local okMW, errMW = pcall(function()
            local found = model:FindFirstChild(rootName, true)
            if found and found:IsA("BasePart") then return found end
        end
-       -- Never select an arbitrary body/accessory/prop part as a target root.
-       -- Models without a recognized root are rejected instead of warping at a map part.
+       -- บอสบางตัวไม่มี Humanoid/PrimaryPart/ชื่อราก: ถ้า "ยืนยันแล้วว่าเป็นมอนสเตอร์" ให้ใช้ชิ้นส่วนที่ใหญ่ที่สุด
+       -- (ตัวลำตัว) เป็นราก ส่วนโมเดลที่ยังไม่ยืนยันจะถูกปฏิเสธเหมือนเดิม ไม่วาร์ปไปชิ้นส่วนแมพมั่ว ๆ
+       if allowLargest then
+           local best, bestVolume = nil, 0
+           for _, part in ipairs(model:GetDescendants()) do
+               if part:IsA("BasePart") then
+                   local size = part.Size
+                   local volume = size.X * size.Y * size.Z
+                   if volume > bestVolume then best, bestVolume = part, volume end
+               end
+           end
+           return best
+       end
        return nil
    end
 
@@ -2210,21 +2279,65 @@ local okMW, errMW = pcall(function()
        return false
    end
 
+   -- ชื่อบอสจาก HUD ของเกม (เช่นแถบบอสด้านบนจอ "GIANT VOID MOSQUITO"): ถ้ามีโมเดลใน Workspace ชื่อตรงกัน
+   -- (เทียบแบบไม่สนช่องว่าง/ตัวพิมพ์) ถือว่าเป็นบอสแน่นอน แม้โมเดลไม่มี HP/Humanoid
+   local keyCache = {}
+   local function normalizeKey(text)
+       local raw = tostring(text or "")
+       local cached = keyCache[raw]
+       if cached then return cached end
+       local key = string.lower((raw:gsub("[^%w\128-\255]", "")))
+       keyCache[raw] = key
+       return key
+   end
+   local currentGuiNames = {}
+   local function collectGuiNames()
+       local names = {}
+       local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+       if not playerGui then return names end
+       for _, obj in ipairs(playerGui:GetDescendants()) do
+           if obj:IsA("TextLabel") and obj.Visible then
+               local text = obj.Text
+               if type(text) == "string" and #text >= 6 and #text <= 40 then
+                   local gui = obj:FindFirstAncestorWhichIsA("ScreenGui")
+                   if gui and gui.Enabled and gui ~= screenGui then
+                       local shown, parent = true, obj.Parent
+                       while parent and parent ~= gui do
+                           if parent:IsA("GuiObject") and not parent.Visible then shown = false break end
+                           parent = parent.Parent
+                       end
+                       if shown then names[normalizeKey(text)] = text end
+                   end
+               end
+           end
+       end
+       return names
+   end
+
+   local function looksAnimated(model)
+       return model:FindFirstChildWhichIsA("Animator", true) ~= nil
+           or model:FindFirstChildWhichIsA("AnimationController", true) ~= nil
+   end
+
    -- ผลลัพธ์: "Monster" | "NPC" | nil  และ (ตัวที่ 3) true = ไม่มีค่า HP แต่มีหลักฐานว่าเป็นศัตรู
    local function classifyModel(model, humanoid)
        local monsterNamed = hasMonsterNameHint(model.Name)
        local npcNamed = hasNpcNameHint(model.Name)
+       local guiBoss = currentGuiNames[normalizeKey(model.Name)] ~= nil
        if isExcludedMonsterName(model.Name) and not npcNamed then return nil end
-       if not monsterNamed and not npcNamed and not humanoid then return nil end
+       if not monsterNamed and not npcNamed and not humanoid and not guiBoss then return nil end
        -- ของตั้งโชว์/พร็อพ/โมเดลในกล้อง ไม่ใช่ทั้ง Monster และ NPC
        if isInDisplayContainer(model) then return nil end
 
        local strongNpc, npcReason = hasStrongNpcEvidence(model)
        if strongNpc then return "NPC", npcReason end
+       -- ชื่อตรงกับแถบบอส/HUD ของเกม → บอสแน่นอน
+       if guiBoss then return "Monster", "boss-hud", not hasHealthSource(model, humanoid) end
        if monsterNamed then
-           -- ชื่อเข้าข่ายอย่างเดียวไม่พอ: ต้องมี HP จริง หรืออยู่ในกลุ่ม/แท็กศัตรู
+           -- ชื่อเข้าข่ายอย่างเดียวไม่พอ: ต้องมี HP จริง, อยู่ในกลุ่ม/แท็กศัตรู, หรือมี Animator (ตัวเป็น ๆ ขยับได้)
            if hasHealthSource(model, humanoid) then return "Monster", "name+hp" end
            if hasMonsterEvidence(model) then return "Monster", "name+container", true end
+           if looksAnimated(model) then return "Monster", "name+animator", true end
            return nil
        end
        if humanoid and hasInteractionEvidence(model) then return "NPC", "interaction" end
@@ -2276,6 +2389,8 @@ local okMW, errMW = pcall(function()
 
        local found, seen = {}, {}
        local counts = { Monster = 0, NPC = 0 }
+       currentGuiNames = collectGuiNames()
+       local unknown = {}
        for _, obj in ipairs(workspace:GetDescendants()) do
            if obj:IsA("Model") and obj.Parent and not seen[obj] then
                seen[obj] = true
@@ -2284,8 +2399,11 @@ local okMW, errMW = pcall(function()
                    -- Monster ต้องมีชื่อเข้าข่ายเสมอ (Humanoid อย่างเดียวไม่พอ)
                    -- NPC จัดแยกด้วยชื่อ/โฟลเดอร์/แอตทริบิวต์/แท็ก/ปุ่มคุย
                    local kind, reason, noHealth = classifyModel(obj, humanoid)
+                   if not kind and humanoid and hasHealthSource(obj, humanoid) and not isExcludedMonsterName(obj.Name) and not isInDisplayContainer(obj) then
+                       table.insert(unknown, { name = obj.Name, maxHp = tonumber(humanoid.MaxHealth) or 0 })
+                   end
                    if kind then
-                       local root = getMonsterRoot(obj, humanoid)
+                       local root = getMonsterRoot(obj, humanoid, kind == "Monster")
                        if root and root:IsDescendantOf(obj) then
                            local allowNoHealth = (kind == "NPC") or noHealth == true
                            local hp, maxHp, alive = readMonsterHealth(obj, humanoid, allowNoHealth)
@@ -2313,6 +2431,15 @@ local okMW, errMW = pcall(function()
        end)
        monsterCandidates = found
        monsterGroupCounts = counts
+       -- โมเดลที่มี HP แต่จัดกลุ่มไม่ได้: โชว์ชื่อไว้ช่วยดูว่าบอสชื่ออะไร (แล้วเพิ่มคำใน MONSTER_NAME_HINTS)
+       table.sort(unknown, function(a, b) return a.maxHp > b.maxHp end)
+       local names = {}
+       for i = 1, math.min(4, #unknown) do names[i] = string.format("%s(%d)", unknown[i].name, math.floor(unknown[i].maxHp)) end
+       monsterUnknownSummary = table.concat(names, ", ")
+       if monsterUnknownSummary ~= "" and monsterUnknownSummary ~= monsterUnknownPrinted then
+           monsterUnknownPrinted = monsterUnknownSummary
+           print("[TAYJAY M-WARP] unclassified models with HP: " .. monsterUnknownSummary)
+       end
        monsterScanDirty = false
        monsterLastScan = os.clock()
        return counts[monsterFilterMode] or 0, counts
@@ -2338,7 +2465,7 @@ local okMW, errMW = pcall(function()
        candidate.health = hp
        candidate.maxHealth = maxHp
        candidate.alive = alive
-       candidate.root = getMonsterRoot(model, humanoid)
+       candidate.root = getMonsterRoot(model, humanoid, candidate.kind == "Monster")
        return alive and candidate.root ~= nil
    end
 
@@ -2380,6 +2507,8 @@ local okMW, errMW = pcall(function()
        npcFilterBtn.BackgroundColor3 = (not isMonster) and NPC_COLOR or Color3.fromRGB(65, 74, 63)
        orbitBtn.BackgroundColor3 = monsterOrbitOn and Color3.fromRGB(39, 174, 119) or Color3.fromRGB(65, 74, 63)
        orbitBtn.TextTransparency = monsterOrbitOn and 0 or 0.35
+       dodgeBtn.BackgroundColor3 = monsterDodgeOn and Color3.fromRGB(39, 174, 119) or Color3.fromRGB(65, 74, 63)
+       dodgeBtn.TextTransparency = monsterDodgeOn and 0 or 0.35
        monsterFilterBtn.TextTransparency = isMonster and 0 or 0.35
        npcFilterBtn.TextTransparency = (not isMonster) and 0 or 0.35
        monsterHealthFill.BackgroundColor3 = isMonster and MONSTER_COLOR or NPC_COLOR
@@ -2394,11 +2523,13 @@ local okMW, errMW = pcall(function()
 
    local function updateMonsterWarpVisual()
        local on = states.MonsterWarp == true
+       monsterWarpButton.BackgroundColor3 = on and GREEN.on or GREEN.off
+       monsterWarpStroke.Color = on and Color3.fromRGB(255, 210, 90) or (monsterFilterMode == "NPC" and NPC_COLOR or MONSTER_COLOR)
+       monsterWarpButton.Text = '<font size="25">👾</font>\n<font size="13">M-WARP</font>\n<font size="10">' .. (on and "ON" or "OFF") .. '</font>'
+       monsterPanel.Visible = on
        refreshMonsterFilterUI()
-       monsterFilterBtn.BackgroundColor3 = on and GREEN.on or GREEN.off
-       monsterFilterBtn.Text = "👾 MONSTER  •  " .. (on and "ON" or "OFF")
        if not on then
-           setMonsterPanelStatus("👾 MONSTER WARP: OFF", "ปิดอยู่ • กด MONSTER เพื่อเริ่มค้นหา", 0, 1)
+           setMonsterPanelStatus("👾 MONSTER WARP: OFF", "ปิดอยู่ • กด M-WARP เพื่อเริ่มค้นหา", 0, 1)
        end
    end
 
@@ -2434,6 +2565,52 @@ local okMW, errMW = pcall(function()
            task.delay(1, function()
                if old.Parent then pcall(function() old:Destroy() end) end
            end)
+       end
+   end
+
+   local function getMonsterTracks(target)
+       local animator = target.animator
+       if not animator or not animator.Parent then
+           animator = target.model:FindFirstChildWhichIsA("Animator", true)
+           target.animator = animator
+       end
+       if not animator then return nil end
+       local ok, tracks = pcall(function() return animator:GetPlayingAnimationTracks() end)
+       if ok and tracks then return tracks end
+       return nil
+   end
+
+   -- ท่าไหนอันตราย: ชื่อเข้าข่ายโจมตี/สกิล (และไม่ใช่ท่าเดิน/ยืนนิ่ง/โดนตี) หรือเป็นท่าที่เคยทำให้เราเสียเลือด
+   local function detectMonsterAttack(target)
+       local tracks = getMonsterTracks(target)
+       if not tracks then return false end
+       for _, track in ipairs(tracks) do
+           local name = tostring(track.Name or "")
+           local learned = learnedDangerAnims[string.lower(name)] ~= nil
+           local hinted = matchesHint(name, DODGE_ANIM_HINTS) and not matchesHint(name, DODGE_IGNORE_HINTS)
+           if learned or hinted then
+               local length = tonumber(track.Length) or 1
+               local position = tonumber(track.TimePosition) or 0
+               return true, name, math.clamp(length - position, 0.2, MONSTER_DODGE_MAX_SECONDS)
+           end
+       end
+       return false
+   end
+
+   -- เรียนรู้: ตอนเราเสียเลือด ท่าที่ไม่วนซ้ำและไม่ใช่ท่าธรรมดาที่กำลังเล่นอยู่ ถือว่าอันตราย
+   local function learnDanger(target)
+       local tracks = getMonsterTracks(target)
+       if not tracks then return end
+       for _, track in ipairs(tracks) do
+           local name = tostring(track.Name or "")
+           if not track.Looped and not matchesHint(name, DODGE_IGNORE_HINTS) then
+               local key = string.lower(name)
+               if learnedDangerAnims[key] == nil then
+                   learnedDangerAnims[key] = 0
+                   print("[TAYJAY M-WARP] learned dangerous animation: " .. name)
+               end
+               learnedDangerAnims[key] = learnedDangerAnims[key] + 1
+           end
        end
    end
 
@@ -2481,14 +2658,28 @@ local okMW, errMW = pcall(function()
        _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.3 -- บอก Fly ว่าตอนนี้ M-WARP คุมตำแหน่งอยู่
        local destination = targetRoot.CFrame * MONSTER_FOLLOW_OFFSET
        local orbiting = monsterOrbitOn and monsterFilterMode == "Monster"
+       local nowClock = os.clock()
+       if monsterLastRoot ~= targetRoot then monsterEnterAt = nowClock end -- เป้าใหม่: เข้าสิงร่างทันที
+       local dodging = monsterDodgeOn and monsterFilterMode == "Monster" and nowClock < monsterDodgeUntil
+       if dodging then
+           monsterWasDodging = true
+       elseif monsterWasDodging then
+           monsterWasDodging = false
+           monsterEnterAt = nowClock -- หนีเสร็จ: กลับเข้าสิงร่างใหม่ แล้วค่อยขยายวง
+       end
        if orbiting then
-           -- วนรอบตำแหน่งมอนสเตอร์ในพิกัดโลก (ไม่หมุนตามตัวมัน) หันหน้าเข้าหามัน
-           local now = os.clock()
-           local angle = now * MONSTER_ORBIT_SPEED
-           local radius = MONSTER_ORBIT_RADIUS + math.sin(now * 1.7) * MONSTER_ORBIT_BREATH
-           local center = targetRoot.Position
-           local orbitPos = center + Vector3.new(math.cos(angle) * radius, math.sin(now * 3.1) * MONSTER_ORBIT_BOB, math.sin(angle) * radius)
-           destination = CFrame.lookAt(orbitPos, center)
+           -- เริ่มจากกลางตัวมอนสเตอร์ (สิงร่าง) แล้วขยายวงโคจรออกอย่างนุ่มนวล
+           local grow = math.clamp((nowClock - monsterEnterAt) / MONSTER_ENTER_SECONDS, 0, 1)
+           local angle = nowClock * MONSTER_ORBIT_SPEED
+           local radius = (MONSTER_ORBIT_RADIUS + math.sin(nowClock * 1.7) * MONSTER_ORBIT_BREATH) * grow
+           if radius > 0.15 then
+               local center = targetRoot.Position
+               local orbitPos = center + Vector3.new(math.cos(angle) * radius, math.sin(nowClock * 3.1) * MONSTER_ORBIT_BOB * grow, math.sin(angle) * radius)
+               destination = CFrame.lookAt(orbitPos, center)
+           end
+       end
+       if dodging then
+           destination = CFrame.new(targetRoot.Position + Vector3.new(0, MONSTER_DODGE_HEIGHT, 0))
        end
        myRoot.AssemblyLinearVelocity = Vector3.zero
        myRoot.AssemblyAngularVelocity = Vector3.zero
@@ -2505,6 +2696,7 @@ local okMW, errMW = pcall(function()
        monsterLastRoot = nil
        monsterTrackedTarget = nil
        _G.TAYJAY_POS_LOCK_UNTIL = nil
+       monsterDodgeUntil, monsterWasDodging, monsterLastMyHealth = 0, false, nil
        monsterNoclipList = {}
        monsterRestoreCollision()
        if monsterHiddenCharacter then
@@ -2540,6 +2732,7 @@ local okMW, errMW = pcall(function()
        if states.DNWarp then syncButtonState("DNWarp", false) end
        if states.AutoWarp then syncButtonState("AutoWarp", false) end
        updateKaBtnDisplay()
+       monsterPanel.Visible = true
        setMonsterPanelStatus("👾 MONSTER WARP: SWITCHING", "กำลังหยุดระบบ WARP ผู้เล่นก่อนเริ่มค้นหา Monster...", 0, 1)
        task.wait(0.20)
 
@@ -2548,6 +2741,7 @@ local okMW, errMW = pcall(function()
        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
        if not character or not root or not humanoid or humanoid.Health <= 0 then
            monsterWarpStarting = false
+           monsterPanel.Visible = false
            setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ไม่พบตัวละครที่พร้อมใช้งาน", 0, 1)
            return
        end
@@ -2588,17 +2782,20 @@ local okMW, errMW = pcall(function()
                "เปลี่ยนตัวกรองเป็น " .. modeLabel() .. " • กำลังเลือกเป้าหมายใหม่...", 0, 1)
        end
    end
+   trackConnection(monsterFilterBtn.Activated:Connect(function() setMonsterFilter("Monster") end))
    trackConnection(npcFilterBtn.Activated:Connect(function() setMonsterFilter("NPC") end))
+   trackConnection(dodgeBtn.Activated:Connect(function()
+       monsterDodgeOn = not monsterDodgeOn
+       monsterDodgeUntil = 0
+       refreshMonsterFilterUI()
+   end))
    trackConnection(orbitBtn.Activated:Connect(function()
        monsterOrbitOn = not monsterOrbitOn
        monsterLastRoot = nil -- ให้วางตำแหน่งใหม่ทันที (กลับไปติดบนเป้าเมื่อปิดวง)
        refreshMonsterFilterUI()
    end))
 
-   trackConnection(monsterFilterBtn.Activated:Connect(function()
-       setMonsterFilter("Monster")
-       startMonsterWarp()
-   end))
+   trackConnection(monsterWarpButton.Activated:Connect(startMonsterWarp))
    trackConnection(workspace.DescendantAdded:Connect(function(obj)
        if obj:IsA("Model") or obj:IsA("Humanoid") then
            monsterScanDirty = true
@@ -2647,7 +2844,8 @@ local okMW, errMW = pcall(function()
                        local count = scanMonsterModels()
                        refreshMonsterFilterUI()
                        if count == 0 then
-                           setMonsterPanelStatus("👾 MONSTER WARP: SEARCHING", "ยังไม่พบ Monster • ระบบจะค้นหาอีกเมื่อมีโมเดลใหม่", 0, 1)
+                           setMonsterPanelStatus("👾 MONSTER WARP: SEARCHING", "ยังไม่พบ Monster • ระบบจะค้นหาอีกเมื่อมีโมเดลใหม่"
+                                   .. (monsterUnknownSummary ~= "" and ("\nไม่รู้จัก: " .. monsterUnknownSummary) or ""), 0, 1)
                        else
                            setMonsterPanelStatus("👾 MONSTER WARP: FOUND " .. tostring(count), "พบเป้าหมาย • กำลังเลือก Monster ที่ใกล้ที่สุด", 0, 1)
                        end
@@ -2716,8 +2914,25 @@ local okMW, errMW = pcall(function()
                            -- Remote โจมตีทั่วไปไม่ถูกเรียกจากโหมดนี้ (กันพลาดไปโจมตีผู้เล่น):
                            -- ใช้ AUTO ATK / ปุ่มโจมตีของเกมเองตอนอยู่บนมอนสเตอร์
                            local notice = (now < monsterNoticeUntil) and ("\n⚠ " .. monsterNoticeText) or ""
-                           local stateWord = "LOCKED"
+                           if monsterFilterMode == "Monster" and monsterDodgeOn then
+                               local myHpNow = myHumanoid.Health
+                               if monsterLastMyHealth and myHpNow < monsterLastMyHealth - 0.5 then
+                                   learnDanger(target)
+                                   monsterDodgeUntil = math.max(monsterDodgeUntil, now + 0.8)
+                                   monsterDodgeWhy = "HIT"
+                               end
+                               monsterLastMyHealth = myHpNow
+                               local isAttack, attackName, remaining = detectMonsterAttack(target)
+                               if isAttack then
+                                   monsterDodgeUntil = math.max(monsterDodgeUntil, now + remaining + MONSTER_DODGE_PAD)
+                                   monsterDodgeWhy = attackName
+                               end
+                           end
+                           local stateWord = "POSSESS"
                            if monsterOrbitOn and monsterFilterMode == "Monster" then stateWord = "ORBIT" end
+                           if monsterDodgeOn and monsterFilterMode == "Monster" and now < monsterDodgeUntil then
+                               stateWord = "DODGE " .. tostring(monsterDodgeWhy)
+                           end
                            setMonsterPanelStatus(
                                "👾 MONSTER: " .. tostring(target.name),
                                string.format("HP %d / %d  •  %s", math.floor(hp), math.floor(maxHp), stateWord) .. notice,
@@ -2733,7 +2948,8 @@ local okMW, errMW = pcall(function()
                            -- like a false target selection on large maps.
                            setMonsterPanelStatus("👾 MONSTER WARP: SEARCHING",
                                "ยังไม่พบ Monster ที่ยืนยันได้ • ยืนรอและค้นหาใหม่"
-                                   .. ((now < monsterNoticeUntil) and ("\n⚠ " .. monsterNoticeText) or ""), 0, 1)
+                                   .. ((now < monsterNoticeUntil) and ("\n⚠ " .. monsterNoticeText)
+                                       or (monsterUnknownSummary ~= "" and ("\nไม่รู้จัก: " .. monsterUnknownSummary) or "")), 0, 1)
                        end
                    end
                end
@@ -2748,6 +2964,203 @@ if not okMW then
    pcall(function() warn("[TAYJAY M-WARP] initialization failed: " .. tostring(errMW)) end)
    pcall(function()
        if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "M-WARP: " .. tostring(errMW)) end
+   end)
+end
+end
+
+-- =========================================================
+-- ⚔ RAPID BITE: ปุ่มตีรัวแยกอิสระ (ไม่ผูกกับ M-WARP / WARP ใช้ร่วมหรือแยกก็ได้)
+-- กดปุ่ม BITE (ปุ่มโจมตีของเกม) ซ้ำ ๆ ด้วยความเร็ว RAPID_CPS ครั้ง/วินาที
+--   แตะ 1 ครั้ง = ON (ตีรัวตลอด)  | แตะ 2 ครั้ง = AUTO (ตีรัวเฉพาะตอน HUD ขึ้นคำว่ามึน/STUN)  | แตะ 3 ครั้ง = OFF
+-- วิธีกด: เรียก connection ของปุ่ม (getconnections) ถ้า executor รองรับ ไม่งั้นจำลองการแตะที่กลางปุ่ม
+-- =========================================================
+do
+local okRB, errRB = pcall(function()
+   local GuiService = game:GetService("GuiService")
+   local VirtualInputManager = nil
+   pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
+
+   local RAPID_CPS = 20                      -- กดกี่ครั้งต่อวินาที
+   local RAPID_TEXTS = { "bite" }            -- ข้อความบนปุ่มโจมตีของเกม (ไม่สนตัวพิมพ์/ช่องว่าง) เพิ่มได้เช่น "attack"
+   local STUN_WORDS = { "stun", "daze", "dizzy", "vulnerab", "exhaust", "weaken", "มึน", "สตัน" } -- คำบน HUD ตอนบอสมึน
+
+   local rapidMode = 0                       -- 0 = OFF, 1 = ON, 2 = AUTO
+   local biteButton, lastFindAt = nil, -10
+   local lastMethod, stunSeen, stunText = "-", false, ""
+   local clickAccumulator, stunCheckAt, visualAt = 0, 0, 0
+
+   local button = Instance.new("TextButton", screenGui)
+   button.Name = "TayJayRapidBiteBtn"
+   button.AnchorPoint = Vector2.new(0.5, 0.5)
+   button.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
+   button.Position = UI_LAYOUT.RapidBiteCenter
+   button.BackgroundColor3 = GREEN.off
+   button.RichText = true
+   button.Text = '<font size="25">⚔</font>\n<font size="13">RAPID</font>\n<font size="10">OFF</font>'
+   button.TextColor3 = WHITE_TEXT
+   button.Font = Enum.Font.GothamBlack
+   button.TextSize = 15
+   button.Active = true
+   button.AutoButtonColor = true
+   Instance.new("UICorner", button).CornerRadius = UDim.new(1, 0)
+   local stroke = Instance.new("UIStroke", button)
+   stroke.Color = Color3.fromRGB(255, 96, 132)
+   stroke.Thickness = 2.5
+   makeDraggable(button)
+
+   local function normalize(text)
+       local str = tostring(text or "")
+       str = str:gsub("<[^>]*>", "")
+       str = str:gsub("[^%w\128-\255]", "")
+       return string.lower(str)
+   end
+
+   local function guiShown(obj)
+       local gui = obj:FindFirstAncestorWhichIsA("ScreenGui")
+       if not gui or not gui.Enabled or gui == screenGui then return false end
+       local parent = obj
+       while parent and parent ~= gui do
+           if parent:IsA("GuiObject") and not parent.Visible then return false end
+           parent = parent.Parent
+       end
+       return true
+   end
+
+   -- หาปุ่ม BITE ใน PlayerGui: ป้ายข้อความตรงกับ RAPID_TEXTS และแสดงอยู่จริง
+   local function findBiteButton()
+       local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+       if not playerGui then return nil end
+       for _, obj in ipairs(playerGui:GetDescendants()) do
+           if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and #obj.Text > 0 and #obj.Text <= 24 then
+               local key = normalize(obj.Text)
+               for _, want in ipairs(RAPID_TEXTS) do
+                   if key == want and guiShown(obj) then
+                       local target = obj:IsA("GuiButton") and obj or obj:FindFirstAncestorWhichIsA("GuiButton")
+                       return target or obj
+                   end
+               end
+           end
+       end
+       return nil
+   end
+
+   local function fireSignals(target)
+       if type(getconnections) ~= "function" then return false end
+       for _, signalName in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down", "TouchTap" }) do
+           local okSig, signal = pcall(function() return target[signalName] end)
+           if okSig and signal then
+               local okConn, connections = pcall(getconnections, signal)
+               if okConn and type(connections) == "table" then
+                   local fired = false
+                   for _, conn in ipairs(connections) do
+                       if pcall(function() conn:Fire() end) then fired = true end
+                   end
+                   if fired then return true end -- ยิงแค่สัญญาณแรกที่มีคนฟัง กันนับซ้ำ
+               end
+           end
+       end
+       return false
+   end
+
+   local function clickScreen(target)
+       if not VirtualInputManager then return false end
+       local position, size = target.AbsolutePosition, target.AbsoluteSize
+       local x, y = position.X + size.X / 2, position.Y + size.Y / 2
+       local gui = target:FindFirstAncestorWhichIsA("ScreenGui")
+       if gui and not gui.IgnoreGuiInset then
+           local okInset, inset = pcall(function() return GuiService:GetGuiInset() end)
+           if okInset and inset then y = y + inset.Y end
+       end
+       return (pcall(function()
+           if UserInputService.TouchEnabled then
+               VirtualInputManager:SendTouchEvent(91, 0, x, y)
+               VirtualInputManager:SendTouchEvent(91, 2, x, y)
+           else
+               VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+               VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+           end
+       end))
+   end
+
+   local function biteOnce()
+       local now = os.clock()
+       if (not biteButton or not biteButton.Parent) and now - lastFindAt > 1.5 then
+           lastFindAt = now
+           biteButton = findBiteButton()
+           if biteButton then
+               pcall(function() print("[TAYJAY RAPID] attack button found: " .. biteButton:GetFullName()) end)
+           end
+       end
+       if not biteButton or not biteButton.Parent then lastMethod = "NO BUTTON" return false end
+       if fireSignals(biteButton) then lastMethod = "signal" return true end
+       if clickScreen(biteButton) then lastMethod = "touch" return true end
+       lastMethod = "NO INPUT"
+       return false
+   end
+
+   local function scanStun()
+       local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+       if not playerGui then return false end
+       for _, obj in ipairs(playerGui:GetDescendants()) do
+           if obj:IsA("TextLabel") and #obj.Text > 0 and #obj.Text <= 40 and guiShown(obj) then
+               local key = string.lower(obj.Text)
+               for _, word in ipairs(STUN_WORDS) do
+                   if string.find(key, word, 1, true) then return true, obj.Text end
+               end
+           end
+       end
+       return false
+   end
+
+   local function updateVisual()
+       local line3, color = "OFF", GREEN.off
+       if rapidMode == 1 then
+           line3, color = "ON • " .. lastMethod, GREEN.on
+       elseif rapidMode == 2 then
+           if stunSeen then line3, color = "AUTO • STUN! " .. lastMethod, GREEN.on
+           else line3, color = "AUTO • รอมึน", GREEN.warning end
+       end
+       button.BackgroundColor3 = color
+       button.Text = '<font size="25">⚔</font>\n<font size="13">RAPID</font>\n<font size="9">' .. line3 .. '</font>'
+   end
+
+   trackConnection(button.Activated:Connect(function()
+       rapidMode = (rapidMode + 1) % 3
+       clickAccumulator, stunSeen, stunCheckAt = 0, false, 0
+       if rapidMode ~= 0 then lastFindAt = -10 end -- ค้นหาปุ่มโจมตีใหม่ทุกครั้งที่เปิด
+       updateVisual()
+   end))
+
+   trackConnection(RunService.Heartbeat:Connect(function(dt)
+       if rapidMode == 0 then clickAccumulator = 0 return end
+       local now = os.clock()
+       if rapidMode == 2 and now >= stunCheckAt then
+           stunCheckAt = now + 0.3
+           local seen, text = scanStun()
+           if seen and not stunSeen then print("[TAYJAY RAPID] stun text detected: " .. tostring(text)) end
+           stunSeen, stunText = seen, text or ""
+       end
+       if rapidMode == 2 and not stunSeen then clickAccumulator = 0 end
+       if rapidMode == 1 or stunSeen then
+           clickAccumulator = clickAccumulator + dt
+           local interval = 1 / RAPID_CPS
+           local clicks = 0
+           while clickAccumulator >= interval and clicks < 3 do
+               clickAccumulator = clickAccumulator - interval
+               clicks = clicks + 1
+               biteOnce()
+           end
+           if clickAccumulator > interval * 3 then clickAccumulator = 0 end
+       end
+       if now >= visualAt then visualAt = now + 0.25; updateVisual() end
+   end))
+
+   updateVisual()
+end)
+if not okRB then
+   pcall(function() warn("[TAYJAY RAPID] initialization failed: " .. tostring(errRB)) end)
+   pcall(function()
+       if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "RAPID: " .. tostring(errRB)) end
    end)
 end
 end
@@ -2921,14 +3334,14 @@ local function applyCompactTabletLayout()
    local viewport = camera.ViewportSize
    local narrow = viewport.X < 900
    if narrow then
-      mainFrame.Size = UDim2.fromOffset(204, 236)
-      mainFrame.Position = UDim2.new(0, 8, 0, 104)
-      deathNoteGroup.Size = UDim2.fromOffset(204, 236)
-      deathNoteGroup.Position = UDim2.new(0, 220, 0, 104)
+      mainFrame.Size = UDim2.fromOffset(344, 320)
+       mainFrame.Position = UDim2.new(0, 8, 0, 104)
+       deathNoteGroup.Size = UDim2.fromOffset(224, 300)
+       deathNoteGroup.Position = UDim2.new(0, 360, 0, 104)
    else
-      mainFrame.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH)
+      mainFrame.Size = UDim2.fromOffset(344, 320)
       mainFrame.Position = UI_LAYOUT.MainMenu
-      deathNoteGroup.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH)
+      deathNoteGroup.Size = UDim2.fromOffset(224, 300)
       deathNoteGroup.Position = UI_LAYOUT.PlayerList
    end
 end
@@ -2966,11 +3379,15 @@ if _G.TAYJAY_UI.effects then addCandyRainbow(title, 3.2, 0) end
 
 local scroll = Instance.new("ScrollingFrame", mainFrame)
 scroll.Size = UDim2.new(1, -14, 1, -62); scroll.Position = UDim2.new(0, 7, 0, 56); scroll.BackgroundTransparency = 1; scroll.ScrollBarThickness = 6; scroll.ScrollBarImageColor3 = GREEN.neon
-local list = Instance.new("UIListLayout", scroll); list.SortOrder = Enum.SortOrder.LayoutOrder; list.Padding = UDim.new(0, 6)
+local list = Instance.new("UIGridLayout", scroll)
+list.SortOrder = Enum.SortOrder.LayoutOrder
+list.CellSize = UDim2.new(0.5, -5, 0, 38)
+list.CellPadding = UDim2.fromOffset(8, 6)
+list.FillDirectionMaxCells = 2
 
 local function createBtn(order, text, key)
    local btn = Instance.new("TextButton", scroll)
-   btn.Size = UDim2.new(1, -4, 0, 38); btn.BackgroundColor3 = GREEN.off; btn.Text = text .. " : OFF"; btn.TextColor3 = WHITE_TEXT; btn.Font = Enum.Font.GothamBold; btn.LayoutOrder = order
+   btn.Size = UDim2.new(0.5, -5, 0, 38); btn.BackgroundColor3 = GREEN.off; btn.Text = text .. " : OFF"; btn.TextColor3 = WHITE_TEXT; btn.Font = Enum.Font.GothamBold; btn.LayoutOrder = order
    btn.TextScaled = true; btn.TextWrapped = false
    local btnSize = Instance.new("UITextSizeConstraint", btn); btnSize.MaxTextSize = 14; btnSize.MinTextSize = 9
    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 11); local btnEdge = Instance.new("UIStroke", btn); btnEdge.Color = GREEN.warning; btnEdge.Thickness = 1.2
@@ -3000,8 +3417,6 @@ local function createBtn(order, text, key)
            deathNoteMain.Visible = isOn
            if isOn then task.defer(updatePlayerList) end
        elseif key == "ServerSelector" then serverFrame.Visible = isOn; if isOn and #sfList:GetChildren() <= 2 then loadPublicServers() end
-       elseif key == "MonsterPanel" then
-           if _G.TAYJAY_MONSTER_PANEL then _G.TAYJAY_MONSTER_PANEL.Visible = isOn end
        end
    end)
    updateVisual(states[key])
@@ -3013,10 +3428,28 @@ createBtn(2, "2. 🛸 โหมดบิน (Fly)", "Fly")
 createBtn(3, "3. 🌌 กระโดดไร้ขีดจำกัด (Inf Jump)", "InfJump")
 createBtn(4, "4. 🔍 มองทะลุ (X-Ray)", "Xray")
 createBtn(5, "5. ☠️ สมุดสั่งตาย (Death Note)", "DeathNote")
-createBtn(6, "6. 🌍 หาเซิร์ฟว่าง (Server Selector)", "ServerSelector")
-createBtn(7, "7. 👾 หน้าต่าง Monster", "MonsterPanel")
-
-trackConnection(list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() scroll.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 20) end))
+createBtn(6, "6. 🌍 Server Selector", "ServerSelector")
+createBtn(7, "7. ESP", "ESP")
+local stopAllButton = Instance.new("TextButton", scroll)
+stopAllButton.Name = "TayJayStopAllButton"
+stopAllButton.LayoutOrder = 8
+stopAllButton.Size = UDim2.new(0.5, -5, 0, 38)
+stopAllButton.BackgroundColor3 = Color3.fromRGB(176, 36, 48)
+stopAllButton.Text = "STOP ALL"
+stopAllButton.TextColor3 = WHITE_TEXT
+stopAllButton.Font = Enum.Font.GothamBlack
+stopAllButton.TextSize = 14
+stopAllButton.TextStrokeColor3 = TEXT_OUTLINE
+stopAllButton.TextStrokeTransparency = 0.25
+stopAllButton.BorderSizePixel = 0
+Instance.new("UICorner", stopAllButton).CornerRadius = UDim.new(0, 9)
+local stopEdge = Instance.new("UIStroke", stopAllButton)
+stopEdge.Color = Color3.fromRGB(255, 214, 72)
+stopEdge.Thickness = 2
+trackConnection(stopAllButton.Activated:Connect(function()
+    if type(_G.TAYJAY_STOP_ALL) == "function" then _G.TAYJAY_STOP_ALL() end
+end))
+trackConnection(list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() scroll.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 12) end))
 
 -- =========================================================
 -- LOGIC SYSTEMS
@@ -3099,7 +3532,13 @@ local function applyEspToCharacter(character)
    local head = character:FindFirstChild("Head")
    local humanoid = character:FindFirstChildOfClass("Humanoid")
    if not head or not humanoid then return end
-
+   if not states.ESP and not states.MM2RoleESP then
+       local oldHighlight = character:FindFirstChild(ESP_HIGHLIGHT)
+       if oldHighlight then oldHighlight:Destroy() end
+       local oldBillboard = head:FindFirstChild(ESP_NAME)
+       if oldBillboard then oldBillboard:Destroy() end
+       return
+   end
    local highlight = character:FindFirstChild(ESP_HIGHLIGHT)
    if not highlight then
        highlight = Instance.new("Highlight")
@@ -3192,6 +3631,24 @@ local function applyEspToCharacter(character)
        end))
    end
 end
+registerUiSync("ESP", function(isOn)
+    if isOn then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then applyEspToCharacter(player.Character) end
+        end
+    elseif not states.MM2RoleESP then
+        for _, player in ipairs(Players:GetPlayers()) do
+            local character = player.Character
+            if character then
+                local highlight = character:FindFirstChild(ESP_HIGHLIGHT)
+                if highlight then highlight:Destroy() end
+                local head = character:FindFirstChild("Head") or character.PrimaryPart
+                local billboard = head and head:FindFirstChild(ESP_NAME)
+                if billboard then billboard:Destroy() end
+            end
+        end
+    end
+end)
 
 local function bindEspPlayer(player)
    if player == LocalPlayer then return end
@@ -3271,7 +3728,7 @@ do
 
    local mm2ListFrame = Instance.new("Frame")
    mm2ListFrame.Name = "TayJayMM2PlayerList"
-   mm2ListFrame.Size = UDim2.new(0, 258, 0, 292)
+   mm2ListFrame.Size = UDim2.new(0, 224, 0, 300)
    mm2ListFrame.AnchorPoint = Vector2.new(0, 1)
    mm2ListFrame.Position = UDim2.new(0, 244, 1, -12)
    mm2ListFrame.BackgroundColor3 = GREEN.deep
@@ -3466,6 +3923,14 @@ do
                end
            end
        end
+   end
+
+   _G.TAYJAY_MM2_STOP = function()
+       mm2ESPEnabled = false
+       states.MM2RoleESP = false
+       mm2ESPButton.BackgroundColor3 = GREEN.off
+       mm2ESPButton:SetAttribute("TayJayEnabled", false)
+       clearMM2RoleESP()
    end
 
    local function updateMM2PlayerList()
@@ -4192,7 +4657,7 @@ local launcher = ui("TextButton", {
 corner(launcher, 25); stroke(launcher, Color3.fromRGB(255, 231, 92), 2.5)
 local launcherDragging, launcherDragStart, launcherStartPos = false, nil, nil
 v70Track(V70Perf.MonitorConnections, launcher.InputBegan:Connect(function(input)
-   if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+   if not _G.TAYJAY_UI.locked and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
        launcherDragging = true
        launcherDragStart = input.Position
        launcherStartPos = launcher.Position
@@ -4360,6 +4825,7 @@ do
     Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 8)
     local function refreshLock()
         local locked = _G.TAYJAY_UI.locked
+        isWindowLocked = locked
         lockBtn.Text = locked and "🔒 ล็อก" or "🔓 ลาก"
         lockBtn.BackgroundColor3 = locked and Color3.fromRGB(255, 132, 24) or Color3.fromRGB(76, 158, 48)
     end
@@ -4406,6 +4872,161 @@ trackConnection(perfGui.DescendantAdded:Connect(function(uiObject)
        end
    end)
 end))
+
+
+-- =========================================================
+-- QUICK VISIBILITY CONTROLS + GLOBAL STOP ALL
+-- =========================================================
+local quickGui = Instance.new("ScreenGui")
+quickGui.Name = "TayJayQuickVisibility"
+quickGui.ResetOnSpawn = false
+quickGui.IgnoreGuiInset = true
+quickGui.DisplayOrder = 1000002
+quickGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+SecureParentGui(quickGui)
+local quickBar = Instance.new("Frame", quickGui)
+quickBar.Name = "TayJayVisibilityBar"
+quickBar.Size = UDim2.fromOffset(180, 28)
+quickBar.Position = UDim2.new(0, 10, 0, 100)
+quickBar.BackgroundColor3 = GREEN.deep
+quickBar.BorderSizePixel = 0
+Instance.new("UICorner", quickBar).CornerRadius = UDim.new(0, 8)
+local quickEdge = Instance.new("UIStroke", quickBar)
+quickEdge.Color = UI_LAYOUT.Accent.Main
+quickEdge.Thickness = 1.5
+local function getRoot(name) return screenGui:FindFirstChild(name) end
+local tayjayRoots = {
+    "TayJayMainMenu", "TayJayMainToggle", "TayJaySpeedWidget", "TayJayFlyControl",
+    "TayJayNoclipCircle", "KillAuraCircleBtn", "KillAuraNormalBtn", "TayJayTargetPanel",
+    "TayJayMonsterWarpBtn", "TayJayMonsterTargetPanel", "TayJayRapidBiteBtn",
+    "TayJayServerSelector", "DeathNoteGroup"
+}
+local mm2Roots = {"TayJayMM2Dock", "TayJayMM2PlayerList"}
+local visibility = {TAYJAY=true, MM2=true, FPS=true}
+local quickButtons = {}
+local function setRootGroup(names, visible)
+    for _, name in ipairs(names) do
+        local root = getRoot(name)
+        if root and root:IsA("GuiObject") then root.Visible = visible end
+    end
+end
+local function refreshQuickButton(key)
+    local button = quickButtons[key]
+    if not button then return end
+    button.Text = key .. (visibility[key] and " ON" or " OFF")
+    button.BackgroundColor3 = visibility[key] and Color3.fromRGB(36,164,104) or Color3.fromRGB(174,52,54)
+    local edge = button:FindFirstChildOfClass("UIStroke")
+    if edge then edge.Color = visibility[key] and Color3.fromRGB(160,255,198) or Color3.fromRGB(255,145,130) end
+end
+local function setVisibility(key, value)
+    visibility[key] = value == true
+    if key == "TAYJAY" then setRootGroup(tayjayRoots,visibility[key])
+    elseif key == "MM2" then setRootGroup(mm2Roots,visibility[key])
+    elseif key == "FPS" then perfGui.Enabled = visibility[key] end
+    refreshQuickButton(key)
+end
+for index,key in ipairs({"TAYJAY","MM2","FPS"}) do
+    local button = Instance.new("TextButton",quickBar)
+    button.Name = "Visibility_" .. key
+    button.Size = UDim2.fromOffset(54,22)
+    button.Position = UDim2.fromOffset(4+(index-1)*58,3)
+    button.BackgroundColor3 = Color3.fromRGB(36,164,104)
+    button.BorderSizePixel = 0
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 10
+    button.TextColor3 = WHITE_TEXT
+    button.TextStrokeColor3 = TEXT_OUTLINE
+    button.TextStrokeTransparency = 0.3
+    button.AutoButtonColor = true
+    Instance.new("UICorner",button).CornerRadius = UDim.new(0,6)
+    local edge = Instance.new("UIStroke",button)
+    edge.Thickness = 1.2
+    quickButtons[key] = button
+    refreshQuickButton(key)
+    trackConnection(button.Activated:Connect(function() setVisibility(key,not visibility[key]) end))
+end
+local function applySecondaryScale(guiRoot,excluded)
+    for _,root in ipairs(guiRoot:GetChildren()) do
+        if root:IsA("GuiObject") and not excluded[root.Name] then
+            local scale=root:FindFirstChild("TayJaySecondaryScale")
+            if not scale then scale=Instance.new("UIScale");scale.Name="TayJaySecondaryScale";scale.Parent=root end
+            scale.Scale=0.9
+        end
+    end
+end
+applySecondaryScale(screenGui,{TayJayMainMenu=true,TayJayMainToggle=true})
+applySecondaryScale(perfGui,{})
+local function strengthenControlEdges(guiRoot)
+    for _,obj in ipairs(guiRoot:GetDescendants()) do
+        if obj:IsA("TextButton") and obj.Name~="WindowLockButton" then
+            local edge=obj:FindFirstChildOfClass("UIStroke")
+            if not edge then edge=Instance.new("UIStroke");edge.Parent=obj end
+            edge.Thickness=math.max(edge.Thickness,1.6)
+            edge.Transparency=0.04
+            local label=string.upper(tostring(obj.Text or ""))
+            local enabled=obj:GetAttribute("TayJayEnabled")==true or label:find(" ON",1,true)~=nil
+            edge.Color=enabled and Color3.fromRGB(170,255,190) or Color3.fromRGB(255,145,130)
+        end
+    end
+end
+strengthenControlEdges(screenGui)
+strengthenControlEdges(perfGui)
+local originalCameraSettings = {
+    CameraMode=LocalPlayer.CameraMode,
+    CameraMaxZoomDistance=LocalPlayer.CameraMaxZoomDistance,
+    CameraMinZoomDistance=LocalPlayer.CameraMinZoomDistance,
+    DevCameraOcclusionMode=LocalPlayer.DevCameraOcclusionMode
+}
+_G.TAYJAY_STOP_ALL = function()
+    if _G.TAYJAY_STOPPED then return end
+    _G.TAYJAY_STOPPED=true
+    for key in pairs(states) do pcall(function() syncButtonState(key,false) end) end
+    pcall(function() stopFlying(false) end)
+    pcall(function() setNoclip(false) end)
+    pcall(function() if _G.TAYJAY_MM2_STOP then _G.TAYJAY_MM2_STOP() end end)
+    pcall(v70RestoreAll)
+    pcall(v70RestoreFPSCap)
+    pcall(function()
+        for _,player in ipairs(Players:GetPlayers()) do
+            local character=player.Character
+            if character then
+                local highlight=character:FindFirstChild(ESP_HIGHLIGHT)
+                if highlight then highlight:Destroy() end
+                local head=character:FindFirstChild("Head") or character.PrimaryPart
+                local billboard=head and head:FindFirstChild(ESP_NAME)
+                if billboard then billboard:Destroy() end
+            end
+        end
+    end)
+    pcall(function()
+        LocalPlayer.CameraMode=originalCameraSettings.CameraMode
+        LocalPlayer.CameraMaxZoomDistance=originalCameraSettings.CameraMaxZoomDistance
+        LocalPlayer.CameraMinZoomDistance=originalCameraSettings.CameraMinZoomDistance
+        LocalPlayer.DevCameraOcclusionMode=originalCameraSettings.DevCameraOcclusionMode
+    end)
+    pcall(function() if V70Perf and V70Perf.Cleanup then V70Perf.Cleanup() end end)
+    for _,connection in ipairs(activeConnections) do pcall(function() connection:Disconnect() end) end
+    table.clear(activeConnections)
+    for _,parent in ipairs({CoreGui,LocalPlayer:FindFirstChildOfClass("PlayerGui")}) do
+        if parent then
+            for _,child in ipairs(parent:GetChildren()) do
+                if child.Name==guiName or child.Name=="TayJay_FPS_Booster_V72"
+                    or child.Name=="TayJayLockGui" or child.Name=="TayJayQuickVisibility"
+                    or child.Name=="TayJay_IndependentStartupStatus" then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        end
+    end
+    pcall(function() if screenGui then screenGui:Destroy() end end)
+    pcall(function() if perfGui then perfGui:Destroy() end end)
+    pcall(function() if quickGui then quickGui:Destroy() end end)
+    _G.TAYJAY_V70_PERF=nil
+    _G.TAYJAY_MM2_STOP=nil
+    _G.TAYJAY_STOP_ALL=nil
+    print("[TAYJAY] STOP ALL completed: features restored, connections disconnected, UI removed.")
+end
+
 
 if not screenGui or not screenGui.Parent then
    error("TAYJAY: main ScreenGui ไม่มี Parent จึงไม่สามารถแสดงเมนูได้")
