@@ -257,7 +257,6 @@ local PROTECTED_BRAND_NAMES = {
    TayJayFlyControl = true,
    KillAuraCircleBtn = true,
    KillAuraNormalBtn = true,
-   TayJayMonsterWarpBtn = true,
    TayJayRapidBiteBtn = true,
 }
 local function isProtectedMainBrandPart(obj)
@@ -492,7 +491,6 @@ local UI_LAYOUT = {
    FlyBottom    = UDim2.fromScale(0.6387, 0.9921), -- กรอบ FLY CONTROL (AnchorPoint 0,1 = มุมซ้ายล่าง)
    WarpCenter   = UDim2.fromScale(0.1728, 0.6150), -- ปุ่มวงกลม WARP เดิมสำหรับผู้เล่น
    WalkCenter   = UDim2.fromScale(0.2389, 0.6978), -- ปุ่มวงกลม WALK เดิม
-   MonsterWarpCenter = UDim2.fromScale(0.3020, 0.6150), -- ปุ่ม WARP แยกสำหรับ Monster
    RapidBiteCenter = UDim2.fromScale(0.3650, 0.6150),   -- ปุ่มตีรัว (RAPID) แยกอิสระ
    MonsterTargetPanel = UDim2.fromScale(0.5600, 0.8370), -- สถานะ Monster Warp แยกจาก Target ผู้เล่น
    MM2Dock      = UDim2.fromScale(0.8350, 0.4630), -- กรอบปุ่มดาบ/สมุด (MM2)
@@ -1868,7 +1866,7 @@ end)
 -- Ambiguous syntax และ Lua จะอ่านเป็นการเรียกผลลัพธ์ของ task.spawn(...) ซ้อน → สคริปต์ล้มทั้งไฟล์)
 -- pcall ทำให้ถ้า MONSTER พัง ส่วนอื่นของสคริปต์ยังทำงานต่อ และรายงานสาเหตุขึ้นจอ
 do
-local okMW, errMW = pcall(function()
+local okMonster, errMonster = pcall(function()
 
 
    local monsterPanel = Instance.new("Frame", screenGui)
@@ -2947,8 +2945,9 @@ local okMW, errMW = pcall(function()
    end
    _G.TAYJAY_MONSTER_PANEL_GET_VISIBLE = function() return monsterPanelVisible end
    updateMonsterWarpVisual()
-end)\nif not okMW then
-   pcall(function() warn("[TAYJAY MONSTER] initialization failed: " .. tostring(errMW)) end)
+end)
+if not okMonster then
+   pcall(function() warn("[TAYJAY MONSTER] initialization failed: " .. tostring(errMonster)) end)
    pcall(function()
        if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "MONSTER: " .. tostring(errMW)) end
    end)
@@ -4763,7 +4762,7 @@ local function getRoot(name) return screenGui:FindFirstChild(name) end
 local tayjayRoots = {
     "TayJayMainMenu", "TayJayMainToggle", "TayJaySpeedWidget", "TayJayFlyControl",
     "TayJayNoclipCircle", "KillAuraCircleBtn", "KillAuraNormalBtn", "TayJayTargetPanel",
-    "TayJayMonsterWarpBtn", "TayJayMonsterTargetPanel", "TayJayRapidBiteBtn",
+    "TayJayMonsterTargetPanel", "TayJayRapidBiteBtn",
     "TayJayServerSelector", "DeathNoteGroup"
 }
 local mm2Roots = {"TayJayMM2Dock", "TayJayMM2PlayerList"}
