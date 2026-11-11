@@ -4174,10 +4174,11 @@ local V70Perf = {
    FPS = 0, MinFPS = math.huge, MaxFPS = 0,
    SampleTotal = 0, SampleCount = 0, Ping = "N/A",
    GUI = nil, LastUIUpdate = 0, Samples = {}, ScanToken = 0,
-   FrameWindowTime = 0, FrameWindowFrames = 0,
+   FrameWindowTime = 0, FrameWindowFrames = 0, EnforceRunning = false,
+   CurrentPreset = "Potato",
    OriginalFPSCap = originalFPSCap, FPSUnlock = true, FPSUnlockStatus = "STARTING",
    Options = {Shadows = true, Particles = true, PostEffects = true,
-       Reflections = true, Water = true, Decals = false, Lights = false}
+       Reflections = true, Water = true, Decals = true, Lights = true}
 }
 _G.TAYJAY_V70_PERF = V70Perf
 
@@ -4196,7 +4197,8 @@ local function v70SetFPSUnlock(enabled)
        return false
    end
 
-   local targetCap = V70Perf.FPSUnlock and 999 or (V70Perf.OriginalFPSCap or 60)
+   -- Request a very high cap; actual FPS remains limited by the game, executor and device.
+   local targetCap = V70Perf.FPSUnlock and 9999 or (V70Perf.OriginalFPSCap or 60)
    local ok, err = pcall(setfpscap, targetCap)
    if not ok then
        V70Perf.FPSUnlockStatus = "FAILED"
@@ -4314,6 +4316,43 @@ local function v70ApplyOptions()
    v70Track(V70Perf.BoostConnections, Lighting.DescendantAdded:Connect(function(object)
        if V70Perf.Enabled then v70OptimizeVisual(object) end
    end))
+
+   -- Re-apply the selected profile periodically because some games rewrite visual properties.
+   -- The scan is throttled and processed in batches to limit performance overhead.
+   if not V70Perf.EnforceRunning then
+       V70Perf.EnforceRunning = true
+       task.spawn(function()
+           while V70Perf.Alive do
+               task.wait(5)
+               if V70Perf.Alive and V70Perf.Enabled then
+                   local activeOptions = V70Perf.Options
+                   if activeOptions.Shadows then
+                       v70SaveSet(Lighting, "GlobalShadows", false)
+                   end
+                   if activeOptions.Water then
+                       local terrain = workspace:FindFirstChildOfClass("Terrain")
+                       if terrain then
+                           v70SaveSet(terrain, "Decoration", false)
+                           v70SaveSet(terrain, "WaterWaveSize", 0)
+                           v70SaveSet(terrain, "WaterWaveSpeed", 0)
+                           v70SaveSet(terrain, "WaterReflectance", 0)
+                       end
+                   end
+                   local processed = 0
+                   for _, root in ipairs({workspace, Lighting}) do
+                       for _, object in ipairs(root:GetDescendants()) do
+                           if not V70Perf.Alive or not V70Perf.Enabled then break end
+                           v70OptimizeVisual(object)
+                           processed = processed + 1
+                           if processed % 200 == 0 then task.wait(0.03) end
+                       end
+                       if not V70Perf.Alive or not V70Perf.Enabled then break end
+                   end
+               end
+           end
+           V70Perf.EnforceRunning = false
+       end)
+   end
 end
 
 local MODE_DEFS = {
@@ -4332,7 +4371,9 @@ local function v70SetPreset(name)
     for _, m in ipairs(MODE_DEFS) do
         if m.name == name then mode = m end
     end
-    if not mode or not mode.opts then
+    if not mode then return end
+    V70Perf.CurrentPreset = mode.name
+    if not mode.opts then
         v70RestoreAll()
         V70Perf.Options = {Shadows=false, Particles=false, PostEffects=false, Reflections=false, Water=false, Decals=false, Lights=false}
         _G.TAYJAY_WARP_HOLD = 0
@@ -4344,7 +4385,7 @@ local function v70SetPreset(name)
 end
 
 local lowPresetStarted = pcall(function()
-   v70SetPreset("Balanced")
+   v70SetPreset("Potato")
 end)
 
 local function v70ReadPing()
@@ -4493,7 +4534,7 @@ local function buildCatalog()
     local list = {}
     local unlockUnavailable = V70Perf.FPSUnlockStatus == "UNAVAILABLE" or V70Perf.FPSUnlockStatus == "FAILED"
     table.insert(list, {id="fps:unlock", name="Unlock FPS",
-        detail=unlockUnavailable and "Executor does not support the FPS cap command" or "ON requests 999 FPS; OFF restores the previous cap",
+        detail=unlockUnavailable and "Executor does not support the FPS cap command" or "ON requests 9999 FPS; OFF restores the previous cap",
         toggle=true, on=v70FPSUnlockApplied(),
         button=unlockUnavailable and "N/A" or (V70Perf.FPSUnlock and "ON" or "OFF"),
         run=function()
@@ -4509,22 +4550,7 @@ local function buildCatalog()
             button=(m.name == "Quality") and "RESTORE" or "APPLY",
             run=function() v70SetPreset(m.name); statusLabel.Text = "PROFILE: " .. string.upper(m.name) end})
     end
-    local defs = {
-        {"Shadows", "ปิดเงาของโลก", "Shadows"},
-        {"Particles", "ปิดอนุภาคและเทรล", "Particles"},
-        {"Post Effects", "ปิดเอฟเฟกต์ภาพหลัง", "PostEffects"},
-        {"Reflections", "ลดการสะท้อนพื้นผิว", "Reflections"},
-        {"Water", "ลดแอนิเมชันน้ำ", "Water"},
-        {"Decals", "ซ่อนเดคัลและพื้นผิว", "Decals"},
-        {"Dynamic Lights", "ปิดแสงไดนามิก", "Lights"},
-    }
-    for _, d in ipairs(defs) do
-        local key = d[3]
-        local on = V70Perf.Options[key] == true
-        table.insert(list, {id="opt:"..key, name=d[1], detail=d[2], toggle=true, on=on,
-            button=on and "ON" or "OFF",
-            run=function() V70Perf.Options[key] = not V70Perf.Options[key]; v70ApplyOptions(); statusLabel.Text = "PROFILE: CUSTOM" end})
-    end
+    -- Graphics are changed only by selecting a preset in the FPS tab.
     table.insert(list, {id="action:restore", name="Restore original", detail="ยกเลิกการเปลี่ยนแปลงทั้งหมด",
         button="RESTORE", run=function() v70SetPreset("Quality"); statusLabel.Text = "PROFILE: RESTORED" end})
     return list
@@ -4568,7 +4594,7 @@ local function renderTab()
        local metrics = rowLabel("FPS: --   |   AVG: --   |   MIN: --   |   MAX: --", "PING: --   •   Client frame-rate estimate")
        metrics.Name = "LiveMetrics"
        local unlockUnavailable = V70Perf.FPSUnlockStatus == "UNAVAILABLE" or V70Perf.FPSUnlockStatus == "FAILED"
-       local unlockRow = rowLabel("UNLOCK FPS", unlockUnavailable and "Executor does not support setfpscap()" or "ปลดล็อก FPS สูงสุด • OFF จะคืนค่าเดิม")
+       local unlockRow = rowLabel("UNLOCK FPS", unlockUnavailable and "Executor does not support setfpscap()" or "ขอเพดาน 9999 FPS • OFF จะคืนค่าเดิม")
        local unlockButton = actionButton(unlockRow, unlockUnavailable and "N/A" or (V70Perf.FPSUnlock and "ON" or "OFF"), 64, function()
            local requested = not V70Perf.FPSUnlock
            v70SetFPSUnlock(requested)
@@ -4599,34 +4625,13 @@ local function renderTab()
            if string.sub(entry.id, 1, 5) == "mode:" then drawEntry(entry, function() renderTab() end) end
        end
    else
-       section("GRAPHICS OPTIONS")
-       local definitions = {
-           {"Shadows","Reduces world shadow rendering", "Shadows"},
-           {"Particles","Disables particle and trail effects", "Particles"},
-           {"Post Effects","Disables blur, bloom and color effects", "PostEffects"},
-           {"Reflections","Removes reflective surface intensity", "Reflections"},
-           {"Water","Reduces terrain water animation", "Water"},
-           {"Decals","Hides decal and texture details", "Decals"},
-           {"Dynamic Lights","Disables point, spot and surface lights", "Lights"}
-       }
-       for _, def in ipairs(definitions) do
-           local r = rowLabel(def[1], def[2])
-           local key = def[3]
-           local toggle = actionButton(r, V70Perf.Options[key] and "ON" or "OFF", 54, function()
-               V70Perf.Options[key] = not V70Perf.Options[key]
-               v70ApplyOptions()
-               renderTab()
-           end)
-           toggle.BackgroundColor3 = V70Perf.Options[key] and Color3.fromRGB(104, 211, 57) or Color3.fromRGB(166, 43, 38)
-       end
-       section("RESTORE")
-       local restore = rowLabel("Restore original graphics", "Undo all changes made by FPS Booster")
-       actionButton(restore, "RESTORE", 72, function()
-           v70RestoreAll()
-           V70Perf.Options = {Shadows=false, Particles=false, PostEffects=false, Reflections=false, Water=false, Decals=false, Lights=false}
-           statusLabel.Text = "PROFILE: RESTORED"
-           renderTab()
-       end)
+       section("ACTIVE GRAPHICS PROFILE")
+       rowLabel("PROFILE: " .. string.upper(V70Perf.CurrentPreset or "POTATO"),
+           "กราฟิกจะเปลี่ยนได้จากปุ่ม Preset ในแท็บ FPS เท่านั้น")
+       rowLabel("PERSISTENT LOW GRAPHICS",
+           "ระบบจะตรวจซ้ำเป็นช่วง ๆ เพื่อป้องกันเกมเขียนค่าเอฟเฟกต์กลับ")
+       rowLabel("TO CHANGE PROFILE",
+           "เปิดแท็บ FPS แล้วเลือก Potato / Balanced / Battle / Stream-safe / Quality")
    end
    refreshTabButtons()
 end
@@ -4641,7 +4646,7 @@ for index, name in ipairs({"FPS", "GRAPHICS"}) do
    end))
 end
 statusLabel = ui("TextLabel", {Size=UDim2.new(1,-20,0,17), Position=UDim2.new(0,10,1,-19),
-   BackgroundTransparency=1, Text=(lowPresetStarted and (v70FPSUnlockApplied() and "PROFILE: BALANCED  •  FPS UNLOCK ON" or "PROFILE: BALANCED  •  FPS UNLOCK N/A") or "PROFILE: BALANCED  •  APPLY FAILED"), TextColor3= WHITE_TEXT,
+   BackgroundTransparency=1, Text=(lowPresetStarted and (v70FPSUnlockApplied() and "PROFILE: POTATO  •  FPS UNLOCK ON" or "PROFILE: POTATO  •  FPS UNLOCK N/A") or "PROFILE: POTATO  •  APPLY FAILED"), TextColor3= WHITE_TEXT,
    Font=Enum.Font.GothamBold, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left}, panel)
 local function setCollapsed(value)
    collapsed = value
