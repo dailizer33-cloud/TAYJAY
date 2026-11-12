@@ -3948,13 +3948,24 @@ do
    mm2ListPadding.PaddingTop = UDim.new(0, 2)
    mm2ListPadding.PaddingBottom = UDim.new(0, 14)
 
+   -- MM2 row taps reuse the existing legacy teleport/attack routine.
+   local teleportAndAttack
+
    local function refreshMM2PlayerList()
        if not mm2ListScroll or not mm2ListScroll.Parent then return end
        for _, child in ipairs(mm2ListScroll:GetChildren()) do
            if child:IsA("TextButton") then child:Destroy() end
        end
        local allPlayers = Players:GetPlayers()
-       table.sort(allPlayers, function(a, b) return string.lower(a.DisplayName) < string.lower(b.DisplayName) end)
+       local rolePriority = { Murderer = 1, Sheriff = 2, Innocent = 3, Unknown = 4 }
+       table.sort(allPlayers, function(a, b)
+           local roleA = string.gsub(getMM2PlayerRole(a), "%*", "")
+           local roleB = string.gsub(getMM2PlayerRole(b), "%*", "")
+           local priorityA = rolePriority[roleA] or 4
+           local priorityB = rolePriority[roleB] or 4
+           if priorityA ~= priorityB then return priorityA < priorityB end
+           return string.lower(a.DisplayName) < string.lower(b.DisplayName)
+       end)
        for _, playerObj in ipairs(allPlayers) do
            local roleName, roleColor, roleIcon = getMM2PlayerRole(playerObj)
            local card = Instance.new("TextButton", mm2ListScroll)
@@ -3963,6 +3974,14 @@ do
            card.BackgroundColor3 = Color3.fromRGB(30, 52, 78)
            card.BorderSizePixel = 0
            card.Text = ""
+           card.AutoButtonColor = true
+           card.Activated:Connect(function()
+               if playerObj == LocalPlayer then return end
+               local targetCharacter = playerObj.Character
+               local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
+               if not targetHumanoid or targetHumanoid.Health <= 0 then return end
+               if teleportAndAttack then teleportAndAttack(playerObj) end
+           end)
            Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
            local cardStroke = Instance.new("UIStroke", card)
            cardStroke.Color = roleColor
@@ -4056,7 +4075,7 @@ do
    trackConnection(Players.PlayerAdded:Connect(queueMM2ListRefresh))
    trackConnection(Players.PlayerRemoving:Connect(queueMM2ListRefresh))
 
-   local function teleportAndAttack(targetPlayer)
+   teleportAndAttack = function(targetPlayer)
        if isBusy or targetPlayer == LocalPlayer then return end
 
        local character = LocalPlayer.Character
