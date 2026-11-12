@@ -1881,9 +1881,12 @@ task.spawn(function()
                targetTitle.Text = (states.KillAura and "🕶 WARP: " or "🕶 DN: ") .. targetPlayer.Name
                local hp = math.max(0, math.floor(targetHumanoid.Health))
                local maxHp = math.max(1, math.floor(targetHumanoid.MaxHealth))
-               targetHpLabel.Text = hp .. " / " .. maxHp .. " HP  •  " .. (AttackRemote and "FOLLOW + ATTACK" or "FOLLOW • NO ATTACK REMOTE")
+               local followStatus = states.DNWarp and "FOLLOW ONLY" or (AttackRemote and "FOLLOW + ATTACK" or "FOLLOW • NO ATTACK REMOTE")
+               targetHpLabel.Text = hp .. " / " .. maxHp .. " HP  •  " .. followStatus
                targetBarFill.Size = UDim2.new(math.clamp(hp / maxHp, 0, 1), 0, 1, 0)
-               if AttackRemote then tryAttackTarget(targetCharacter) end
+               -- Death Note DNWarp is follow-only and never depends on an attack Remote.
+               -- Keep the existing KillAura attack behavior separate from Death Note tracking.
+               if states.KillAura and AttackRemote then tryAttackTarget(targetCharacter) end
            else
                if shadowHiddenCharacter then
                    setInvisibility(shadowHiddenCharacter, false)
