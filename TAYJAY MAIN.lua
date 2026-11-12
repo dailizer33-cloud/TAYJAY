@@ -3970,6 +3970,7 @@ end
 -- DEFUSAL TEAM COLOR ESP + PLAYER WARP TRACK (MM2-INDEPENDENT)
 -- Place ID: 79393329652220
 -- =========================================================
+task.spawn(function()
 if IS_DEFUSAL_GAME then
 do
     local BLUE, RED = Color3.fromRGB(55,165,255), Color3.fromRGB(255,70,70)
@@ -4228,6 +4229,7 @@ do
     print("[TAYJAY DEFUSAL] Independent team-color ESP initialized")
 end
 end
+end)
 
 -- =========================================================
 -- Capture original camera values before applying this script's camera defaults.
