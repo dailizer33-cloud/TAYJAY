@@ -1316,6 +1316,7 @@ trackConnection(Players.PlayerRemoving:Connect(function(player)
    end
    if selectedDeathNoteTarget == player then
        selectedDeathNoteTarget = nil
+       syncButtonState("DNWarp", false)
        targetTitle.Text = "🎯 Target: unavailable"
        targetHpLabel.Text = "0 / 0 HP"
        targetBarFill.Size = UDim2.new(0, 0, 1, 0)
@@ -1830,7 +1831,12 @@ task.spawn(function()
                -- เลือกจากรายชื่อ: ตามคนที่เลือกไว้ (ไม่สุ่ม ไม่จำกัดระยะ)
                local dnChar = selectedDeathNoteTarget and selectedDeathNoteTarget.Character
                local dnHum = dnChar and dnChar:FindFirstChildOfClass("Humanoid")
-               local dnGone = selectedDeathNoteTarget and (selectedDeathNoteTarget.Parent ~= Players or (dnHum ~= nil and dnHum.Health <= 0))
+               local dnGone = selectedDeathNoteTarget and (
+                   selectedDeathNoteTarget.Parent ~= Players
+                   or not dnChar
+                   or not dnHum
+                   or dnHum.Health <= 0
+               )
                 if dnGone then
                    -- เป้าหมายตาย/ออก: กลับจุดยืน แล้วปิดโหมดและยกเลิกการเลือก
                    goHome(myRootNow)
