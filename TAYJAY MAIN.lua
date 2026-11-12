@@ -3233,6 +3233,217 @@ if not okRB then
 end
 end
 
+
+-- =========================================================
+-- AUTO KILL: independent copied attack button
+-- =========================================================
+do
+local okAK, errAK = pcall(function()
+   local GuiService = game:GetService("GuiService")
+   local LogService = game:GetService("LogService")
+   local VirtualInputManager = nil
+   pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
+
+   local AUTOKILL_CPS = 20
+   local AUTOKILL_METHOD = "auto"               -- "auto" | "touch" | "signal"
+   local AUTOKILL_TEXTS = { "bite" }
+   local STUN_WORDS = { "stun", "daze", "dizzy", "vulnerab", "exhaust", "weaken", "มึน", "สตัน" }
+
+   local autoKillSignalBad, autoKillLastSignalFireAt = false, -10
+   local autoKillMode = 0
+   local autoKillBiteButton, autoKillLastFindAt = nil, -10
+   local autoKillLastMethod, autoKillStunSeen, autoKillStunText = "-", false, ""
+   local autoKillClickAccumulator, autoKillStunCheckAt, autoKillVisualAt = 0, 0, 0
+
+   trackConnection(LogService.MessageOut:Connect(function(message)
+       if autoKillSignalBad or os.clock() - autoKillLastSignalFireAt > 2 then return end
+       local msg = string.lower(tostring(message or ""))
+       if string.find(msg, "current thread cannot access", 1, true)
+           or (string.find(msg, "lacking capability", 1, true) and string.find(msg, "plugin", 1, true)) then
+           autoKillSignalBad = true
+           autoKillLastMethod = "SIGNAL BLOCKED"
+           pcall(function() warn("[TAYJAY AUTO KILL] signal method disabled after capability error") end)
+       end
+   end))
+
+   local button = Instance.new("TextButton", screenGui)
+   button.Name = "TayJayAutoKillBtn"
+   button.AnchorPoint = Vector2.new(0.5, 0.5)
+   button.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
+   button.Position = UDim2.fromScale(UI_LAYOUT.RapidBiteCenter.X.Scale + 0.075, UI_LAYOUT.RapidBiteCenter.Y.Scale)
+   button.BackgroundColor3 = GREEN.off
+   button.RichText = true
+   button.Text = '<font size="25">⚔</font>\n<font size="11">AUTO KILL</font>\n<font size="10">OFF</font>'
+   button.TextColor3 = WHITE_TEXT
+   button.Font = Enum.Font.GothamBlack
+   button.TextSize = 15
+   button.Active = true
+   button.AutoButtonColor = true
+   Instance.new("UICorner", button).CornerRadius = UDim.new(1, 0)
+   local stroke = Instance.new("UIStroke", button)
+   stroke.Color = Color3.fromRGB(255, 96, 132)
+   stroke.Thickness = 2.5
+   makeDraggable(button)
+
+   local function normalize(text)
+       local str = tostring(text or "")
+       str = str:gsub("<[^>]*>", "")
+       str = str:gsub("[^%w\128-\255]", "")
+       return string.lower(str)
+   end
+
+   local function guiShown(obj)
+       local gui = obj:FindFirstAncestorWhichIsA("ScreenGui")
+       if not gui or not gui.Enabled or gui == screenGui then return false end
+       local parent = obj
+       while parent and parent ~= gui do
+           if parent:IsA("GuiObject") and not parent.Visible then return false end
+           parent = parent.Parent
+       end
+       return true
+   end
+
+   local function findAutoKillBiteButton()
+       local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+       if not playerGui then return nil end
+       for _, obj in ipairs(playerGui:GetDescendants()) do
+           if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and #obj.Text > 0 and #obj.Text <= 24 then
+               local key = normalize(obj.Text)
+               for _, want in ipairs(AUTOKILL_TEXTS) do
+                   if key == want and guiShown(obj) then
+                       local target = obj:IsA("GuiButton") and obj or obj:FindFirstAncestorWhichIsA("GuiButton")
+                       return target or obj
+                   end
+               end
+           end
+       end
+       return nil
+   end
+
+   local function autoKillFireSignals(target)
+       if type(getconnections) ~= "function" then return false end
+       for _, signalName in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down", "TouchTap" }) do
+           local okSig, signal = pcall(function() return target[signalName] end)
+           if okSig and signal then
+               local okConn, connections = pcall(getconnections, signal)
+               if okConn and type(connections) == "table" then
+                   local fired = false
+                   for _, conn in ipairs(connections) do
+                       if pcall(function() conn:Fire() end) then fired = true end
+                   end
+                   if fired then return true end
+               end
+           end
+       end
+       return false
+   end
+
+   local function autoKillClickScreen(target)
+       if not VirtualInputManager then return false end
+       local position, size = target.AbsolutePosition, target.AbsoluteSize
+       local x, y = position.X + size.X / 2, position.Y + size.Y / 2
+       local gui = target:FindFirstAncestorWhichIsA("ScreenGui")
+       if gui and not gui.IgnoreGuiInset then
+           local okInset, inset = pcall(function() return GuiService:GetGuiInset() end)
+           if okInset and inset then y = y + inset.Y end
+       end
+       return (pcall(function()
+           if UserInputService.TouchEnabled then
+               VirtualInputManager:SendTouchEvent(91, 0, x, y)
+               VirtualInputManager:SendTouchEvent(91, 2, x, y)
+           else
+               VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+               VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+           end
+       end))
+   end
+
+   local function autoKillOnce()
+       local now = os.clock()
+       if (not autoKillBiteButton or not autoKillBiteButton.Parent) and now - autoKillLastFindAt > 1.5 then
+           autoKillLastFindAt = now
+           autoKillBiteButton = findAutoKillBiteButton()
+           if autoKillBiteButton then
+               pcall(function() print("[TAYJAY AUTO KILL] attack button found: " .. autoKillBiteButton:GetFullName()) end)
+           end
+       end
+       if not autoKillBiteButton or not autoKillBiteButton.Parent then autoKillLastMethod = "NO BUTTON" return false end
+       if AUTOKILL_METHOD ~= "signal" and autoKillClickScreen(autoKillBiteButton) then autoKillLastMethod = "touch" return true end
+       if AUTOKILL_METHOD ~= "touch" and not autoKillSignalBad then
+           autoKillLastSignalFireAt = os.clock()
+           if autoKillFireSignals(autoKillBiteButton) then autoKillLastMethod = "signal" return true end
+       end
+       autoKillLastMethod = "NO INPUT"
+       return false
+   end
+
+   local function autoKillScanStun()
+       local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+       if not playerGui then return false end
+       for _, obj in ipairs(playerGui:GetDescendants()) do
+           if obj:IsA("TextLabel") and #obj.Text > 0 and #obj.Text <= 40 and guiShown(obj) then
+               local key = string.lower(obj.Text)
+               for _, word in ipairs(STUN_WORDS) do
+                   if string.find(key, word, 1, true) then return true, obj.Text end
+               end
+           end
+       end
+       return false
+   end
+
+   local function updateAutoKillVisual()
+       local line3, color = "OFF", GREEN.off
+       if autoKillMode == 1 then
+           line3, color = "ON • " .. autoKillLastMethod, GREEN.on
+       elseif autoKillMode == 2 then
+           if autoKillStunSeen then line3, color = "AUTO • STUN! " .. autoKillLastMethod, GREEN.on
+           else line3, color = "AUTO • รอมึน", GREEN.warning end
+       end
+       button.BackgroundColor3 = color
+       button.Text = '<font size="25">⚔</font>\n<font size="11">AUTO KILL</font>\n<font size="9">' .. line3 .. '</font>'
+   end
+
+   trackConnection(button.Activated:Connect(function()
+       autoKillMode = (autoKillMode + 1) % 3
+       autoKillClickAccumulator, autoKillStunSeen, autoKillStunCheckAt = 0, false, 0
+       if autoKillMode ~= 0 then autoKillLastFindAt = -10 end
+       updateAutoKillVisual()
+   end))
+
+   trackConnection(RunService.Heartbeat:Connect(function(dt)
+       if autoKillMode == 0 then autoKillClickAccumulator = 0 return end
+       local now = os.clock()
+       if autoKillMode == 2 and now >= autoKillStunCheckAt then
+           autoKillStunCheckAt = now + 0.3
+           local seen, text = autoKillScanStun()
+           if seen and not autoKillStunSeen then print("[TAYJAY AUTO KILL] stun text detected: " .. tostring(text)) end
+           autoKillStunSeen, autoKillStunText = seen, text or ""
+       end
+       if autoKillMode == 2 and not autoKillStunSeen then autoKillClickAccumulator = 0 end
+       if autoKillMode == 1 or autoKillStunSeen then
+           autoKillClickAccumulator = autoKillClickAccumulator + dt
+           local interval = 1 / AUTOKILL_CPS
+           local clicks = 0
+           while autoKillClickAccumulator >= interval and clicks < 3 do
+               autoKillClickAccumulator = autoKillClickAccumulator - interval
+               clicks = clicks + 1
+               autoKillOnce()
+           end
+           if autoKillClickAccumulator > interval * 3 then autoKillClickAccumulator = 0 end
+       end
+       if now >= autoKillVisualAt then autoKillVisualAt = now + 0.25; updateAutoKillVisual() end
+   end))
+
+   updateAutoKillVisual()
+end)
+if not okAK then
+   pcall(function() warn("[TAYJAY AUTO KILL] initialization failed: " .. tostring(errAK)) end)
+   pcall(function()
+       if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "AUTO KILL: " .. tostring(errAK)) end
+   end)
+end
+end
+
 task.spawn(function()
    while screenGui.Parent do
        task.wait(0.05)
