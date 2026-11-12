@@ -3245,7 +3245,7 @@ do
    button.Position = UDim2.fromScale(UI_LAYOUT.RapidBiteCenter.X.Scale + 0.075, UI_LAYOUT.RapidBiteCenter.Y.Scale)
    button.BackgroundColor3 = GREEN.off
    button.RichText = true
-   button.Text = '<font size="25">⚔</font>\\n<font size="11">RAP2</font>\\n<font size="10">OFF</font>'
+   button.Text = '<font size="25">⚔</font>\n<font size="11">RAP2</font>\n<font size="10">OFF</font>'
    button.TextColor3 = WHITE_TEXT
    button.Font = Enum.Font.GothamBlack
    button.TextSize = 15
@@ -3259,7 +3259,7 @@ do
 
    local function updateRap2Visual()
       button.BackgroundColor3 = rap2Enabled and GREEN.on or GREEN.off
-      button.Text = '<font size="25">⚔</font>\\n<font size="11">RAP2</font>\\n<font size="10">' .. (rap2Enabled and "ON" or "OFF") .. '</font>'
+      button.Text = '<font size="25">⚔</font>\n<font size="11">RAP2</font>\n<font size="10">' .. (rap2Enabled and "ON" or "OFF") .. '</font>'
    end
 
    trackConnection(button.Activated:Connect(function()
@@ -3279,7 +3279,6 @@ do
    end))
 
    updateRap2Visual()
-end
 end
 
 task.spawn(function()
