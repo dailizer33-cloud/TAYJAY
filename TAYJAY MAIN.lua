@@ -4075,51 +4075,105 @@ do
    trackConnection(Players.PlayerAdded:Connect(queueMM2ListRefresh))
    trackConnection(Players.PlayerRemoving:Connect(queueMM2ListRefresh))
 
-   teleportAndAttack = function(targetPlayer)
-       if isBusy or targetPlayer == LocalPlayer then return end
+   local function findMM2WeaponForLocal()
+       local localRole = string.gsub(getMM2PlayerRole(LocalPlayer), "%*", "")
+       local wanted = {}
+       if localRole == "Murderer" then
+           wanted = { knife = true, murdererknife = true }
+       elseif localRole == "Sheriff" then
+           wanted = { gun = true, sheriffgun = true, revolver = true }
+       else
+           return nil, "Your MM2 role is not confirmed as Murderer or Sheriff"
+       end
 
        local character = LocalPlayer.Character
+       local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+       local function findIn(container)
+           if not container then return nil end
+           for _, item in ipairs(container:GetChildren()) do
+               if item:IsA("Tool") and wanted[string.lower(item.Name)] then
+                   return item
+               end
+           end
+           return nil
+       end
+       return findIn(character) or findIn(backpack), nil
+   end
+
+   teleportAndAttack = function(targetPlayer)
+       if isBusy or targetPlayer == LocalPlayer then return end
+       if not AttackRemote then
+           warn("[TAYJAY MM2] Attack remote is unavailable; action cancelled")
+           return
+       end
+
+       local character = LocalPlayer.Character
+       local humanoid = character and character:FindFirstChildOfClass("Humanoid")
        local root = character and character:FindFirstChild("HumanoidRootPart")
        local targetCharacter = targetPlayer.Character
+       local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
        local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
-       if not (root and targetRoot) then return end
+       if not (humanoid and root and targetHumanoid and targetHumanoid.Health > 0 and targetRoot) then
+           return
+       end
+
+       local weapon, weaponError = findMM2WeaponForLocal()
+       if not weapon then
+           warn("[TAYJAY MM2] No matching role weapon: " .. tostring(weaponError or "weapon not found"))
+           return
+       end
 
        isBusy = true
        local ok, err = pcall(function()
            local originalCFrame = root.CFrame
-           local backpack = LocalPlayer:FindFirstChild("Backpack")
-           if backpack then
-               for _, tool in ipairs(backpack:GetChildren()) do
-                   if tool:IsA("Tool") then
-                       tool.Parent = character
-                       break
-                   end
-               end
+           local camera = workspace.CurrentCamera
+           local humanoidTool = weapon
+           if weapon.Parent ~= character then
+               humanoid:EquipTool(weapon)
+           end
+           task.wait(0.12)
+
+           if weapon.Parent ~= character then
+               error("Could not equip the role weapon")
            end
 
-           local startTime = tick()
+           local deadline = os.clock() + 2
            local followConnection
            followConnection = trackConnection(RunService.RenderStepped:Connect(function()
-               if tick() - startTime > 2 then
+               if os.clock() >= deadline then
                    if followConnection then followConnection:Disconnect() end
                    return
                end
 
                local currentTargetCharacter = targetPlayer.Character
+               local currentTargetHumanoid = currentTargetCharacter and currentTargetCharacter:FindFirstChildOfClass("Humanoid")
                local currentTargetRoot = currentTargetCharacter and currentTargetCharacter:FindFirstChild("HumanoidRootPart")
                local currentCharacter = LocalPlayer.Character
+               local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
                local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
-               if currentTargetRoot and currentRoot then
-                   _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.12 -- Fly คงสถานะบิน แต่ไม่เขียนตำแหน่งทับระหว่าง Warp
-                   currentRoot.CFrame = currentTargetRoot.CFrame * CFrame.new(0, 0, 2.5)
-                   local targetHumanoid = currentTargetCharacter:FindFirstChildOfClass("Humanoid")
-                   if targetHumanoid and targetHumanoid.Health > 0 then
-                       tryAttackTarget(currentTargetCharacter)
-                   end
+
+               if not currentTargetHumanoid or currentTargetHumanoid.Health <= 0 or not currentTargetRoot
+                   or not currentHumanoid or currentHumanoid.Health <= 0 or not currentRoot then
+                   if followConnection then followConnection:Disconnect() end
+                   return
+               end
+
+               -- Move beside the selected target and keep the camera pointed at that target.
+               _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.12
+               currentRoot.CFrame = currentTargetRoot.CFrame * CFrame.new(0, 0, 2.5)
+               if camera and workspace.CurrentCamera == camera then
+                   local cameraPosition = camera.CFrame.Position
+                   camera.CFrame = CFrame.lookAt(cameraPosition, currentTargetRoot.Position)
+               end
+
+               -- Use only the existing attack routine while the verified weapon is equipped.
+               if humanoidTool.Parent == currentCharacter and currentTargetHumanoid.Health > 0 then
+                   tryAttackTarget(currentTargetCharacter)
                end
            end))
 
            task.wait(2.1)
+           if followConnection then pcall(function() followConnection:Disconnect() end) end
            local currentCharacter = LocalPlayer.Character
            local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
            if currentRoot then
@@ -4127,7 +4181,7 @@ do
            end
        end)
        isBusy = false
-       if not ok then warn("[TAYJAY MM2] Follow action stopped: " .. tostring(err)) end
+       if not ok then warn("[TAYJAY MM2] Target action stopped: " .. tostring(err)) end
    end
 
    local mm2ESPEnabled = false
