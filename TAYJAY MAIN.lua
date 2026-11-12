@@ -355,6 +355,8 @@ local GREEN = {
    warning = Color3.fromRGB(255, 190, 68),  
 }
 
+local IS_DEFUSAL_GAME = game.PlaceId == 79393329652220
+local defusalSetEsp = nil
 local config = { WalkSpeed = 16 }
 local originalWalkSpeed = nil
 local isBusy = false 
@@ -3573,6 +3575,7 @@ local espBoundCharacters = {}
 
 local function applyEspToCharacter(character)
    if not character or not character.Parent then return end
+   if IS_DEFUSAL_GAME then return end
    local head = character:FindFirstChild("Head")
    local humanoid = character:FindFirstChildOfClass("Humanoid")
    if not head or not humanoid then return end
@@ -3676,6 +3679,10 @@ local function applyEspToCharacter(character)
    end
 end
 registerUiSync("ESP", function(isOn)
+    if IS_DEFUSAL_GAME then
+        if defusalSetEsp then defusalSetEsp(isOn) end
+        return
+    end
     if isOn then
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LocalPlayer and player.Character then applyEspToCharacter(player.Character) end
@@ -3737,12 +3744,12 @@ end)
 -- =========================================================
 -- 🗡️ MM2 ROLE ESP + PLAYER LIST 
 -- =========================================================
-do
+if not IS_DEFUSAL_GAME then
    print("[TAYJAY MM2] Initializing merged MM2 controls...")
 
    local mm2MainFrame = Instance.new("Frame")
    mm2MainFrame.Name = "TayJayMM2Dock"
-   mm2MainFrame.Size = UDim2.new(0, 118, 0, 48)
+   mm2MainFrame.Size = UDim2.new(0, 53, 0, 48)
    mm2MainFrame.Position = UI_LAYOUT.MM2Dock
    mm2MainFrame.BackgroundColor3 = GREEN.dark
    mm2MainFrame.BackgroundTransparency = 0.05
@@ -3768,76 +3775,8 @@ do
    end
 
    local mm2ESPButton = createMM2Button("🗡️", 7)
-   local mm2ListButton = createMM2Button("📋", 72)
+   local mm2ESPButton = createMM2Button("🗡️", 7)
 
-   -- Two separate MM2 team tables: blue allies and red enemies.
-   local mm2ListFrame = Instance.new("Frame")
-   mm2ListFrame.Name = "TayJayMM2PlayerList"
-   mm2ListFrame.Size = UDim2.new(0, 438, 0, 252)
-   mm2ListFrame.AnchorPoint = Vector2.new(0, 1)
-   mm2ListFrame.Position = UDim2.new(0, 244, 1, -12)
-   mm2ListFrame.BackgroundColor3 = GREEN.deep
-   mm2ListFrame.BackgroundTransparency = 0.05
-   mm2ListFrame.Active = true
-   mm2ListFrame.Visible = false
-   mm2ListFrame.Parent = screenGui
-   Instance.new("UICorner", mm2ListFrame).CornerRadius = UDim.new(0, 10)
-   local mm2ListStroke = Instance.new("UIStroke")
-   mm2ListStroke.Color = GREEN.stroke
-   mm2ListStroke.Thickness = 1.5
-   mm2ListStroke.Parent = mm2ListFrame
-   makeDraggable(mm2ListFrame, false)
-
-   local function createMM2TeamTable(name, title, xOffset, accent)
-       local panel = Instance.new("Frame")
-       panel.Name = name
-       panel.Size = UDim2.new(0, 210, 1, -16)
-       panel.Position = UDim2.new(0, xOffset, 0, 8)
-       panel.BackgroundColor3 = GREEN.panel
-       panel.BackgroundTransparency = 0.02
-       panel.Parent = mm2ListFrame
-       Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
-       local edge = Instance.new("UIStroke", panel)
-       edge.Color = accent
-       edge.Thickness = 1.8
-
-       local heading = Instance.new("TextLabel")
-       heading.Name = "TeamHeading"
-       heading.Size = UDim2.new(1, -12, 0, 28)
-       heading.Position = UDim2.new(0, 6, 0, 3)
-       heading.BackgroundTransparency = 1
-       heading.Text = title .. " (0)"
-       heading.TextColor3 = accent
-       heading.Font = Enum.Font.GothamBold
-       heading.TextSize = 14
-       heading.TextStrokeColor3 = TEXT_OUTLINE
-       heading.TextStrokeTransparency = 0.35
-       heading.TextXAlignment = Enum.TextXAlignment.Center
-       heading.Parent = panel
-
-       local scrolling = Instance.new("ScrollingFrame")
-       scrolling.Name = "PlayerRows"
-       scrolling.Size = UDim2.new(1, -12, 1, -38)
-       scrolling.Position = UDim2.new(0, 6, 0, 34)
-       scrolling.BackgroundTransparency = 1
-       scrolling.BorderSizePixel = 0
-       scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
-       scrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
-       scrolling.ScrollBarThickness = 4
-       scrolling.ScrollBarImageColor3 = accent
-       scrolling.Parent = panel
-
-       local layout = Instance.new("UIListLayout")
-       layout.Padding = UDim.new(0, 4)
-       layout.SortOrder = Enum.SortOrder.LayoutOrder
-       layout.Parent = scrolling
-       return panel, heading, scrolling
-   end
-
-   local blueTeamPanel, blueTeamTitle, blueTeamRows = createMM2TeamTable(
-       "MM2BlueTeamTable", "🔵 ตำรวจ", 6, Color3.fromRGB(55, 155, 255))
-   local redEnemyPanel, redEnemyTitle, redEnemyRows = createMM2TeamTable(
-       "MM2RedEnemyTable", "🔴 โจร", 222, Color3.fromRGB(255, 72, 72))
    local function getMM2PlayerRole(player)
        local character = player.Character
        local backpack = player:FindFirstChild("Backpack")
@@ -4002,113 +3941,6 @@ do
        clearMM2RoleESP()
    end
 
-   local function getMM2TeamSide(player)
-       -- Use the game's assigned team, never infer the local player's side from role/tools.
-       local teamName = ""
-       pcall(function()
-           if player.Team then teamName = tostring(player.Team.Name) end
-       end)
-       local teamColorName = ""
-       pcall(function()
-           teamColorName = tostring(player.TeamColor.Name)
-       end)
-       local teamText = string.lower(teamName .. " " .. teamColorName)
-
-       -- Blue team: Police / Sheriff.
-       if string.find(teamText, "police", 1, true)
-           or string.find(teamText, "cop", 1, true)
-           or string.find(teamText, "sheriff", 1, true)
-           or string.find(teamText, "ตำรวจ", 1, true)
-           or string.find(teamText, "blue", 1, true)
-           or string.find(teamText, "bright blue", 1, true) then
-           return "police"
-       end
-
-       -- Red team: Thief / Robber / Criminal.
-       if string.find(teamText, "thief", 1, true)
-           or string.find(teamText, "robber", 1, true)
-           or string.find(teamText, "criminal", 1, true)
-           or string.find(teamText, "โจร", 1, true)
-           or string.find(teamText, "red", 1, true) then
-           return "thief"
-       end
-
-       return "unknown"
-   end
-
-   local function updateMM2PlayerList()
-       if not mm2ListFrame.Visible then return end
-
-       local policePlayers, thiefPlayers = {}, {}
-       local unknownCount = 0
-
-       for _, player in ipairs(Players:GetPlayers()) do
-           local side = getMM2TeamSide(player)
-           if side == "police" then
-               table.insert(policePlayers, player)
-           elseif side == "thief" then
-               table.insert(thiefPlayers, player)
-           else
-               unknownCount = unknownCount + 1
-           end
-       end
-
-       local function renderTeamRows(scrolling, players, accent)
-           local keep = {}
-           for index, player in ipairs(players) do
-               keep[player.Name] = true
-               local row = scrolling:FindFirstChild(player.Name)
-               if not row then
-                   row = Instance.new("Frame")
-                   row.Name = player.Name
-                   row.Size = UDim2.new(1, 0, 0, 34)
-                   row.BackgroundColor3 = GREEN.dark
-                   row.BackgroundTransparency = 0.08
-                   row.LayoutOrder = index
-                   row.Parent = scrolling
-                   Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
-                   local rowStroke = Instance.new("UIStroke", row)
-                   rowStroke.Color = accent
-                   rowStroke.Thickness = 1.1
-
-                   local nameLabel = Instance.new("TextLabel")
-                   nameLabel.Name = "PlayerName"
-                   nameLabel.Size = UDim2.new(1, -14, 1, 0)
-                   nameLabel.Position = UDim2.new(0, 7, 0, 0)
-                   nameLabel.BackgroundTransparency = 1
-                   nameLabel.TextColor3 = WHITE_TEXT
-                   nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-                   nameLabel.Font = Enum.Font.GothamBold
-                   nameLabel.TextSize = 13
-                   nameLabel.TextStrokeColor3 = TEXT_OUTLINE
-                   nameLabel.TextStrokeTransparency = 0.35
-                   nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-                   nameLabel.Parent = row
-               end
-
-               row.LayoutOrder = index
-               local nameLabel = row:FindFirstChild("PlayerName")
-               if nameLabel then
-                   nameLabel.Text = player.Name .. (player == LocalPlayer and " (YOU)" or "")
-               end
-           end
-
-           for _, child in ipairs(scrolling:GetChildren()) do
-               if child:IsA("Frame") and not keep[child.Name] then
-                   child:Destroy()
-               end
-           end
-       end
-
-       blueTeamTitle.Text = "🔵 ตำรวจ (" .. #policePlayers .. ")"
-       redEnemyTitle.Text = "🔴 โจร (" .. #thiefPlayers .. ")"
-       renderTeamRows(blueTeamRows, policePlayers, Color3.fromRGB(55, 155, 255))
-       renderTeamRows(redEnemyRows, thiefPlayers, Color3.fromRGB(255, 72, 72))
-
-       -- Keep unassigned/unsupported team states unclassified instead of guessing a side.
-       mm2ListFrame:SetAttribute("UnassignedTeamCount", unknownCount)
-   end
-
    trackConnection(mm2ESPButton.Activated:Connect(function()
        mm2ESPEnabled = not mm2ESPEnabled
        states.MM2RoleESP = mm2ESPEnabled
@@ -4123,25 +3955,6 @@ do
        end
    end))
 
-   trackConnection(mm2ListButton.Activated:Connect(function()
-       mm2ListFrame.Visible = not mm2ListFrame.Visible
-       if mm2ListFrame.Visible then
-           mm2ListButton.BackgroundColor3 = GREEN.on
-           mm2ListButton:SetAttribute("TayJayEnabled", true)
-           updateMM2PlayerList()
-       else
-           mm2ListButton.BackgroundColor3 = GREEN.off
-           mm2ListButton:SetAttribute("TayJayEnabled", false)
-       end
-   end))
-
-   trackConnection(Players.PlayerAdded:Connect(function()
-       task.defer(updateMM2PlayerList)
-   end))
-   trackConnection(Players.PlayerRemoving:Connect(function()
-       task.defer(updateMM2PlayerList)
-   end))
-
    task.spawn(function()
        while screenGui.Parent do
            task.wait(0.5)
@@ -4152,14 +3965,266 @@ do
        clearMM2RoleESP()
    end)
 
-   task.spawn(function()
-       while screenGui.Parent do
-           task.wait(1)
-           updateMM2PlayerList()
-       end
-   end)
 end
 
+-- =========================================================
+-- DEFUSAL TEAM COLOR ESP + PLAYER WARP TRACK (MM2-INDEPENDENT)
+-- Place ID: 79393329652220
+-- =========================================================
+if IS_DEFUSAL_GAME then
+do
+    local BLUE, RED = Color3.fromRGB(55,165,255), Color3.fromRGB(255,70,70)
+    local UNKNOWN = Color3.fromRGB(255,215,85)
+    local PANEL, INNER = Color3.fromRGB(18,34,54), Color3.fromRGB(25,48,72)
+    local HIGHLIGHT_NAME, BILLBOARD_NAME = "TayJay_DefusalHighlight","TayJay_DefusalBillboard"
+    local espEnabled, listVisible, tracking = states.ESP == true, false, false
+    local selectedTarget, trackingConnection, lastTableRefresh = nil,nil,0
+
+    local function keepStyle(obj)
+        if obj then obj:SetAttribute("TayJayKeepCustomStyle",true) end
+        return obj
+    end
+    local function corner(parent,radius)
+        local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,radius or 7); c.Parent=parent; keepStyle(c); return c
+    end
+    local function stroke(parent,color,thickness)
+        local s=Instance.new("UIStroke"); s.Color=color; s.Thickness=thickness or 1.4; s.Parent=parent; keepStyle(s); return s
+    end
+    local function label(parent,name,size,pos,value,color,textSize,centered)
+        local t=Instance.new("TextLabel"); t.Name=name; t.Size=size; t.Position=pos
+        t.BackgroundTransparency=1; t.Text=value or ""; t.TextColor3=color or WHITE_TEXT
+        t.Font=Enum.Font.GothamBold; t.TextSize=textSize or 12
+        t.TextStrokeColor3=Color3.new(0,0,0); t.TextStrokeTransparency=0.2
+        t.TextXAlignment=centered and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
+        t.Parent=parent; keepStyle(t); return t
+    end
+
+    local vw=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X or 900
+    local listWidth=math.clamp(math.floor(vw*0.38),330,420)
+    local dock=Instance.new("Frame")
+    dock.Name,dock.Size="TayJayDefusalDock",UDim2.fromOffset(212,44)
+    dock.Position=UDim2.new(1,-224,0,112); dock.BackgroundColor3=PANEL; dock.BackgroundTransparency=0.04; dock.Active=true
+    keepStyle(dock); dock.Parent=screenGui; corner(dock,10); stroke(dock,Color3.fromRGB(90,185,235),1.7); makeDraggable(dock,false)
+
+    local function dockButton(name,caption,x,w,color)
+        local b=Instance.new("TextButton"); b.Name=name; b.Size=UDim2.fromOffset(w,30); b.Position=UDim2.fromOffset(x,7)
+        b.BackgroundColor3=color; b.BorderSizePixel=0; b.Text=caption; b.TextColor3=WHITE_TEXT
+        b.TextStrokeColor3=Color3.new(0,0,0); b.TextStrokeTransparency=0.22
+        b.Font=Enum.Font.GothamBlack; b.TextSize=11; b.Parent=dock; keepStyle(b); corner(b,7); stroke(b,Color3.fromRGB(195,225,245),1)
+        return b
+    end
+    local espButton=dockButton("DefusalESPButton","ESP ON",6,62,Color3.fromRGB(28,145,95))
+    local trackButton=dockButton("DefusalTrackButton","TRACK OFF",75,67,Color3.fromRGB(170,75,45))
+    local listButton=dockButton("DefusalTeamButton","TEAMS",149,57,Color3.fromRGB(40,105,175))
+
+    local listFrame=Instance.new("Frame")
+    listFrame.Name,listFrame.Size="TayJayDefusalPlayers",UDim2.fromOffset(listWidth,238)
+    listFrame.Position=UDim2.new(1,-listWidth-12,0,164); listFrame.BackgroundColor3=PANEL; listFrame.BackgroundTransparency=0.035
+    listFrame.Active=true; listFrame.Visible=false; keepStyle(listFrame); listFrame.Parent=screenGui
+    corner(listFrame,10); stroke(listFrame,Color3.fromRGB(90,185,235),1.7); makeDraggable(listFrame,false)
+    label(listFrame,"DefusalHeader",UDim2.new(1,-74,0,25),UDim2.fromOffset(9,4),"DEFUSAL • TEAM COLOR",WHITE_TEXT,13,false)
+
+    local closeButton=Instance.new("TextButton")
+    closeButton.Name,closeButton.Size="CloseDefusalList",UDim2.fromOffset(25,23)
+    closeButton.Position=UDim2.new(1,-31,0,5); closeButton.BackgroundColor3=Color3.fromRGB(190,55,55)
+    closeButton.Text="×"; closeButton.TextColor3=WHITE_TEXT; closeButton.Font=Enum.Font.GothamBlack; closeButton.TextSize=17
+    closeButton.Parent=listFrame; keepStyle(closeButton); corner(closeButton,6); stroke(closeButton,Color3.fromRGB(255,205,205),1)
+
+    local function teamPanel(name,titleText,x,width,color)
+        local p=Instance.new("Frame"); p.Name=name; p.Size=UDim2.new(0,width,0,174); p.Position=UDim2.fromOffset(x,34)
+        p.BackgroundColor3=INNER; p.BackgroundTransparency=0.02; p.Parent=listFrame; keepStyle(p); corner(p,8); stroke(p,color,1.6)
+        local title=label(p,"TeamTitle",UDim2.new(1,-10,0,24),UDim2.fromOffset(5,3),titleText.." (0)",color,12,true)
+        local sc=Instance.new("ScrollingFrame"); sc.Name="TeamPlayers"; sc.Size=UDim2.new(1,-10,1,-32); sc.Position=UDim2.fromOffset(5,29)
+        sc.BackgroundTransparency=1; sc.BorderSizePixel=0; sc.ScrollBarThickness=4; sc.ScrollBarImageColor3=color
+        sc.AutomaticCanvasSize=Enum.AutomaticSize.Y; sc.CanvasSize=UDim2.new(0,0,0,0); sc.Parent=p; keepStyle(sc)
+        local layout=Instance.new("UIListLayout"); layout.SortOrder=Enum.SortOrder.LayoutOrder; layout.Padding=UDim.new(0,3); layout.Parent=sc; keepStyle(layout)
+        return title,sc
+    end
+    local colW=math.floor((listWidth-18-8)/2)
+    local blueTitle,blueRows=teamPanel("DefusalBlueTeam","BLUE TEAM",6,colW,BLUE)
+    local redTitle,redRows=teamPanel("DefusalRedTeam","RED TEAM",14+colW,colW,RED)
+    local unknownLabel=label(listFrame,"UnknownTeamCount",UDim2.new(1,-16,0,18),UDim2.fromOffset(8,211),"UNKNOWN: 0",UNKNOWN,10,true)
+
+    -- Sample visible torso / vest / armor BasePart colors. Do not read Team fields or MM2 tools.
+    -- Textured clothing that exposes no colored BasePart is conservatively classified UNKNOWN.
+    local function classifyColor(player)
+        local char=player and player.Character
+        if not char then return "unknown",UNKNOWN end
+        local bs,rs,samples=0,0,0
+        local function sample(c,w)
+            if typeof(c)~="Color3" then return end
+            local h,s,v=Color3.toHSV(c); if s<0.30 or v<0.18 then return end
+            local score=s*v*(w or 1)
+            if h<=0.055 or h>=0.945 then rs,samples=rs+score,samples+1
+            elseif h>=0.53 and h<=0.73 then bs,samples=bs+score,samples+1 end
+        end
+        for _,part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                local n=string.lower(part.Name); local w=0
+                if string.find(n,"vest",1,true) or string.find(n,"armor",1,true) or string.find(n,"chest",1,true) then w=1.7
+                elseif string.find(n,"uppertorso",1,true) or string.find(n,"torso",1,true) then w=1.35
+                elseif string.find(n,"body",1,true) then w=0.6 end
+                if w>0 then sample(part.Color,w) end
+            end
+        end
+        local bc=char:FindFirstChildOfClass("BodyColors")
+        if bc then pcall(function() sample(bc.TorsoColor3,0.55) end) end
+        if samples==0 then return "unknown",UNKNOWN end
+        if bs>=0.38 and bs>rs*1.22 then return "blue",BLUE end
+        if rs>=0.38 and rs>bs*1.22 then return "red",RED end
+        return "unknown",UNKNOWN
+    end
+
+    local function characterParts(char)
+        if not char or not char:IsA("Model") then return nil,nil,nil end
+        local hum=char:FindFirstChildOfClass("Humanoid")
+        local head=char:FindFirstChild("Head"); local root=char:FindFirstChild("HumanoidRootPart")
+        return hum,head or root,root
+    end
+    local function clearVisual(char)
+        if not char then return end
+        local h=char:FindFirstChild(HIGHLIGHT_NAME); if h then h:Destroy() end
+        local anchor=char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+        local g=anchor and anchor:FindFirstChild(BILLBOARD_NAME); if g then g:Destroy() end
+    end
+    local function applyVisual(player)
+        local char=player and player.Character; local hum,anchor=characterParts(char)
+        if not char or not hum or not anchor or player==LocalPlayer then return end
+        -- Remove legacy generic ESP objects so only the color-coded Defusal display remains.
+        local legacyH=char:FindFirstChild("TayJay_PlayerHighlight"); if legacyH then legacyH:Destroy() end
+        local legacyG=anchor:FindFirstChild("TayJay_PlayerESP"); if legacyG then legacyG:Destroy() end
+
+        local side,color=classifyColor(player)
+        local h=char:FindFirstChild(HIGHLIGHT_NAME)
+        if not h then h=Instance.new("Highlight"); h.Name=HIGHLIGHT_NAME; h.Adornee=char; h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop; h.Parent=char end
+        h.Enabled=true; h.FillColor=color; h.OutlineColor=color
+        h.FillTransparency=side=="unknown" and 0.84 or 0.70; h.OutlineTransparency=0.05
+
+        local g=anchor:FindFirstChild(BILLBOARD_NAME)
+        if not g then
+            g=Instance.new("BillboardGui"); g.Name=BILLBOARD_NAME; g.Adornee=anchor
+            g.AlwaysOnTop=true; g.LightInfluence=0; g.MaxDistance=500
+            g.Size=UDim2.fromOffset(205,42); g.StudsOffset=Vector3.new(0,2.8,0); g.Parent=anchor
+            local nm=Instance.new("TextLabel"); nm.Name="DefusalPlayerName"; nm.Size=UDim2.new(1,0,0,22)
+            nm.BackgroundTransparency=1; nm.Font=Enum.Font.GothamBlack; nm.TextSize=13
+            nm.TextStrokeColor3=Color3.new(0,0,0); nm.TextStrokeTransparency=0.12
+            nm.TextXAlignment=Enum.TextXAlignment.Center; nm.Parent=g
+            local hp=Instance.new("TextLabel"); hp.Name="DefusalPlayerHealth"; hp.Size=UDim2.new(1,0,0,18)
+            hp.Position=UDim2.fromOffset(0,22); hp.BackgroundTransparency=1; hp.Font=Enum.Font.GothamBold; hp.TextSize=11
+            hp.TextColor3=WHITE_TEXT; hp.TextStrokeColor3=Color3.new(0,0,0); hp.TextStrokeTransparency=0.18
+            hp.TextXAlignment=Enum.TextXAlignment.Center; hp.Parent=g
+        end
+        local nm=g:FindFirstChild("DefusalPlayerName")
+        if nm then
+            local sideName=side=="blue" and "BLUE" or (side=="red" and "RED" or "UNKNOWN")
+            nm.Text=player.DisplayName.." ["..sideName.."]"; nm.TextColor3=color
+        end
+        local hp=g:FindFirstChild("DefusalPlayerHealth")
+        if hp then hp.Text=tostring(math.max(0,math.floor(hum.Health+0.5))).." / "..tostring(math.max(1,math.floor(hum.MaxHealth+0.5))).." HP" end
+    end
+
+    local function setEsp(enabled)
+        espEnabled=enabled==true; states.ESP=espEnabled
+        espButton.Text=espEnabled and "ESP ON" or "ESP OFF"
+        espButton.BackgroundColor3=espEnabled and Color3.fromRGB(28,145,95) or Color3.fromRGB(135,55,55)
+        espButton:SetAttribute("TayJayEnabled",espEnabled)
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p~=LocalPlayer and p.Character then if espEnabled then applyVisual(p) else clearVisual(p.Character) end end
+        end
+    end
+    defusalSetEsp=setEsp
+
+    local function updateRows(scroll,players,color)
+        local keep={}
+        for index,p in ipairs(players) do
+            local rowName="Player_"..tostring(p.UserId); keep[rowName]=true
+            local row=scroll:FindFirstChild(rowName)
+            if not row then
+                row=Instance.new("TextButton"); row.Name=rowName; row.Size=UDim2.new(1,-2,0,28)
+                row.BackgroundColor3=color:Lerp(INNER,0.78); row.BackgroundTransparency=0.03; row.Text=""
+                row.Parent=scroll; keepStyle(row); corner(row,6); stroke(row,color,1.2)
+                local nm=label(row,"PlayerName",UDim2.new(1,-10,1,0),UDim2.fromOffset(5,0),"",color,11,false)
+                nm.TextTruncate=Enum.TextTruncate.AtEnd
+                local rowPlayer=p; row.Activated:Connect(function() selectedTarget=rowPlayer end)
+            end
+            row.LayoutOrder=index
+            local nm=row:FindFirstChild("PlayerName")
+            if nm then nm.Text=p.DisplayName.."  (@"..p.Name..")"; nm.TextColor3=color end
+        end
+        for _,child in ipairs(scroll:GetChildren()) do
+            if child:IsA("TextButton") and not keep[child.Name] then child:Destroy() end
+        end
+    end
+    local function updateTable()
+        if not listFrame.Visible then return end
+        local blues,reds,unknowns={},{},{}
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p~=LocalPlayer then
+                local side=classifyColor(p)
+                if side=="blue" then table.insert(blues,p)
+                elseif side=="red" then table.insert(reds,p)
+                else table.insert(unknowns,p) end
+            end
+        end
+        local function byName(a,b) return a.Name:lower()<b.Name:lower() end
+        table.sort(blues,byName); table.sort(reds,byName); table.sort(unknowns,byName)
+        blueTitle.Text="BLUE TEAM ("..#blues..")"; redTitle.Text="RED TEAM ("..#reds..")"
+        updateRows(blueRows,blues,BLUE); updateRows(redRows,reds,RED)
+        local names={}; for i=1,math.min(#unknowns,3) do table.insert(names,unknowns[i].DisplayName) end
+        local suffix=#unknowns>3 and " +"..tostring(#unknowns-3) or ""
+        unknownLabel.Text="UNKNOWN: "..#unknowns..(#names>0 and "  •  "..table.concat(names,", ")..suffix or "")
+    end
+
+    local function stopTracking()
+        tracking=false
+        if trackingConnection then pcall(function() trackingConnection:Disconnect() end); trackingConnection=nil end
+        trackButton.Text="TRACK OFF"; trackButton.BackgroundColor3=Color3.fromRGB(170,75,45)
+    end
+    local function toggleTracking()
+        if tracking then stopTracking(); return end
+        if not selectedTarget or selectedTarget==LocalPlayer then return end
+        if states.KillAura or states.AutoWarp or states.DNWarp or states.MonsterWarp then return end
+        tracking=true; trackButton.Text="TRACK ON"; trackButton.BackgroundColor3=Color3.fromRGB(28,145,95)
+        trackingConnection=trackConnection(RunService.RenderStepped:Connect(function()
+            if not tracking then return end
+            local target=selectedTarget
+            local th,_,tr=characterParts(target and target.Character)
+            local mh,_,mr=characterParts(LocalPlayer.Character)
+            if not target or target.Parent~=Players or not th or th.Health<=0 or not tr or not mh or mh.Health<=0 or not mr then
+                stopTracking(); return
+            end
+            -- Follow only: no attack, tool switching, or MM2 routine.
+            _G.TAYJAY_POS_LOCK_UNTIL=os.clock()+0.14
+            mr.CFrame=tr.CFrame*CFrame.new(0,0,3.25)
+        end))
+    end
+    trackConnection(espButton.Activated:Connect(function() syncButtonState("ESP",not states.ESP) end))
+    trackConnection(trackButton.Activated:Connect(toggleTracking))
+    trackConnection(listButton.Activated:Connect(function()
+        listVisible=not listVisible; listFrame.Visible=listVisible
+        listButton.BackgroundColor3=listVisible and Color3.fromRGB(40,145,205) or Color3.fromRGB(40,105,175)
+        if listVisible then updateTable() end
+    end))
+    trackConnection(closeButton.Activated:Connect(function()
+        listVisible=false; listFrame.Visible=false; listButton.BackgroundColor3=Color3.fromRGB(40,105,175)
+    end))
+    task.spawn(function()
+        while screenGui.Parent and IS_DEFUSAL_GAME do
+            task.wait(0.4)
+            if espEnabled then
+                for _,p in ipairs(Players:GetPlayers()) do if p~=LocalPlayer and p.Character then applyVisual(p) end end
+            end
+            if listFrame.Visible and os.clock()-lastTableRefresh>=0.8 then lastTableRefresh=os.clock(); updateTable() end
+        end
+        stopTracking()
+        for _,p in ipairs(Players:GetPlayers()) do if p.Character then clearVisual(p.Character) end end
+    end)
+    setEsp(states.ESP)
+    print("[TAYJAY DEFUSAL] Independent team-color ESP initialized")
+end
+end
+
+-- =========================================================
 -- Capture original camera values before applying this script's camera defaults.
 local originalCameraSettings = {
     CameraMode=LocalPlayer.CameraMode,
@@ -4188,6 +4253,11 @@ end
 
 local function styleDynamicObject(obj)
    if not obj or isProtectedMainBrandPart(obj) then return end
+   local ancestor=obj
+   while ancestor and ancestor~=screenGui do
+       if ancestor:GetAttribute("TayJayKeepCustomStyle")==true then return end
+       ancestor=ancestor.Parent
+   end
 
    if obj:IsA("TextButton") then
        obj.Font = Enum.Font.GothamBold
