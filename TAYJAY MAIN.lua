@@ -3235,7 +3235,7 @@ end
 
 
 -- =========================================================
--- AUTO KILL: independent copied attack button
+-- RAP2: independent copied attack button
 -- =========================================================
 do
 local okAK, errAK = pcall(function()
@@ -3262,18 +3262,18 @@ local okAK, errAK = pcall(function()
            or (string.find(msg, "lacking capability", 1, true) and string.find(msg, "plugin", 1, true)) then
            autoKillSignalBad = true
            autoKillLastMethod = "SIGNAL BLOCKED"
-           pcall(function() warn("[TAYJAY AUTO KILL] signal method disabled after capability error") end)
+           pcall(function() warn("[TAYJAY RAP2] signal method disabled after capability error") end)
        end
    end))
 
    local button = Instance.new("TextButton", screenGui)
-   button.Name = "TayJayAutoKillBtn"
+   button.Name = "TayJayRap2Btn"
    button.AnchorPoint = Vector2.new(0.5, 0.5)
    button.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
    button.Position = UDim2.fromScale(UI_LAYOUT.RapidBiteCenter.X.Scale + 0.075, UI_LAYOUT.RapidBiteCenter.Y.Scale)
    button.BackgroundColor3 = GREEN.off
    button.RichText = true
-   button.Text = '<font size="25">⚔</font>\n<font size="11">AUTO KILL</font>\n<font size="10">OFF</font>'
+   button.Text = '<font size="25">⚔</font>\n<font size="11">RAP2</font>\n<font size="10">OFF</font>'
    button.TextColor3 = WHITE_TEXT
    button.Font = Enum.Font.GothamBlack
    button.TextSize = 15
@@ -3364,7 +3364,7 @@ local okAK, errAK = pcall(function()
            autoKillLastFindAt = now
            autoKillBiteButton = findAutoKillBiteButton()
            if autoKillBiteButton then
-               pcall(function() print("[TAYJAY AUTO KILL] attack button found: " .. autoKillBiteButton:GetFullName()) end)
+               pcall(function() print("[TAYJAY RAP2] attack button found: " .. autoKillBiteButton:GetFullName()) end)
            end
        end
        if not autoKillBiteButton or not autoKillBiteButton.Parent then autoKillLastMethod = "NO BUTTON" return false end
@@ -3400,7 +3400,7 @@ local okAK, errAK = pcall(function()
            else line3, color = "AUTO • รอมึน", GREEN.warning end
        end
        button.BackgroundColor3 = color
-       button.Text = '<font size="25">⚔</font>\n<font size="11">AUTO KILL</font>\n<font size="9">' .. line3 .. '</font>'
+       button.Text = '<font size="25">⚔</font>\n<font size="11">RAP2</font>\n<font size="9">' .. line3 .. '</font>'
    end
 
    trackConnection(button.Activated:Connect(function()
@@ -3416,7 +3416,7 @@ local okAK, errAK = pcall(function()
        if autoKillMode == 2 and now >= autoKillStunCheckAt then
            autoKillStunCheckAt = now + 0.3
            local seen, text = autoKillScanStun()
-           if seen and not autoKillStunSeen then print("[TAYJAY AUTO KILL] stun text detected: " .. tostring(text)) end
+           if seen and not autoKillStunSeen then print("[TAYJAY RAP2] stun text detected: " .. tostring(text)) end
            autoKillStunSeen, autoKillStunText = seen, text or ""
        end
        if autoKillMode == 2 and not autoKillStunSeen then autoKillClickAccumulator = 0 end
@@ -3437,9 +3437,9 @@ local okAK, errAK = pcall(function()
    updateAutoKillVisual()
 end)
 if not okAK then
-   pcall(function() warn("[TAYJAY AUTO KILL] initialization failed: " .. tostring(errAK)) end)
+   pcall(function() warn("[TAYJAY RAP2] initialization failed: " .. tostring(errAK)) end)
    pcall(function()
-       if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "AUTO KILL: " .. tostring(errAK)) end
+       if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "RAP2: " .. tostring(errAK)) end
    end)
 end
 end
