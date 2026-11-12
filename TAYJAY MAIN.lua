@@ -3770,9 +3770,10 @@ do
    local mm2ESPButton = createMM2Button("🗡️", 7)
    local mm2ListButton = createMM2Button("📋", 72)
 
+   -- Two separate MM2 team tables: blue allies and red enemies.
    local mm2ListFrame = Instance.new("Frame")
    mm2ListFrame.Name = "TayJayMM2PlayerList"
-   mm2ListFrame.Size = UDim2.new(0, 224, 0, 300)
+   mm2ListFrame.Size = UDim2.new(0, 438, 0, 252)
    mm2ListFrame.AnchorPoint = Vector2.new(0, 1)
    mm2ListFrame.Position = UDim2.new(0, 244, 1, -12)
    mm2ListFrame.BackgroundColor3 = GREEN.deep
@@ -3787,33 +3788,56 @@ do
    mm2ListStroke.Parent = mm2ListFrame
    makeDraggable(mm2ListFrame, false)
 
-   local mm2ListTitle = Instance.new("TextLabel")
-   mm2ListTitle.Size = UDim2.new(1, -74, 0, 32)
-   mm2ListTitle.BackgroundTransparency = 1
-   mm2ListTitle.Text = "👥 ผู้เล่นทั้งหมด (MM2)"
-   mm2ListTitle.TextColor3 = WHITE_TEXT
-   mm2ListTitle.Font = Enum.Font.GothamBold
-   mm2ListTitle.TextSize = 14
-   mm2ListTitle.TextStrokeColor3 = TEXT_OUTLINE
-   mm2ListTitle.TextStrokeTransparency = 0.48
-   mm2ListTitle.TextXAlignment = Enum.TextXAlignment.Left
-   mm2ListTitle.Position = UDim2.new(0, 10, 0, 0)
-   mm2ListTitle.Parent = mm2ListFrame
+   local function createMM2TeamTable(name, title, xOffset, accent)
+       local panel = Instance.new("Frame")
+       panel.Name = name
+       panel.Size = UDim2.new(0, 210, 1, -16)
+       panel.Position = UDim2.new(0, xOffset, 0, 8)
+       panel.BackgroundColor3 = GREEN.panel
+       panel.BackgroundTransparency = 0.02
+       panel.Parent = mm2ListFrame
+       Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
+       local edge = Instance.new("UIStroke", panel)
+       edge.Color = accent
+       edge.Thickness = 1.8
 
-   local mm2ScrollingFrame = Instance.new("ScrollingFrame")
-   mm2ScrollingFrame.Size = UDim2.new(1, -16, 1, -42)
-   mm2ScrollingFrame.Position = UDim2.new(0, 8, 0, 36)
-   mm2ScrollingFrame.BackgroundTransparency = 1
-   mm2ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-   mm2ScrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-   mm2ScrollingFrame.ScrollBarThickness = 4
-   mm2ScrollingFrame.Parent = mm2ListFrame
+       local heading = Instance.new("TextLabel")
+       heading.Name = "TeamHeading"
+       heading.Size = UDim2.new(1, -12, 0, 28)
+       heading.Position = UDim2.new(0, 6, 0, 3)
+       heading.BackgroundTransparency = 1
+       heading.Text = title .. " (0)"
+       heading.TextColor3 = accent
+       heading.Font = Enum.Font.GothamBold
+       heading.TextSize = 14
+       heading.TextStrokeColor3 = TEXT_OUTLINE
+       heading.TextStrokeTransparency = 0.35
+       heading.TextXAlignment = Enum.TextXAlignment.Center
+       heading.Parent = panel
 
-   local mm2ListLayout = Instance.new("UIListLayout")
-   mm2ListLayout.Padding = UDim.new(0, 5)
-   mm2ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-   mm2ListLayout.Parent = mm2ScrollingFrame
+       local scrolling = Instance.new("ScrollingFrame")
+       scrolling.Name = "PlayerRows"
+       scrolling.Size = UDim2.new(1, -12, 1, -38)
+       scrolling.Position = UDim2.new(0, 6, 0, 34)
+       scrolling.BackgroundTransparency = 1
+       scrolling.BorderSizePixel = 0
+       scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
+       scrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
+       scrolling.ScrollBarThickness = 4
+       scrolling.ScrollBarImageColor3 = accent
+       scrolling.Parent = panel
 
+       local layout = Instance.new("UIListLayout")
+       layout.Padding = UDim.new(0, 4)
+       layout.SortOrder = Enum.SortOrder.LayoutOrder
+       layout.Parent = scrolling
+       return panel, heading, scrolling
+   end
+
+   local blueTeamPanel, blueTeamTitle, blueTeamRows = createMM2TeamTable(
+       "MM2BlueTeamTable", "🔵 ทีมเรา", 6, Color3.fromRGB(55, 155, 255))
+   local redEnemyPanel, redEnemyTitle, redEnemyRows = createMM2TeamTable(
+       "MM2RedEnemyTable", "🔴 ศัตรู", 222, Color3.fromRGB(255, 72, 72))
    local function getMM2PlayerRole(player)
        local character = player.Character
        local backpack = player:FindFirstChild("Backpack")
@@ -3980,84 +4004,129 @@ do
 
    local function updateMM2PlayerList()
        if not mm2ListFrame.Visible then return end
-       mm2ListTitle.Text = "👥 ผู้เล่นทั้งหมด (" .. math.max(0, #Players:GetPlayers() - 1) .. ")"
 
-       for _, child in ipairs(mm2ScrollingFrame:GetChildren()) do
-           if child:IsA("Frame") and not Players:FindFirstChild(child.Name) then
-               child:Destroy()
-           end
-       end
+       local localRole = getMM2PlayerRole(LocalPlayer)
+       local localIsMurderer = string.find(string.lower(localRole), "murderer", 1, true) ~= nil
+       local bluePlayers, redPlayers = {}, {}
 
        for _, player in ipairs(Players:GetPlayers()) do
            if player ~= LocalPlayer then
                local roleName, roleColor, roleIcon = getMM2PlayerRole(player)
-               local row = mm2ScrollingFrame:FindFirstChild(player.Name)
+               local isMurderer = string.find(string.lower(roleName), "murderer", 1, true) ~= nil
+               local isKnownMurderer = isMurderer
+               local isKnownNonMurderer =
+                   string.find(string.lower(roleName), "sheriff", 1, true) ~= nil
+                   or string.find(string.lower(roleName), "innocent", 1, true) ~= nil
 
+               -- MM2 murderer is one side; Sheriff/Innocent are allied.
+               -- If the local role is unknown, use the standard survivor-vs-murderer split.
+               local enemy
+               if localIsMurderer then
+                   enemy = isKnownNonMurderer
+               else
+                   enemy = isKnownMurderer
+               end
+
+               local entry = {
+                   player = player,
+                   role = roleName,
+                   color = roleColor,
+                   icon = roleIcon,
+                   unknown = not isKnownMurderer and not isKnownNonMurderer
+               }
+               if enemy then
+                   table.insert(redPlayers, entry)
+               else
+                   -- Unknown entries remain visible in blue but keep an explicit UNKNOWN label.
+                   table.insert(bluePlayers, entry)
+               end
+           end
+       end
+
+       local function renderTeamRows(scrolling, entries, isEnemy)
+           local keep = {}
+           for index, entry in ipairs(entries) do
+               local player = entry.player
+               keep[player.Name] = true
+               local row = scrolling:FindFirstChild(player.Name)
                if not row then
                    row = Instance.new("Frame")
                    row.Name = player.Name
-                   row.Size = UDim2.new(1, 0, 0, 48)
-                   row.BackgroundColor3 = GREEN.panel
-                   row.Parent = mm2ScrollingFrame
-                   Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
+                   row.Size = UDim2.new(1, 0, 0, 38)
+                   row.BackgroundColor3 = GREEN.dark
+                   row.BackgroundTransparency = 0.08
+                   row.LayoutOrder = index
+                   row.Parent = scrolling
+                   Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
                    local rowStroke = Instance.new("UIStroke", row)
-                   rowStroke.Color = GREEN.stroke
-                   rowStroke.Thickness = 1.4
+                   rowStroke.Color = isEnemy and Color3.fromRGB(255, 95, 95) or Color3.fromRGB(75, 165, 255)
+                   rowStroke.Thickness = 1.1
 
                    local nameLabel = Instance.new("TextLabel")
                    nameLabel.Name = "PlayerName"
-                   nameLabel.Size = UDim2.new(0.46, -8, 1, 0)
-                   nameLabel.Position = UDim2.new(0, 10, 0, 0)
+                   nameLabel.Size = UDim2.new(0.58, -6, 1, 0)
+                   nameLabel.Position = UDim2.new(0, 7, 0, 0)
                    nameLabel.BackgroundTransparency = 1
-                   nameLabel.Text = player.Name
                    nameLabel.TextColor3 = WHITE_TEXT
                    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
                    nameLabel.Font = Enum.Font.GothamBold
-                   nameLabel.TextSize = 16
+                   nameLabel.TextSize = 13
                    nameLabel.TextStrokeColor3 = TEXT_OUTLINE
-                   nameLabel.TextStrokeTransparency = 0.48
+                   nameLabel.TextStrokeTransparency = 0.35
                    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
                    nameLabel.Parent = row
 
                    local roleLabel = Instance.new("TextLabel")
                    roleLabel.Name = "RoleLabel"
-                   roleLabel.Size = UDim2.new(0.31, 0, 1, 0)
-                   roleLabel.Position = UDim2.new(0.49, 0, 0, 0)
+                   roleLabel.Size = UDim2.new(0.34, -2, 1, 0)
+                   roleLabel.Position = UDim2.new(0.59, 0, 0, 0)
                    roleLabel.BackgroundTransparency = 1
-                   roleLabel.Text = roleName
-                   roleLabel.TextColor3 = roleColor
                    roleLabel.Font = Enum.Font.GothamBold
-                   roleLabel.TextSize = 13
+                   roleLabel.TextSize = 11
                    roleLabel.TextStrokeColor3 = TEXT_OUTLINE
-                   roleLabel.TextStrokeTransparency = 0.48
+                   roleLabel.TextStrokeTransparency = 0.3
                    roleLabel.TextXAlignment = Enum.TextXAlignment.Center
                    roleLabel.Parent = row
 
-                   local actionButton = Instance.new("TextButton")
-                   actionButton.Name = "ActionBtn"
-                   actionButton.Size = UDim2.new(0, 32, 0, 30)
-                   actionButton.Position = UDim2.new(1, -37, 0.5, -15)
-                   actionButton.BackgroundColor3 = GREEN.warning
-                   actionButton.TextColor3 = WHITE_TEXT
-                   actionButton.Text = roleIcon
-                   actionButton.TextSize = 16
-                   actionButton.Font = Enum.Font.GothamBold
-                   actionButton.Parent = row
-                   Instance.new("UICorner", actionButton).CornerRadius = UDim.new(0, 6)
-                   trackConnection(actionButton.Activated:Connect(function()
-                       teleportAndAttack(player)
-                   end))
-               else
-                   local roleLabel = row:FindFirstChild("RoleLabel")
-                   local actionButton = row:FindFirstChild("ActionBtn")
-                   if roleLabel then
-                       roleLabel.Text = roleName
-                       roleLabel.TextColor3 = WHITE_TEXT
+                   if isEnemy then
+                       local actionButton = Instance.new("TextButton")
+                       actionButton.Name = "ActionBtn"
+                       actionButton.Size = UDim2.new(0, 27, 0, 26)
+                       actionButton.Position = UDim2.new(1, -30, 0.5, -13)
+                       actionButton.BackgroundColor3 = GREEN.warning
+                       actionButton.TextColor3 = WHITE_TEXT
+                       actionButton.Text = "⚔"
+                       actionButton.TextSize = 14
+                       actionButton.Font = Enum.Font.GothamBold
+                       actionButton.Parent = row
+                       Instance.new("UICorner", actionButton).CornerRadius = UDim.new(0, 5)
+                       trackConnection(actionButton.Activated:Connect(function()
+                           teleportAndAttack(player)
+                       end))
                    end
-                   if actionButton then actionButton.Text = roleIcon end
+               end
+
+               row.LayoutOrder = index
+               local nameLabel = row:FindFirstChild("PlayerName")
+               local roleLabel = row:FindFirstChild("RoleLabel")
+               if nameLabel then nameLabel.Text = player.Name end
+               if roleLabel then
+                   roleLabel.Text = entry.unknown and "UNKNOWN" or entry.role
+                   roleLabel.TextColor3 = entry.unknown and Color3.fromRGB(255, 215, 90) or entry.color
+               end
+           end
+
+           for _, child in ipairs(scrolling:GetChildren()) do
+               if child:IsA("Frame") and not keep[child.Name] then
+                   child:Destroy()
                end
            end
        end
+
+       blueTeamTitle.Text = "🔵 ทีมเรา (" .. #bluePlayers .. ")"
+       redEnemyTitle.Text = "🔴 ศัตรู (" .. #redPlayers .. ")"
+       renderTeamRows(blueTeamRows, bluePlayers, false)
+       renderTeamRows(redEnemyRows, redPlayers, true)
    end
 
    trackConnection(mm2ESPButton.Activated:Connect(function()
