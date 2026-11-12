@@ -122,12 +122,16 @@ pcall(function()
     _tjLogConnection = logService.MessageOut:Connect(function(message, messageType)
         if messageType == Enum.MessageType.MessageError then
             local _tjMessageText = string.lower(tostring(message or ""))
-            -- Ignore this Roblox material/PBR asset warning in the TAYJAY error banner.
-            -- It is a game/client asset-loading warning, not a TAYJAY Lua runtime failure.
+            -- Ignore known Roblox/game asset-loading warnings in the TAYJAY error banner.
+            -- These are client-side asset failures, not TAYJAY Lua runtime failures.
             local _tjIsCloverMatteWarning =
                 string.find(_tjMessageText, "materialservice.clovermatte", 1, true) ~= nil
                 and string.find(_tjMessageText, "pbr textures may not be visible in game", 1, true) ~= nil
-            if not _tjIsCloverMatteWarning then
+            local _tjIsEmptySoundAssetWarning =
+                string.find(_tjMessageText, "failed to load sound", 1, true) ~= nil
+                and string.find(_tjMessageText, "rbxassetid://0", 1, true) ~= nil
+                and string.find(_tjMessageText, "exactly one asset identifier", 1, true) ~= nil
+            if not _tjIsCloverMatteWarning and not _tjIsEmptySoundAssetWarning then
                 pcall(function() _tjShowDiagnostic("ERROR", message) end)
             end
         end
