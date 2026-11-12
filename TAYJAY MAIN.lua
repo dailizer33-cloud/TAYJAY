@@ -3939,6 +3939,8 @@ do
    mm2ListScroll.ScrollBarThickness = 5
    mm2ListScroll.ScrollingDirection = Enum.ScrollingDirection.Y
    mm2ListScroll.ClipsDescendants = true
+   mm2ListScroll.Active = true
+   mm2ListScroll.ScrollingEnabled = true
    mm2ListScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
    mm2ListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
    local mm2ListLayout = Instance.new("UIListLayout", mm2ListScroll)
@@ -4046,15 +4048,52 @@ do
        row.HPText = hpText
        row.Role = roleTag
 
-       -- The button is created once per UserId; repeated list refreshes never replace it.
-       card.Activated:Connect(function()
+       -- Keep one stable row per UserId and place a full-size touch hitbox above
+       -- decorative labels/images so Android taps are received consistently.
+       local function activateMM2Row()
+           local now = os.clock()
+           if row.LastTapAt and (now - row.LastTapAt) < 0.35 then return end
+           row.LastTapAt = now
+
            local selectedPlayer = row.Player
-           if not selectedPlayer or selectedPlayer == LocalPlayer then return end
+           if not selectedPlayer or selectedPlayer == LocalPlayer or selectedPlayer.Parent ~= Players then return end
            local targetCharacter = selectedPlayer.Character
            local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
-           if not targetHumanoid or targetHumanoid.Health <= 0 then return end
-           if teleportAndAttack then teleportAndAttack(selectedPlayer) end
-       end)
+           if not targetHumanoid or targetHumanoid.Health <= 0 then
+               warn("[TAYJAY MM2] Selected player is not alive")
+               return
+           end
+           if not teleportAndAttack then
+               warn("[TAYJAY MM2] Row input received, but target action is not ready")
+               return
+           end
+
+           task.spawn(function()
+               local ok, err = pcall(teleportAndAttack, selectedPlayer)
+               if not ok then warn("[TAYJAY MM2] Row action error: " .. tostring(err)) end
+           end)
+       end
+
+       -- Parent button remains as a fallback for mouse/gamepad input.
+       card.Activated:Connect(activateMM2Row)
+
+       -- The transparent hitbox is the topmost object in the row and captures
+       -- the complete tap area, including avatar, name, role and health display.
+       local tapOverlay = Instance.new("TextButton")
+       tapOverlay.Name = "TapHitbox"
+       tapOverlay.Size = UDim2.fromScale(1, 1)
+       tapOverlay.Position = UDim2.fromOffset(0, 0)
+       tapOverlay.BackgroundTransparency = 1
+       tapOverlay.BorderSizePixel = 0
+       tapOverlay.Text = ""
+       tapOverlay.TextTransparency = 1
+       tapOverlay.AutoButtonColor = false
+       tapOverlay.Active = true
+       tapOverlay.Selectable = false
+       tapOverlay.ZIndex = 60
+       tapOverlay.Parent = card
+       tapOverlay.Activated:Connect(activateMM2Row)
+       row.TapOverlay = tapOverlay
 
        return row
    end
