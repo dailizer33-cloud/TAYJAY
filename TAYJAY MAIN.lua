@@ -3835,9 +3835,9 @@ do
    end
 
    local blueTeamPanel, blueTeamTitle, blueTeamRows = createMM2TeamTable(
-       "MM2BlueTeamTable", "🔵 ทีมเรา", 6, Color3.fromRGB(55, 155, 255))
+       "MM2BlueTeamTable", "🔵 ตำรวจ", 6, Color3.fromRGB(55, 155, 255))
    local redEnemyPanel, redEnemyTitle, redEnemyRows = createMM2TeamTable(
-       "MM2RedEnemyTable", "🔴 ศัตรู", 222, Color3.fromRGB(255, 72, 72))
+       "MM2RedEnemyTable", "🔴 โจร", 222, Color3.fromRGB(255, 72, 72))
    local function getMM2PlayerRole(player)
        local character = player.Character
        local backpack = player:FindFirstChild("Backpack")
@@ -4002,69 +4002,78 @@ do
        clearMM2RoleESP()
    end
 
+   local function getMM2TeamSide(player)
+       -- Use the game's assigned team, never infer the local player's side from role/tools.
+       local teamName = ""
+       pcall(function()
+           if player.Team then teamName = tostring(player.Team.Name) end
+       end)
+       local teamColorName = ""
+       pcall(function()
+           teamColorName = tostring(player.TeamColor.Name)
+       end)
+       local teamText = string.lower(teamName .. " " .. teamColorName)
+
+       -- Blue team: Police / Sheriff.
+       if string.find(teamText, "police", 1, true)
+           or string.find(teamText, "cop", 1, true)
+           or string.find(teamText, "sheriff", 1, true)
+           or string.find(teamText, "ตำรวจ", 1, true)
+           or string.find(teamText, "blue", 1, true)
+           or string.find(teamText, "bright blue", 1, true) then
+           return "police"
+       end
+
+       -- Red team: Thief / Robber / Criminal.
+       if string.find(teamText, "thief", 1, true)
+           or string.find(teamText, "robber", 1, true)
+           or string.find(teamText, "criminal", 1, true)
+           or string.find(teamText, "โจร", 1, true)
+           or string.find(teamText, "red", 1, true) then
+           return "thief"
+       end
+
+       return "unknown"
+   end
+
    local function updateMM2PlayerList()
        if not mm2ListFrame.Visible then return end
 
-       local localRole = getMM2PlayerRole(LocalPlayer)
-       local localIsMurderer = string.find(string.lower(localRole), "murderer", 1, true) ~= nil
-       local bluePlayers, redPlayers = {}, {}
+       local policePlayers, thiefPlayers = {}, {}
+       local unknownCount = 0
 
        for _, player in ipairs(Players:GetPlayers()) do
-           if player ~= LocalPlayer then
-               local roleName, roleColor, roleIcon = getMM2PlayerRole(player)
-               local isMurderer = string.find(string.lower(roleName), "murderer", 1, true) ~= nil
-               local isKnownMurderer = isMurderer
-               local isKnownNonMurderer =
-                   string.find(string.lower(roleName), "sheriff", 1, true) ~= nil
-                   or string.find(string.lower(roleName), "innocent", 1, true) ~= nil
-
-               -- MM2 murderer is one side; Sheriff/Innocent are allied.
-               -- If the local role is unknown, use the standard survivor-vs-murderer split.
-               local enemy
-               if localIsMurderer then
-                   enemy = isKnownNonMurderer
-               else
-                   enemy = isKnownMurderer
-               end
-
-               local entry = {
-                   player = player,
-                   role = roleName,
-                   color = roleColor,
-                   icon = roleIcon,
-                   unknown = not isKnownMurderer and not isKnownNonMurderer
-               }
-               if enemy then
-                   table.insert(redPlayers, entry)
-               else
-                   -- Unknown entries remain visible in blue but keep an explicit UNKNOWN label.
-                   table.insert(bluePlayers, entry)
-               end
+           local side = getMM2TeamSide(player)
+           if side == "police" then
+               table.insert(policePlayers, player)
+           elseif side == "thief" then
+               table.insert(thiefPlayers, player)
+           else
+               unknownCount = unknownCount + 1
            end
        end
 
-       local function renderTeamRows(scrolling, entries, isEnemy)
+       local function renderTeamRows(scrolling, players, accent)
            local keep = {}
-           for index, entry in ipairs(entries) do
-               local player = entry.player
+           for index, player in ipairs(players) do
                keep[player.Name] = true
                local row = scrolling:FindFirstChild(player.Name)
                if not row then
                    row = Instance.new("Frame")
                    row.Name = player.Name
-                   row.Size = UDim2.new(1, 0, 0, 38)
+                   row.Size = UDim2.new(1, 0, 0, 34)
                    row.BackgroundColor3 = GREEN.dark
                    row.BackgroundTransparency = 0.08
                    row.LayoutOrder = index
                    row.Parent = scrolling
                    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
                    local rowStroke = Instance.new("UIStroke", row)
-                   rowStroke.Color = isEnemy and Color3.fromRGB(255, 95, 95) or Color3.fromRGB(75, 165, 255)
+                   rowStroke.Color = accent
                    rowStroke.Thickness = 1.1
 
                    local nameLabel = Instance.new("TextLabel")
                    nameLabel.Name = "PlayerName"
-                   nameLabel.Size = UDim2.new(0.58, -6, 1, 0)
+                   nameLabel.Size = UDim2.new(1, -14, 1, 0)
                    nameLabel.Position = UDim2.new(0, 7, 0, 0)
                    nameLabel.BackgroundTransparency = 1
                    nameLabel.TextColor3 = WHITE_TEXT
@@ -4075,44 +4084,12 @@ do
                    nameLabel.TextStrokeTransparency = 0.35
                    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
                    nameLabel.Parent = row
-
-                   local roleLabel = Instance.new("TextLabel")
-                   roleLabel.Name = "RoleLabel"
-                   roleLabel.Size = UDim2.new(0.34, -2, 1, 0)
-                   roleLabel.Position = UDim2.new(0.59, 0, 0, 0)
-                   roleLabel.BackgroundTransparency = 1
-                   roleLabel.Font = Enum.Font.GothamBold
-                   roleLabel.TextSize = 11
-                   roleLabel.TextStrokeColor3 = TEXT_OUTLINE
-                   roleLabel.TextStrokeTransparency = 0.3
-                   roleLabel.TextXAlignment = Enum.TextXAlignment.Center
-                   roleLabel.Parent = row
-
-                   if isEnemy then
-                       local actionButton = Instance.new("TextButton")
-                       actionButton.Name = "ActionBtn"
-                       actionButton.Size = UDim2.new(0, 27, 0, 26)
-                       actionButton.Position = UDim2.new(1, -30, 0.5, -13)
-                       actionButton.BackgroundColor3 = GREEN.warning
-                       actionButton.TextColor3 = WHITE_TEXT
-                       actionButton.Text = "⚔"
-                       actionButton.TextSize = 14
-                       actionButton.Font = Enum.Font.GothamBold
-                       actionButton.Parent = row
-                       Instance.new("UICorner", actionButton).CornerRadius = UDim.new(0, 5)
-                       trackConnection(actionButton.Activated:Connect(function()
-                           teleportAndAttack(player)
-                       end))
-                   end
                end
 
                row.LayoutOrder = index
                local nameLabel = row:FindFirstChild("PlayerName")
-               local roleLabel = row:FindFirstChild("RoleLabel")
-               if nameLabel then nameLabel.Text = player.Name end
-               if roleLabel then
-                   roleLabel.Text = entry.unknown and "UNKNOWN" or entry.role
-                   roleLabel.TextColor3 = entry.unknown and Color3.fromRGB(255, 215, 90) or entry.color
+               if nameLabel then
+                   nameLabel.Text = player.Name .. (player == LocalPlayer and " (YOU)" or "")
                end
            end
 
@@ -4123,10 +4100,13 @@ do
            end
        end
 
-       blueTeamTitle.Text = "🔵 ทีมเรา (" .. #bluePlayers .. ")"
-       redEnemyTitle.Text = "🔴 ศัตรู (" .. #redPlayers .. ")"
-       renderTeamRows(blueTeamRows, bluePlayers, false)
-       renderTeamRows(redEnemyRows, redPlayers, true)
+       blueTeamTitle.Text = "🔵 ตำรวจ (" .. #policePlayers .. ")"
+       redEnemyTitle.Text = "🔴 โจร (" .. #thiefPlayers .. ")"
+       renderTeamRows(blueTeamRows, policePlayers, Color3.fromRGB(55, 155, 255))
+       renderTeamRows(redEnemyRows, thiefPlayers, Color3.fromRGB(255, 72, 72))
+
+       -- Keep unassigned/unsupported team states unclassified instead of guessing a side.
+       mm2ListFrame:SetAttribute("UnassignedTeamCount", unknownCount)
    end
 
    trackConnection(mm2ESPButton.Activated:Connect(function()
