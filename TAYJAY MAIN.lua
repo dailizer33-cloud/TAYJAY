@@ -3787,7 +3787,7 @@ do
 
    local mm2MainFrame = Instance.new("Frame")
    mm2MainFrame.Name = "TayJayMM2Dock"
-   mm2MainFrame.Size = UDim2.new(0, 53, 0, 48)
+   mm2MainFrame.Size = UDim2.new(0, 98, 0, 48)
    mm2MainFrame.Position = UI_LAYOUT.MM2Dock
    mm2MainFrame.BackgroundColor3 = GREEN.dark
    mm2MainFrame.BackgroundTransparency = 0.05
@@ -3812,7 +3812,14 @@ do
        return button
    end
 
-   local mm2ESPButton = createMM2Button("🗡️", 7)
+   local mm2ESPButton = createMM2Button("⚔️", 7)
+   mm2ESPButton.Name = "MM2RoleESPButton"
+   mm2ESPButton.BackgroundColor3 = Color3.fromRGB(35, 91, 145)
+
+   local mm2ListButton = createMM2Button("☷", 53)
+   mm2ListButton.Name = "MM2PlayerListButton"
+   mm2ListButton.BackgroundColor3 = Color3.fromRGB(39, 111, 145)
+   mm2ListButton.TextSize = 25
 
    local function getMM2PlayerRole(player)
        local character = player.Character
@@ -3844,6 +3851,210 @@ do
        end
        return "Unknown", Color3.fromRGB(255, 220, 110), "❔"
    end
+
+   -- MM2 PLAYER TABLE: reuses the Death Note card layout (avatar, display name, HP bar).
+   -- Separate MM2 view; does not alter Death Note selection or warp behavior.
+   local mm2ListFrame = Instance.new("Frame")
+   mm2ListFrame.Name = "TayJayMM2PlayerList"
+   mm2ListFrame.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH)
+   mm2ListFrame.Position = UDim2.fromScale(0.665, 0.455)
+   mm2ListFrame.BackgroundColor3 = GREEN.dark
+   mm2ListFrame.Visible = false
+   mm2ListFrame.Active = true
+   mm2ListFrame.Parent = screenGui
+   Instance.new("UICorner", mm2ListFrame).CornerRadius = UDim.new(0, 12)
+   local mm2ListStroke = Instance.new("UIStroke", mm2ListFrame)
+   mm2ListStroke.Color = Color3.fromRGB(72, 190, 245)
+   mm2ListStroke.Thickness = 2
+
+   local mm2ListTitle = Instance.new("TextLabel", mm2ListFrame)
+   mm2ListTitle.Size = UDim2.new(1, -64, 0, 32)
+   mm2ListTitle.Position = UDim2.fromOffset(10, 0)
+   mm2ListTitle.BackgroundTransparency = 1
+   mm2ListTitle.Text = "⚔ MM2 PLAYERS"
+   mm2ListTitle.TextColor3 = WHITE_TEXT
+   mm2ListTitle.Font = Enum.Font.GothamBold
+   mm2ListTitle.TextSize = 14
+   mm2ListTitle.TextXAlignment = Enum.TextXAlignment.Left
+   mm2ListTitle.TextStrokeColor3 = TEXT_OUTLINE
+   mm2ListTitle.TextStrokeTransparency = 0.48
+
+   local mm2ListLock = Instance.new("TextButton", mm2ListFrame)
+   mm2ListLock.Name = "WindowLockButton"
+   mm2ListLock.Size = UDim2.fromOffset(25, 25)
+   mm2ListLock.Position = UDim2.new(1, -57, 0, 5)
+   mm2ListLock.BackgroundColor3 = Color3.fromRGB(76, 158, 48)
+   mm2ListLock.Text = "🔓"
+   mm2ListLock.TextColor3 = WHITE_TEXT
+   mm2ListLock.Font = Enum.Font.GothamBold
+   mm2ListLock.TextSize = 15
+   Instance.new("UICorner", mm2ListLock).CornerRadius = UDim.new(0, 7)
+
+   local mm2ListLocked = false
+   local mm2Dragging, mm2DragInput, mm2DragStart, mm2StartPos = false, nil, nil, nil
+   local function setMM2ListDrag(panel)
+       panel.InputBegan:Connect(function(input)
+           if not mm2ListLocked and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+               mm2Dragging = true
+               mm2DragStart = input.Position
+               mm2StartPos = mm2ListFrame.Position
+               input.Changed:Connect(function()
+                   if input.UserInputState == Enum.UserInputState.End then mm2Dragging = false end
+               end)
+           end
+       end)
+       panel.InputChanged:Connect(function(input)
+           if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then mm2DragInput = input end
+       end)
+   end
+   setMM2ListDrag(mm2ListTitle)
+   trackConnection(UserInputService.InputChanged:Connect(function(input)
+       if input == mm2DragInput and mm2Dragging and not mm2ListLocked then
+           local delta = input.Position - mm2DragStart
+           mm2ListFrame.Position = UDim2.new(mm2StartPos.X.Scale, mm2StartPos.X.Offset + delta.X, mm2StartPos.Y.Scale, mm2StartPos.Y.Offset + delta.Y)
+       end
+   end))
+   mm2ListLock.Activated:Connect(function()
+       mm2ListLocked = not mm2ListLocked
+       mm2Dragging = false
+       mm2ListLock.Text = mm2ListLocked and "🔒" or "🔓"
+       mm2ListLock.BackgroundColor3 = mm2ListLocked and Color3.fromRGB(205, 48, 42) or Color3.fromRGB(76, 158, 48)
+   end)
+
+   local mm2ListClose = Instance.new("TextButton", mm2ListFrame)
+   mm2ListClose.Size = UDim2.fromOffset(22, 22)
+   mm2ListClose.Position = UDim2.new(1, -28, 0, 5)
+   mm2ListClose.BackgroundColor3 = Color3.fromRGB(215, 45, 40)
+   mm2ListClose.Text = "✕"
+   mm2ListClose.TextColor3 = WHITE_TEXT
+   mm2ListClose.Font = Enum.Font.GothamBold
+   mm2ListClose.TextSize = 13
+   Instance.new("UICorner", mm2ListClose).CornerRadius = UDim.new(1, 0)
+   mm2ListClose.Activated:Connect(function() mm2ListFrame.Visible = false end)
+
+   local mm2ListScroll = Instance.new("ScrollingFrame", mm2ListFrame)
+   mm2ListScroll.Size = UDim2.new(1, -16, 1, -42)
+   mm2ListScroll.Position = UDim2.fromOffset(8, 36)
+   mm2ListScroll.BackgroundTransparency = 1
+   mm2ListScroll.ScrollBarThickness = 5
+   mm2ListScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+   mm2ListScroll.ClipsDescendants = true
+   mm2ListScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+   mm2ListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+   local mm2ListLayout = Instance.new("UIListLayout", mm2ListScroll)
+   mm2ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+   mm2ListLayout.Padding = UDim.new(0, 5)
+   local mm2ListPadding = Instance.new("UIPadding", mm2ListScroll)
+   mm2ListPadding.PaddingTop = UDim.new(0, 2)
+   mm2ListPadding.PaddingBottom = UDim.new(0, 14)
+
+   local function refreshMM2PlayerList()
+       if not mm2ListScroll or not mm2ListScroll.Parent then return end
+       for _, child in ipairs(mm2ListScroll:GetChildren()) do
+           if child:IsA("TextButton") then child:Destroy() end
+       end
+       local allPlayers = Players:GetPlayers()
+       table.sort(allPlayers, function(a, b) return string.lower(a.DisplayName) < string.lower(b.DisplayName) end)
+       for _, playerObj in ipairs(allPlayers) do
+           local roleName, roleColor, roleIcon = getMM2PlayerRole(playerObj)
+           local card = Instance.new("TextButton", mm2ListScroll)
+           card.Name = "MM2_" .. playerObj.Name
+           card.Size = UDim2.new(1, 0, 0, 46)
+           card.BackgroundColor3 = Color3.fromRGB(30, 52, 78)
+           card.BorderSizePixel = 0
+           card.Text = ""
+           Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+           local cardStroke = Instance.new("UIStroke", card)
+           cardStroke.Color = roleColor
+           cardStroke.Thickness = 1.5
+
+           local avatar = Instance.new("ImageLabel", card)
+           avatar.Size = UDim2.fromOffset(32, 32)
+           avatar.Position = UDim2.fromOffset(7, 7)
+           avatar.BackgroundTransparency = 1
+           avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. playerObj.UserId .. "&w=150&h=150"
+           Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
+
+           local nameLabel = Instance.new("TextLabel", card)
+           nameLabel.Size = UDim2.new(1, -112, 0, 21)
+           nameLabel.Position = UDim2.fromOffset(45, 2)
+           nameLabel.BackgroundTransparency = 1
+           nameLabel.Text = playerObj.DisplayName
+           nameLabel.TextColor3 = WHITE_TEXT
+           nameLabel.TextSize = 13
+           nameLabel.TextStrokeColor3 = TEXT_OUTLINE
+           nameLabel.TextStrokeTransparency = 0.48
+           nameLabel.Font = Enum.Font.GothamBold
+           nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+           local hpBarBg = Instance.new("Frame", card)
+           hpBarBg.Size = UDim2.new(1, -115, 0, 8)
+           hpBarBg.Position = UDim2.fromOffset(45, 28)
+           hpBarBg.BackgroundColor3 = Color3.fromRGB(55, 82, 51)
+           hpBarBg.BorderSizePixel = 0
+           Instance.new("UICorner", hpBarBg).CornerRadius = UDim.new(1, 0)
+           local hpBarFill = Instance.new("Frame", hpBarBg)
+           hpBarFill.Size = UDim2.new(0, 0, 1, 0)
+           hpBarFill.BackgroundColor3 = Color3.fromRGB(104, 211, 57)
+           hpBarFill.BorderSizePixel = 0
+           Instance.new("UICorner", hpBarFill).CornerRadius = UDim.new(1, 0)
+
+           local hpText = Instance.new("TextLabel", card)
+           hpText.Size = UDim2.fromOffset(40, 14)
+           hpText.Position = UDim2.new(1, -49, 0, 26)
+           hpText.BackgroundTransparency = 1
+           hpText.Text = "100/100"
+           hpText.TextColor3 = WHITE_TEXT
+           hpText.TextSize = 10
+           hpText.Font = Enum.Font.GothamBold
+           hpText.TextXAlignment = Enum.TextXAlignment.Right
+
+           local roleTag = Instance.new("TextLabel", card)
+           roleTag.Size = UDim2.fromOffset(74, 18)
+           roleTag.Position = UDim2.new(1, -81, 0, 3)
+           roleTag.BackgroundColor3 = roleColor
+           roleTag.BackgroundTransparency = 0.08
+           roleTag.Text = roleIcon .. " " .. string.upper(string.gsub(roleName, "%*", ""))
+           roleTag.TextColor3 = Color3.fromRGB(255, 255, 255)
+           roleTag.TextSize = 9
+           roleTag.Font = Enum.Font.GothamBlack
+           roleTag.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+           roleTag.TextStrokeTransparency = 0.35
+           Instance.new("UICorner", roleTag).CornerRadius = UDim.new(0, 5)
+
+           local function updateCardHealth()
+               local character = playerObj.Character
+               local hum = character and character:FindFirstChildOfClass("Humanoid")
+               if hum and hum.MaxHealth > 0 then
+                   local hp = math.max(0, math.floor(hum.Health))
+                   local maxHp = math.max(1, math.floor(hum.MaxHealth))
+                   hpBarFill.Size = UDim2.new(math.clamp(hp / maxHp, 0, 1), 0, 1, 0)
+                   hpText.Text = hp .. "/" .. maxHp
+               else
+                   hpBarFill.Size = UDim2.new(0, 0, 1, 0)
+                   hpText.Text = "Dead"
+               end
+           end
+           updateCardHealth()
+       end
+       mm2ListTitle.Text = "⚔ MM2 PLAYERS (" .. #allPlayers .. ")"
+   end
+
+   local mm2ListRefreshQueued = false
+   local function queueMM2ListRefresh()
+       if mm2ListRefreshQueued then return end
+       mm2ListRefreshQueued = true
+       task.defer(function()
+           mm2ListRefreshQueued = false
+           if mm2ListFrame.Visible then pcall(refreshMM2PlayerList) end
+       end)
+   end
+   mm2ListButton.Activated:Connect(function()
+       mm2ListFrame.Visible = not mm2ListFrame.Visible
+       if mm2ListFrame.Visible then refreshMM2PlayerList() end
+   end)
+   trackConnection(Players.PlayerAdded:Connect(queueMM2ListRefresh))
+   trackConnection(Players.PlayerRemoving:Connect(queueMM2ListRefresh))
 
    local function teleportAndAttack(targetPlayer)
        if isBusy or targetPlayer == LocalPlayer then return end
@@ -3997,6 +4208,9 @@ do
            task.wait(0.5)
            if mm2ESPEnabled then
                updateMM2RoleESP()
+           end
+           if mm2ListFrame.Visible then
+               pcall(refreshMM2PlayerList)
            end
        end
        clearMM2RoleESP()
