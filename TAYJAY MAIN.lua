@@ -121,7 +121,15 @@ pcall(function()
     local logService = game:GetService("LogService")
     _tjLogConnection = logService.MessageOut:Connect(function(message, messageType)
         if messageType == Enum.MessageType.MessageError then
-            pcall(function() _tjShowDiagnostic("ERROR", message) end)
+            local _tjMessageText = string.lower(tostring(message or ""))
+            -- Ignore this Roblox material/PBR asset warning in the TAYJAY error banner.
+            -- It is a game/client asset-loading warning, not a TAYJAY Lua runtime failure.
+            local _tjIsCloverMatteWarning =
+                string.find(_tjMessageText, "materialservice.clovermatte", 1, true) ~= nil
+                and string.find(_tjMessageText, "pbr textures may not be visible in game", 1, true) ~= nil
+            if not _tjIsCloverMatteWarning then
+                pcall(function() _tjShowDiagnostic("ERROR", message) end)
+            end
         end
     end)
     task.delay(120, function()
