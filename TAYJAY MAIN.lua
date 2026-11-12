@@ -3951,11 +3951,117 @@ do
    -- MM2 row taps reuse the existing legacy teleport/attack routine.
    local teleportAndAttack
 
+   local mm2RowsByUserId = {}
+
+   local function createMM2PlayerRow(playerObj)
+       local row = {}
+       local card = Instance.new("TextButton")
+       card.Name = "MM2_" .. tostring(playerObj.UserId)
+       card.Size = UDim2.new(1, 0, 0, 46)
+       card.BackgroundColor3 = Color3.fromRGB(30, 52, 78)
+       card.BorderSizePixel = 0
+       card.Text = ""
+       card.Active = true
+       card.AutoButtonColor = true
+       card.ZIndex = 40
+       card.Parent = mm2ListScroll
+       Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+
+       local cardStroke = Instance.new("UIStroke", card)
+       cardStroke.Thickness = 1.5
+       cardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+       local avatar = Instance.new("ImageLabel", card)
+       avatar.Name = "Avatar"
+       avatar.Size = UDim2.fromOffset(32, 32)
+       avatar.Position = UDim2.fromOffset(7, 7)
+       avatar.BackgroundTransparency = 1
+       avatar.ZIndex = 41
+       avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. playerObj.UserId .. "&w=150&h=150"
+       Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
+
+       local nameLabel = Instance.new("TextLabel", card)
+       nameLabel.Name = "PlayerName"
+       nameLabel.Size = UDim2.new(1, -112, 0, 21)
+       nameLabel.Position = UDim2.fromOffset(45, 2)
+       nameLabel.BackgroundTransparency = 1
+       nameLabel.TextColor3 = WHITE_TEXT
+       nameLabel.TextSize = 13
+       nameLabel.TextStrokeColor3 = TEXT_OUTLINE
+       nameLabel.TextStrokeTransparency = 0.48
+       nameLabel.Font = Enum.Font.GothamBold
+       nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+       nameLabel.ZIndex = 42
+       nameLabel.Parent = card
+
+       local hpBarBg = Instance.new("Frame", card)
+       hpBarBg.Name = "HPBackground"
+       hpBarBg.Size = UDim2.new(1, -115, 0, 8)
+       hpBarBg.Position = UDim2.fromOffset(45, 28)
+       hpBarBg.BackgroundColor3 = Color3.fromRGB(55, 82, 51)
+       hpBarBg.BorderSizePixel = 0
+       hpBarBg.ZIndex = 41
+       Instance.new("UICorner", hpBarBg).CornerRadius = UDim.new(1, 0)
+
+       local hpBarFill = Instance.new("Frame", hpBarBg)
+       hpBarFill.Name = "HPFill"
+       hpBarFill.Size = UDim2.new(0, 0, 1, 0)
+       hpBarFill.BackgroundColor3 = Color3.fromRGB(104, 211, 57)
+       hpBarFill.BorderSizePixel = 0
+       hpBarFill.ZIndex = 42
+       Instance.new("UICorner", hpBarFill).CornerRadius = UDim.new(1, 0)
+
+       local hpText = Instance.new("TextLabel", card)
+       hpText.Name = "HPText"
+       hpText.Size = UDim2.fromOffset(40, 14)
+       hpText.Position = UDim2.new(1, -49, 0, 26)
+       hpText.BackgroundTransparency = 1
+       hpText.TextColor3 = WHITE_TEXT
+       hpText.TextSize = 10
+       hpText.Font = Enum.Font.GothamBold
+       hpText.TextXAlignment = Enum.TextXAlignment.Right
+       hpText.ZIndex = 42
+       hpText.Parent = card
+
+       local roleTag = Instance.new("TextLabel", card)
+       roleTag.Name = "RoleTag"
+       roleTag.Size = UDim2.fromOffset(74, 18)
+       roleTag.Position = UDim2.new(1, -81, 0, 3)
+       roleTag.BackgroundTransparency = 0.08
+       roleTag.TextColor3 = Color3.fromRGB(255, 255, 255)
+       roleTag.TextSize = 9
+       roleTag.Font = Enum.Font.GothamBlack
+       roleTag.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+       roleTag.TextStrokeTransparency = 0.35
+       roleTag.ZIndex = 42
+       roleTag.Parent = card
+       Instance.new("UICorner", roleTag).CornerRadius = UDim.new(0, 5)
+
+       row.Player = playerObj
+       row.Card = card
+       row.Stroke = cardStroke
+       row.Avatar = avatar
+       row.Name = nameLabel
+       row.HPFill = hpBarFill
+       row.HPText = hpText
+       row.Role = roleTag
+
+       -- The button is created once per UserId; repeated list refreshes never replace it.
+       card.Activated:Connect(function()
+           local selectedPlayer = row.Player
+           if not selectedPlayer or selectedPlayer == LocalPlayer then return end
+           local targetCharacter = selectedPlayer.Character
+           local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
+           if not targetHumanoid or targetHumanoid.Health <= 0 then return end
+           if teleportAndAttack then teleportAndAttack(selectedPlayer) end
+       end)
+
+       return row
+   end
+
    local function refreshMM2PlayerList()
        if not mm2ListScroll or not mm2ListScroll.Parent then return end
-       for _, child in ipairs(mm2ListScroll:GetChildren()) do
-           if child:IsA("TextButton") then child:Destroy() end
-       end
+
        local allPlayers = Players:GetPlayers()
        local rolePriority = { Murderer = 1, Sheriff = 2, Innocent = 3, Unknown = 4 }
        table.sort(allPlayers, function(a, b)
@@ -3966,96 +4072,50 @@ do
            if priorityA ~= priorityB then return priorityA < priorityB end
            return string.lower(a.DisplayName) < string.lower(b.DisplayName)
        end)
-       for _, playerObj in ipairs(allPlayers) do
-           local roleName, roleColor, roleIcon = getMM2PlayerRole(playerObj)
-           local card = Instance.new("TextButton", mm2ListScroll)
-           card.Name = "MM2_" .. playerObj.Name
-           card.Size = UDim2.new(1, 0, 0, 46)
-           card.BackgroundColor3 = Color3.fromRGB(30, 52, 78)
-           card.BorderSizePixel = 0
-           card.Text = ""
-           card.AutoButtonColor = true
-           card.Activated:Connect(function()
-               if playerObj == LocalPlayer then return end
-               local targetCharacter = playerObj.Character
-               local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
-               if not targetHumanoid or targetHumanoid.Health <= 0 then return end
-               if teleportAndAttack then teleportAndAttack(playerObj) end
-           end)
-           Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
-           local cardStroke = Instance.new("UIStroke", card)
-           cardStroke.Color = roleColor
-           cardStroke.Thickness = 1.5
 
-           local avatar = Instance.new("ImageLabel", card)
-           avatar.Size = UDim2.fromOffset(32, 32)
-           avatar.Position = UDim2.fromOffset(7, 7)
-           avatar.BackgroundTransparency = 1
-           avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. playerObj.UserId .. "&w=150&h=150"
-           Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
-
-           local nameLabel = Instance.new("TextLabel", card)
-           nameLabel.Size = UDim2.new(1, -112, 0, 21)
-           nameLabel.Position = UDim2.fromOffset(45, 2)
-           nameLabel.BackgroundTransparency = 1
-           nameLabel.Text = playerObj.DisplayName
-           nameLabel.TextColor3 = WHITE_TEXT
-           nameLabel.TextSize = 13
-           nameLabel.TextStrokeColor3 = TEXT_OUTLINE
-           nameLabel.TextStrokeTransparency = 0.48
-           nameLabel.Font = Enum.Font.GothamBold
-           nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-           local hpBarBg = Instance.new("Frame", card)
-           hpBarBg.Size = UDim2.new(1, -115, 0, 8)
-           hpBarBg.Position = UDim2.fromOffset(45, 28)
-           hpBarBg.BackgroundColor3 = Color3.fromRGB(55, 82, 51)
-           hpBarBg.BorderSizePixel = 0
-           Instance.new("UICorner", hpBarBg).CornerRadius = UDim.new(1, 0)
-           local hpBarFill = Instance.new("Frame", hpBarBg)
-           hpBarFill.Size = UDim2.new(0, 0, 1, 0)
-           hpBarFill.BackgroundColor3 = Color3.fromRGB(104, 211, 57)
-           hpBarFill.BorderSizePixel = 0
-           Instance.new("UICorner", hpBarFill).CornerRadius = UDim.new(1, 0)
-
-           local hpText = Instance.new("TextLabel", card)
-           hpText.Size = UDim2.fromOffset(40, 14)
-           hpText.Position = UDim2.new(1, -49, 0, 26)
-           hpText.BackgroundTransparency = 1
-           hpText.Text = "100/100"
-           hpText.TextColor3 = WHITE_TEXT
-           hpText.TextSize = 10
-           hpText.Font = Enum.Font.GothamBold
-           hpText.TextXAlignment = Enum.TextXAlignment.Right
-
-           local roleTag = Instance.new("TextLabel", card)
-           roleTag.Size = UDim2.fromOffset(74, 18)
-           roleTag.Position = UDim2.new(1, -81, 0, 3)
-           roleTag.BackgroundColor3 = roleColor
-           roleTag.BackgroundTransparency = 0.08
-           roleTag.Text = roleIcon .. " " .. string.upper(string.gsub(roleName, "%*", ""))
-           roleTag.TextColor3 = Color3.fromRGB(255, 255, 255)
-           roleTag.TextSize = 9
-           roleTag.Font = Enum.Font.GothamBlack
-           roleTag.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-           roleTag.TextStrokeTransparency = 0.35
-           Instance.new("UICorner", roleTag).CornerRadius = UDim.new(0, 5)
-
-           local function updateCardHealth()
-               local character = playerObj.Character
-               local hum = character and character:FindFirstChildOfClass("Humanoid")
-               if hum and hum.MaxHealth > 0 then
-                   local hp = math.max(0, math.floor(hum.Health))
-                   local maxHp = math.max(1, math.floor(hum.MaxHealth))
-                   hpBarFill.Size = UDim2.new(math.clamp(hp / maxHp, 0, 1), 0, 1, 0)
-                   hpText.Text = hp .. "/" .. maxHp
-               else
-                   hpBarFill.Size = UDim2.new(0, 0, 1, 0)
-                   hpText.Text = "Dead"
-               end
+       local present = {}
+       for index, playerObj in ipairs(allPlayers) do
+           local userId = playerObj.UserId
+           present[userId] = true
+           local row = mm2RowsByUserId[userId]
+           if not row or not row.Card or not row.Card.Parent then
+               row = createMM2PlayerRow(playerObj)
+               mm2RowsByUserId[userId] = row
            end
-           updateCardHealth()
+           row.Player = playerObj
+           row.Card.LayoutOrder = index
+           row.Card.Visible = true
+
+           local roleName, roleColor, roleIcon = getMM2PlayerRole(playerObj)
+           row.Stroke.Color = roleColor
+           row.Role.BackgroundColor3 = roleColor
+           row.Role.Text = roleIcon .. " " .. string.upper(string.gsub(roleName, "%*", ""))
+           row.Name.Text = playerObj.DisplayName
+
+           local expectedAvatar = "rbxthumb://type=AvatarHeadShot&id=" .. userId .. "&w=150&h=150"
+           if row.Avatar.Image ~= expectedAvatar then row.Avatar.Image = expectedAvatar end
+
+           local character = playerObj.Character
+           local hum = character and character:FindFirstChildOfClass("Humanoid")
+           if hum and hum.MaxHealth > 0 then
+               local hp = math.max(0, math.floor(hum.Health))
+               local maxHp = math.max(1, math.floor(hum.MaxHealth))
+               row.HPFill.Size = UDim2.new(math.clamp(hp / maxHp, 0, 1), 0, 1, 0)
+               row.HPText.Text = hp .. "/" .. maxHp
+           else
+               row.HPFill.Size = UDim2.new(0, 0, 1, 0)
+               row.HPText.Text = "Dead"
+           end
        end
+
+       -- Remove only cards belonging to players who have left.
+       for userId, row in pairs(mm2RowsByUserId) do
+           if not present[userId] then
+               if row.Card then row.Card:Destroy() end
+               mm2RowsByUserId[userId] = nil
+           end
+       end
+
        mm2ListTitle.Text = "⚔ MM2 PLAYERS (" .. #allPlayers .. ")"
    end
 
