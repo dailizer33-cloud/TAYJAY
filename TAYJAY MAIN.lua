@@ -3973,7 +3973,7 @@ end
 task.spawn(function()
 if IS_DEFUSAL_GAME then
 do
-    local BLUE, RED = Color3.fromRGB(55,165,255), Color3.fromRGB(255,70,70)
+    local BLUE, RED = Color3.fromRGB(25,175,255), Color3.fromRGB(255,35,55)
     local UNKNOWN = Color3.fromRGB(255,215,85)
     local PANEL, INNER = Color3.fromRGB(18,34,54), Color3.fromRGB(25,48,72)
     local HIGHLIGHT_NAME, BILLBOARD_NAME = "TayJay_DefusalHighlight","TayJay_DefusalBillboard"
@@ -4000,7 +4000,7 @@ do
     end
 
     local vw=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X or 900
-    local listWidth=math.clamp(math.floor(vw*0.38),330,420)
+    local listWidth=math.clamp(math.floor(vw*0.48),390,480)
     local dock=Instance.new("Frame")
     dock.Name,dock.Size="TayJayDefusalDock",UDim2.fromOffset(212,58)
     dock.Position=UDim2.new(1,-224,0,112); dock.BackgroundColor3=PANEL; dock.BackgroundTransparency=0.04; dock.Active=true
@@ -4020,7 +4020,7 @@ do
         "TARGET: none",WHITE_TEXT,9,true)
 
     local listFrame=Instance.new("Frame")
-    listFrame.Name,listFrame.Size="TayJayDefusalPlayers",UDim2.fromOffset(listWidth,238)
+    listFrame.Name,listFrame.Size="TayJayDefusalPlayers",UDim2.fromOffset(listWidth,250)
     listFrame.Position=UDim2.new(1,-listWidth-12,0,180); listFrame.BackgroundColor3=PANEL; listFrame.BackgroundTransparency=0.035
     listFrame.Active=true; listFrame.Visible=false; keepStyle(listFrame); listFrame.Parent=screenGui
     corner(listFrame,10); stroke(listFrame,Color3.fromRGB(90,185,235),1.7); makeDraggable(listFrame,false)
@@ -4033,7 +4033,7 @@ do
     closeButton.Parent=listFrame; keepStyle(closeButton); corner(closeButton,6); stroke(closeButton,Color3.fromRGB(255,205,205),1)
 
     local function teamPanel(name,titleText,x,width,color)
-        local p=Instance.new("Frame"); p.Name=name; p.Size=UDim2.new(0,width,0,174); p.Position=UDim2.fromOffset(x,34)
+        local p=Instance.new("Frame"); p.Name=name; p.Size=UDim2.new(0,width,0,190); p.Position=UDim2.fromOffset(x,34)
         p.BackgroundColor3=INNER; p.BackgroundTransparency=0.02; p.Parent=listFrame; keepStyle(p); corner(p,8); stroke(p,color,1.6)
         local title=label(p,"TeamTitle",UDim2.new(1,-10,0,24),UDim2.fromOffset(5,3),titleText.." (0)",color,12,true)
         local sc=Instance.new("ScrollingFrame"); sc.Name="TeamPlayers"; sc.Size=UDim2.new(1,-10,1,-32); sc.Position=UDim2.fromOffset(5,29)
@@ -4042,10 +4042,10 @@ do
         local layout=Instance.new("UIListLayout"); layout.SortOrder=Enum.SortOrder.LayoutOrder; layout.Padding=UDim.new(0,3); layout.Parent=sc; keepStyle(layout)
         return title,sc
     end
-    local colW=math.floor((listWidth-18-8)/2)
-    local blueTitle,blueRows=teamPanel("DefusalBlueTeam","BLUE TEAM",6,colW,BLUE)
-    local redTitle,redRows=teamPanel("DefusalRedTeam","RED TEAM",14+colW,colW,RED)
-    local unknownLabel=label(listFrame,"UnknownTeamCount",UDim2.new(1,-16,0,18),UDim2.fromOffset(8,211),"UNKNOWN: 0",UNKNOWN,10,true)
+    local colW=math.floor((listWidth-30-12)/3)
+    local blueTitle,blueRows=teamPanel("DefusalBlueTeam","BLUE",6,colW,BLUE)
+    local redTitle,redRows=teamPanel("DefusalRedTeam","RED",12+colW,colW,RED)
+    local unknownTitle,unknownRows=teamPanel("DefusalUnknownTeam","UNKNOWN",18+colW*2,colW,UNKNOWN)
 
     -- Sample visible torso / vest / armor BasePart colors. Do not read Team fields or MM2 tools.
     -- Textured clothing that exposes no colored BasePart is conservatively classified UNKNOWN.
@@ -4055,25 +4055,32 @@ do
         local bs,rs,samples=0,0,0
         local function sample(c,w)
             if typeof(c)~="Color3" then return end
-            local h,s,v=Color3.toHSV(c); if s<0.30 or v<0.18 then return end
+            local h,s,v=Color3.toHSV(c)
+            if s<0.22 or v<0.20 then return end
             local score=s*v*(w or 1)
-            if h<=0.055 or h>=0.945 then rs,samples=rs+score,samples+1
-            elseif h>=0.53 and h<=0.73 then bs,samples=bs+score,samples+1 end
+            if h<=0.045 or h>=0.955 then rs,samples=rs+score,samples+1
+            elseif h>=0.50 and h<=0.76 then bs,samples=bs+score,samples+1 end
         end
         for _,part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
-                local n=string.lower(part.Name); local w=0
-                if string.find(n,"vest",1,true) or string.find(n,"armor",1,true) or string.find(n,"chest",1,true) then w=1.7
-                elseif string.find(n,"uppertorso",1,true) or string.find(n,"torso",1,true) then w=1.35
-                elseif string.find(n,"body",1,true) then w=0.6 end
-                if w>0 then sample(part.Color,w) end
+                local n=string.lower(part.Name); local w=0.38
+                if string.find(n,"vest",1,true) or string.find(n,"armor",1,true)
+                    or string.find(n,"chest",1,true) or string.find(n,"jacket",1,true)
+                    or string.find(n,"uniform",1,true) then w=1.8
+                elseif string.find(n,"uppertorso",1,true) or string.find(n,"torso",1,true)
+                    or string.find(n,"lowertorso",1,true) then w=1.55
+                elseif string.find(n,"body",1,true) then w=0.75
+                elseif string.find(n,"head",1,true) or string.find(n,"arm",1,true)
+                    or string.find(n,"leg",1,true) or string.find(n,"hand",1,true)
+                    or string.find(n,"foot",1,true) then w=0.18 end
+                sample(part.Color,w)
             end
         end
         local bc=char:FindFirstChildOfClass("BodyColors")
         if bc then pcall(function() sample(bc.TorsoColor3,0.55) end) end
         if samples==0 then return "unknown",UNKNOWN end
-        if bs>=0.38 and bs>rs*1.22 then return "blue",BLUE end
-        if rs>=0.38 and rs>bs*1.22 then return "red",RED end
+        if bs>=0.24 and bs>rs*1.12 then return "blue",BLUE end
+        if rs>=0.24 and rs>bs*1.12 then return "red",RED end
         return "unknown",UNKNOWN
     end
 
@@ -4101,8 +4108,8 @@ do
         local side,color=classifyColor(player)
         local h=char:FindFirstChild(HIGHLIGHT_NAME)
         if not h then h=Instance.new("Highlight"); h.Name=HIGHLIGHT_NAME; h.Adornee=char; h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop; h.Parent=char end
-        h.Enabled=true; h.FillColor=color; h.OutlineColor=color
-        h.FillTransparency=side=="unknown" and 0.84 or 0.70; h.OutlineTransparency=0.05
+        h.Enabled=true; h.FillColor=color; h.OutlineColor=side=="blue" and Color3.fromRGB(120,220,255) or (side=="red" and Color3.fromRGB(255,145,155) or Color3.fromRGB(255,240,130))
+        h.FillTransparency=side=="unknown" and 0.58 or 0.32; h.OutlineTransparency=0
 
         local g=anchor:FindFirstChild(BILLBOARD_NAME)
         if not g then
@@ -4172,11 +4179,8 @@ do
         end
         local function byName(a,b) return a.Name:lower()<b.Name:lower() end
         table.sort(blues,byName); table.sort(reds,byName); table.sort(unknowns,byName)
-        blueTitle.Text="BLUE TEAM ("..#blues..")"; redTitle.Text="RED TEAM ("..#reds..")"
-        updateRows(blueRows,blues,BLUE); updateRows(redRows,reds,RED)
-        local names={}; for i=1,math.min(#unknowns,3) do table.insert(names,unknowns[i].DisplayName) end
-        local suffix=#unknowns>3 and " +"..tostring(#unknowns-3) or ""
-        unknownLabel.Text="UNKNOWN: "..#unknowns..(#names>0 and "  •  "..table.concat(names,", ")..suffix or "")
+        blueTitle.Text="BLUE ("..#blues..")"; redTitle.Text="RED ("..#reds..")"; unknownTitle.Text="UNKNOWN ("..#unknowns..")"
+        updateRows(blueRows,blues,BLUE); updateRows(redRows,reds,RED); updateRows(unknownRows,unknowns,UNKNOWN)
     end
 
     local function stopTracking()
