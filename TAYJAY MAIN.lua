@@ -28,8 +28,9 @@ local function _tjAttachBootGui()
 end
 
 local function _tjShowDiagnostic(state, message)
-    local isError = state == "ERROR"
-    local body = tostring(message or "")
+    -- No toast or full-width error banner: errors are stored behind a small top-right dot.
+    if state ~= "ERROR" then return end
+    local body = tostring(message or "Unknown error")
     pcall(function()
         if not _tjBootGui then
             _tjBootGui = Instance.new("ScreenGui")
@@ -38,43 +39,113 @@ local function _tjShowDiagnostic(state, message)
             _tjBootGui.IgnoreGuiInset = true
             _tjBootGui.DisplayOrder = 1000000
             _tjBootGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            _tjBootLabel = Instance.new("TextLabel")
-            _tjBootLabel.Name = "Status"
-            _tjBootLabel.Size = UDim2.new(1, -16, 0, 58)
-            _tjBootLabel.Position = UDim2.new(0, 8, 0, 8)
-            _tjBootLabel.BackgroundColor3 = Color3.fromRGB(28, 38, 54)
-            _tjBootLabel.BackgroundTransparency = 0.06
+
+            _tjBootLabel = Instance.new("TextButton")
+            _tjBootLabel.Name = "ErrorDot"
+            _tjBootLabel.Size = UDim2.fromOffset(34, 34)
+            _tjBootLabel.Position = UDim2.new(1, -44, 0, 10)
+            _tjBootLabel.BackgroundColor3 = Color3.fromRGB(190, 42, 48)
             _tjBootLabel.BorderSizePixel = 0
+            _tjBootLabel.Text = "!"
             _tjBootLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            _tjBootLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-            _tjBootLabel.TextStrokeTransparency = 0.25
+            _tjBootLabel.TextSize = 20
             _tjBootLabel.Font = Enum.Font.GothamBold
-            _tjBootLabel.TextSize = 13
-            _tjBootLabel.TextWrapped = true
-            _tjBootLabel.TextXAlignment = Enum.TextXAlignment.Left
-            _tjBootLabel.TextYAlignment = Enum.TextYAlignment.Center
-            _tjBootLabel.ZIndex = 10000
+            _tjBootLabel.AutoButtonColor = true
+            _tjBootLabel.ZIndex = 10002
             _tjBootLabel.Parent = _tjBootGui
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, 8)
-            corner.Parent = _tjBootLabel
-            local outline = Instance.new("UIStroke")
-            outline.Color = Color3.fromRGB(80, 210, 235)
-            outline.Thickness = 1.5
-            outline.Parent = _tjBootLabel
+            local dotCorner = Instance.new("UICorner")
+            dotCorner.CornerRadius = UDim.new(1, 0)
+            dotCorner.Parent = _tjBootLabel
+            local dotStroke = Instance.new("UIStroke")
+            dotStroke.Color = Color3.fromRGB(255, 115, 115)
+            dotStroke.Thickness = 2
+            dotStroke.Parent = _tjBootLabel
+
+            local panel = Instance.new("Frame")
+            panel.Name = "ErrorDetails"
+            panel.Size = UDim2.fromOffset(320, 220)
+            panel.Position = UDim2.new(1, -334, 0, 52)
+            panel.BackgroundColor3 = Color3.fromRGB(28, 31, 41)
+            panel.BorderSizePixel = 0
+            panel.Visible = false
+            panel.ZIndex = 10001
+            panel.Parent = _tjBootGui
+            local panelCorner = Instance.new("UICorner")
+            panelCorner.CornerRadius = UDim.new(0, 10)
+            panelCorner.Parent = panel
+            local panelStroke = Instance.new("UIStroke")
+            panelStroke.Color = Color3.fromRGB(230, 75, 80)
+            panelStroke.Thickness = 1.5
+            panelStroke.Parent = panel
+
+            local heading = Instance.new("TextLabel")
+            heading.Name = "Heading"
+            heading.Size = UDim2.new(1, -42, 0, 28)
+            heading.Position = UDim2.fromOffset(10, 5)
+            heading.BackgroundTransparency = 1
+            heading.Text = "TAYJAY ERROR DETAILS"
+            heading.TextColor3 = Color3.fromRGB(255, 125, 125)
+            heading.TextSize = 13
+            heading.Font = Enum.Font.GothamBold
+            heading.TextXAlignment = Enum.TextXAlignment.Left
+            heading.ZIndex = 10002
+            heading.Parent = panel
+
+            local close = Instance.new("TextButton")
+            close.Name = "Close"
+            close.Size = UDim2.fromOffset(26, 26)
+            close.Position = UDim2.new(1, -32, 0, 5)
+            close.BackgroundColor3 = Color3.fromRGB(75, 48, 54)
+            close.BorderSizePixel = 0
+            close.Text = "×"
+            close.TextColor3 = Color3.fromRGB(255, 255, 255)
+            close.TextSize = 18
+            close.Font = Enum.Font.GothamBold
+            close.ZIndex = 10003
+            close.Parent = panel
+            local closeCorner = Instance.new("UICorner")
+            closeCorner.CornerRadius = UDim.new(0, 7)
+            closeCorner.Parent = close
+            close.Activated:Connect(function() panel.Visible = false end)
+
+            local details = Instance.new("TextBox")
+            details.Name = "Message"
+            details.Size = UDim2.new(1, -20, 1, -44)
+            details.Position = UDim2.fromOffset(10, 36)
+            details.BackgroundColor3 = Color3.fromRGB(17, 19, 27)
+            details.BorderSizePixel = 0
+            details.TextColor3 = Color3.fromRGB(245, 245, 245)
+            details.TextSize = 12
+            details.Font = Enum.Font.Code
+            details.TextWrapped = true
+            details.TextXAlignment = Enum.TextXAlignment.Left
+            details.TextYAlignment = Enum.TextYAlignment.Top
+            details.ClearTextOnFocus = false
+            details.MultiLine = true
+            details.TextEditable = false
+            details.ZIndex = 10002
+            details.Parent = panel
+            local detailsCorner = Instance.new("UICorner")
+            detailsCorner.CornerRadius = UDim.new(0, 7)
+            detailsCorner.Parent = details
+
+            _tjBootLabel.Activated:Connect(function()
+                panel.Visible = not panel.Visible
+            end)
+            _tjBootGui:SetAttribute("ErrorPanelReady", true)
         end
+
         _tjAttachBootGui()
+        local panel = _tjBootGui and _tjBootGui:FindFirstChild("ErrorDetails")
+        local details = panel and panel:FindFirstChild("Message")
+        if details then details.Text = string.sub(body, 1, 6000) end
         if _tjBootLabel then
-            _tjBootLabel.BackgroundColor3 = isError and Color3.fromRGB(105, 32, 35) or Color3.fromRGB(28, 38, 54)
-            local outline = _tjBootLabel:FindFirstChildOfClass("UIStroke")
-            if outline then outline.Color = isError and Color3.fromRGB(255, 90, 90) or Color3.fromRGB(80, 210, 235) end
-            _tjBootLabel.Text = isError
-                and ("TAYJAY ERROR\n" .. string.sub(body, 1, 500))
-                or ("TAYJAY " .. tostring(state) .. "\n" .. string.sub(body, 1, 260))
+            _tjBootLabel.Visible = true
+            _tjBootLabel.BackgroundColor3 = Color3.fromRGB(190, 42, 48)
         end
     end)
 
-    -- Retry GUI parenting while PlayerGui becomes available; notification is a fallback.
+    -- Retry parenting silently; never issue StarterGui notifications.
     pcall(function()
         task.spawn(function()
             for _ = 1, 12 do
@@ -84,32 +155,6 @@ local function _tjShowDiagnostic(state, message)
             end
         end)
     end)
-    if state == "STARTING" or state == "ERROR" or state == "READY" then
-        pcall(function()
-            task.spawn(function()
-                local starter = game:GetService("StarterGui")
-                for _ = 1, 10 do
-                    local ok = pcall(function()
-                        starter:SetCore("SendNotification", {
-                            Title = isError and "TAYJAY SCRIPT ERROR" or "TAYJAY",
-                            Text = string.sub(body ~= "" and body or tostring(state), 1, 180),
-                            Duration = isError and 10 or 5
-                        })
-                    end)
-                    if ok then break end
-                    task.wait(0.5)
-                end
-            end)
-        end)
-    end
-    if state == "READY" then
-        pcall(function()
-            task.delay(12, function()
-                if _tjBootGui and _tjBootGui.Parent then _tjBootGui:Destroy() end
-                _tjBootGui, _tjBootLabel = nil, nil
-            end)
-        end)
-    end
 end
 
 _G.TAYJAY_DIAGNOSTIC = _tjShowDiagnostic
