@@ -3775,7 +3775,6 @@ if not IS_DEFUSAL_GAME then
    end
 
    local mm2ESPButton = createMM2Button("🗡️", 7)
-   local mm2ESPButton = createMM2Button("🗡️", 7)
 
    local function getMM2PlayerRole(player)
        local character = player.Character
