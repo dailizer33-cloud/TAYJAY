@@ -4001,7 +4001,7 @@ do
     local vw=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X or 900
     local listWidth=math.clamp(math.floor(vw*0.38),330,420)
     local dock=Instance.new("Frame")
-    dock.Name,dock.Size="TayJayDefusalDock",UDim2.fromOffset(212,44)
+    dock.Name,dock.Size="TayJayDefusalDock",UDim2.fromOffset(212,58)
     dock.Position=UDim2.new(1,-224,0,112); dock.BackgroundColor3=PANEL; dock.BackgroundTransparency=0.04; dock.Active=true
     keepStyle(dock); dock.Parent=screenGui; corner(dock,10); stroke(dock,Color3.fromRGB(90,185,235),1.7); makeDraggable(dock,false)
 
@@ -4015,10 +4015,12 @@ do
     local espButton=dockButton("DefusalESPButton","ESP ON",6,62,Color3.fromRGB(28,145,95))
     local trackButton=dockButton("DefusalTrackButton","TRACK OFF",75,67,Color3.fromRGB(170,75,45))
     local listButton=dockButton("DefusalTeamButton","TEAMS",149,57,Color3.fromRGB(40,105,175))
+    local selectedLabel=label(dock,"DefusalSelectedTarget",UDim2.new(1,-8,0,13),UDim2.fromOffset(4,42),
+        "TARGET: none",WHITE_TEXT,9,true)
 
     local listFrame=Instance.new("Frame")
     listFrame.Name,listFrame.Size="TayJayDefusalPlayers",UDim2.fromOffset(listWidth,238)
-    listFrame.Position=UDim2.new(1,-listWidth-12,0,164); listFrame.BackgroundColor3=PANEL; listFrame.BackgroundTransparency=0.035
+    listFrame.Position=UDim2.new(1,-listWidth-12,0,180); listFrame.BackgroundColor3=PANEL; listFrame.BackgroundTransparency=0.035
     listFrame.Active=true; listFrame.Visible=false; keepStyle(listFrame); listFrame.Parent=screenGui
     corner(listFrame,10); stroke(listFrame,Color3.fromRGB(90,185,235),1.7); makeDraggable(listFrame,false)
     label(listFrame,"DefusalHeader",UDim2.new(1,-74,0,25),UDim2.fromOffset(9,4),"DEFUSAL • TEAM COLOR",WHITE_TEXT,13,false)
@@ -4083,8 +4085,10 @@ do
     local function clearVisual(char)
         if not char then return end
         local h=char:FindFirstChild(HIGHLIGHT_NAME); if h then h:Destroy() end
+        local legacyH=char:FindFirstChild("TayJay_PlayerHighlight"); if legacyH then legacyH:Destroy() end
         local anchor=char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
         local g=anchor and anchor:FindFirstChild(BILLBOARD_NAME); if g then g:Destroy() end
+        local legacyG=anchor and anchor:FindFirstChild("TayJay_PlayerESP"); if legacyG then legacyG:Destroy() end
     end
     local function applyVisual(player)
         local char=player and player.Character; local hum,anchor=characterParts(char)
@@ -4144,7 +4148,7 @@ do
                 row.Parent=scroll; keepStyle(row); corner(row,6); stroke(row,color,1.2)
                 local nm=label(row,"PlayerName",UDim2.new(1,-10,1,0),UDim2.fromOffset(5,0),"",color,11,false)
                 nm.TextTruncate=Enum.TextTruncate.AtEnd
-                local rowPlayer=p; row.Activated:Connect(function() selectedTarget=rowPlayer end)
+                local rowPlayer=p; row.Activated:Connect(function() selectedTarget=rowPlayer; selectedLabel.Text="TARGET: "..rowPlayer.Name end)
             end
             row.LayoutOrder=index
             local nm=row:FindFirstChild("PlayerName")
@@ -4178,12 +4182,14 @@ do
         tracking=false
         if trackingConnection then pcall(function() trackingConnection:Disconnect() end); trackingConnection=nil end
         trackButton.Text="TRACK OFF"; trackButton.BackgroundColor3=Color3.fromRGB(170,75,45)
+        selectedLabel.Text=selectedTarget and ("TARGET: "..selectedTarget.Name) or "TARGET: none"
     end
     local function toggleTracking()
         if tracking then stopTracking(); return end
-        if not selectedTarget or selectedTarget==LocalPlayer then return end
-        if states.KillAura or states.AutoWarp or states.DNWarp or states.MonsterWarp then return end
+        if not selectedTarget or selectedTarget==LocalPlayer then selectedLabel.Text="Select from TEAMS list"; return end
+        if states.KillAura or states.AutoWarp or states.DNWarp or states.MonsterWarp then selectedLabel.Text="Stop other WARP first"; return end
         tracking=true; trackButton.Text="TRACK ON"; trackButton.BackgroundColor3=Color3.fromRGB(28,145,95)
+        selectedLabel.Text="TRACKING: "..selectedTarget.Name
         trackingConnection=trackConnection(RunService.RenderStepped:Connect(function()
             if not tracking then return end
             local target=selectedTarget
