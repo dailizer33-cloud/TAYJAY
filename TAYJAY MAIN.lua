@@ -63,8 +63,8 @@ local function _tjShowDiagnostic(state, message)
 
             local panel = Instance.new("Frame")
             panel.Name = "ErrorDetails"
-            panel.Size = UDim2.fromOffset(320, 220)
-            panel.Position = UDim2.new(1, -334, 0, 52)
+            panel.Size = UDim2.fromOffset(344, 237)
+            panel.Position = UDim2.new(1, -358, 0, 54)
             panel.BackgroundColor3 = Color3.fromRGB(28, 31, 41)
             panel.BorderSizePixel = 0
             panel.Visible = false
@@ -315,6 +315,7 @@ local PROTECTED_BRAND_NAMES = {
    KillAuraCircleBtn = true,
    KillAuraNormalBtn = true,
    TayJayRapidBiteBtn = true,
+   TayJayWalk2Btn = true,
 }
 local function isProtectedMainBrandPart(obj)
    if not obj then return false end
@@ -542,14 +543,15 @@ end
 --   X = ซ้าย→ขวา , Y = บน→ล่าง
 -- =========================================================
 local UI_LAYOUT = {
-   MainMenu     = UDim2.fromScale(0.0815, 0.1171), -- เมนูหลัก TAYJAY (มุมซ้ายบนของกรอบ)
+   MainMenu     = UDim2.fromScale(0.0762, 0.1667), -- เมนูหลัก TAYJAY ตามตำแหน่งในภาพ
    PlayerList   = UDim2.fromScale(0.3242, 0.4600), -- ตาราง "ผู้เล่นทั้งหมด"
-   TargetPanel  = UDim2.fromScale(0.3219, 0.8370), -- กรอบ Select target / TARGET (ย้ายลงให้พ้นตารางผู้เล่นที่สูงขึ้น)
-   FlyBottom    = UDim2.fromScale(0.6387, 0.9921), -- กรอบ FLY CONTROL (AnchorPoint 0,1 = มุมซ้ายล่าง)
-   WarpCenter   = UDim2.fromScale(0.1500, 0.6900), -- ปุ่มวงกลม WARP (จัดเรียงฟันปลา)
-   WalkCenter   = UDim2.fromScale(0.2300, 0.6500), -- ปุ่มวงกลม WALK (จัดเรียงฟันปลา)
-   RapidBiteCenter = UDim2.fromScale(0.3100, 0.6900),   -- ปุ่มตีรัว RAPID (จัดเรียงฟันปลา)
-   MonsterTargetPanel = UDim2.fromScale(0.5600, 0.8370), -- สถานะ Monster Warp แยกจาก Target ผู้เล่น
+   TargetPanel  = UDim2.fromScale(0.3219, 0.8370), -- กรอบ Select target / TARGET
+   FlyBottom    = UDim2.fromScale(0.6263, 1.0000), -- FLY CONTROL มุมขวาล่าง
+   WarpCenter   = UDim2.fromScale(0.1550, 0.6000), -- ปุ่มวงกลม WARP
+   WalkCenter   = UDim2.fromScale(0.2050, 0.6420), -- ปุ่มวงกลม WALK
+   Walk2Center  = UDim2.fromScale(0.2490, 0.6000), -- ปุ่มวงกลม WALK*2
+   RapidBiteCenter = UDim2.fromScale(0.4310, 0.8540), -- ปุ่ม RAPID ด้านล่างกึ่งกลาง
+   MonsterTargetPanel = UDim2.fromScale(0.4820, 0.7300), -- ตาราง Monster/NPC ด้านล่างกึ่งกลาง
    MM2Dock      = UDim2.fromScale(0.8350, 0.4630), -- กรอบปุ่มดาบ/สมุด (MM2)
    PanelW       = 224, -- ความกว้างมาตรฐานของหน้าต่างหลัก (เท่ากันหมด; ไม่กว้างกว่านี้เพราะจะชนกับ NOCLIP/FLYในภาพ)
    FlyH         = 224, -- ความสูงกล่อง FLY (ดีไซน์ใหม่)
@@ -636,7 +638,7 @@ local speedWidget = Instance.new("Frame", screenGui)
 speedWidget.Name = "TayJaySpeedWidget"
 speedWidget.AnchorPoint = Vector2.new(0, 1)
 speedWidget.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 64) -- อยู่เหนือกล่อง FLY ความกว้างเท่ากัน
-speedWidget.Position = UDim2.new(UI_LAYOUT.FlyBottom.X.Scale, UI_LAYOUT.FlyBottom.X.Offset, UI_LAYOUT.FlyBottom.Y.Scale, UI_LAYOUT.FlyBottom.Y.Offset - UI_LAYOUT.FlyH - 8)
+speedWidget.Position = UDim2.new(UI_LAYOUT.FlyBottom.X.Scale, UI_LAYOUT.FlyBottom.X.Offset, UI_LAYOUT.FlyBottom.Y.Scale, UI_LAYOUT.FlyBottom.Y.Offset - UI_LAYOUT.FlyH)
 speedWidget.BackgroundColor3 = GREEN.dark
 speedWidget.BackgroundTransparency = 0.02
 speedWidget.Visible = false
@@ -1066,6 +1068,13 @@ local function tryAttackTarget(targetCharacter)
    return ok
 end
 
+local function walk2AttackTarget(targetCharacter)
+   if not targetCharacter or not targetCharacter.Parent then return false end
+   local targetHumanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+   if not targetHumanoid or targetHumanoid.Health <= 0 then return false end
+   return tryAttackTarget(targetCharacter)
+end
+
 local deathNoteGroup = Instance.new("Frame", screenGui)
 deathNoteGroup.Name = "DeathNoteGroup"; deathNoteGroup.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH); deathNoteGroup.Position = UI_LAYOUT.PlayerList
 deathNoteGroup.BackgroundTransparency = 1; deathNoteGroup.Visible = false; deathNoteGroup.Active = true
@@ -1257,6 +1266,8 @@ local function createPlayerCard(playerObj, parentScroll, isKiller)
            targetTitle.Text = "🚫 อยู่ใน blacklist"
            return
        end
+       -- Immediate one-shot attack through the same target/remote path as WALK*2.
+       if playerObj.Character then walk2AttackTarget(playerObj.Character) end
        if selectedDeathNoteTarget == playerObj then
            -- กดชื่อเดิมอีกครั้ง = ยกเลิก แล้วกลับไปยืนที่จุดยืน
            selectedDeathNoteTarget = nil
@@ -2272,6 +2283,17 @@ local okMonster, errMonster = pcall(function()
            or model:FindFirstChildWhichIsA("Dialog", true) ~= nil
    end
 
+   -- Generic human NPCs may have no NPC tag/name or interaction prompt.
+   local function hasHumanNpcBody(model, humanoid)
+       if not humanoid then return false end
+       local head = model:FindFirstChild("Head", true)
+       local torso = model:FindFirstChild("UpperTorso", true)
+           or model:FindFirstChild("Torso", true)
+           or model:FindFirstChild("LowerTorso", true)
+       local root = model:FindFirstChild("HumanoidRootPart", true) or model.PrimaryPart
+       return head ~= nil and torso ~= nil and root ~= nil and root:IsA("BasePart")
+   end
+
    local function readHealthAttribute(model)
        for _, key in ipairs({ "Health", "HP", "CurrentHealth" }) do
            local ok, value = pcall(function() return model:GetAttribute(key) end)
@@ -2389,6 +2411,9 @@ local okMonster, errMonster = pcall(function()
            return nil
        end
        if humanoid and hasInteractionEvidence(model) then return "NPC", "interaction" end
+       if humanoid and not monsterNamed and hasHealthSource(model, humanoid) and hasHumanNpcBody(model, humanoid) then
+           return "NPC", "humanoid-rig"
+       end
        return nil
    end
 
@@ -2551,15 +2576,18 @@ local okMonster, errMonster = pcall(function()
 
    local function refreshMonsterFilterUI()
        local isMonster = monsterFilterMode == "Monster"
-       monsterFilterBtn.Text = states.MonsterWarp and "👾 MONSTER: ON" or "👾 MONSTER: OFF"
-       monsterFilterBtn.BackgroundColor3 = states.MonsterWarp and GREEN.on or GREEN.off
-       npcFilterBtn.BackgroundColor3 = (not isMonster) and NPC_COLOR or Color3.fromRGB(65, 74, 63)
+       local monsterActive = states.MonsterWarp and isMonster
+       local npcActive = states.MonsterWarp and not isMonster
+       monsterFilterBtn.Text = monsterActive and "👾 MONSTER: ON" or "👾 MONSTER"
+       npcFilterBtn.Text = npcActive and "🧑 NPC: ON" or "🧑 NPC"
+       monsterFilterBtn.BackgroundColor3 = monsterActive and GREEN.on or (isMonster and GREEN.off or Color3.fromRGB(65, 74, 63))
+       npcFilterBtn.BackgroundColor3 = npcActive and NPC_COLOR or ((not isMonster) and Color3.fromRGB(40, 89, 112) or Color3.fromRGB(65, 74, 63))
        orbitBtn.BackgroundColor3 = monsterOrbitOn and Color3.fromRGB(39, 174, 119) or Color3.fromRGB(65, 74, 63)
        orbitBtn.TextTransparency = monsterOrbitOn and 0 or 0.35
        dodgeBtn.BackgroundColor3 = monsterDodgeOn and Color3.fromRGB(39, 174, 119) or Color3.fromRGB(65, 74, 63)
        dodgeBtn.TextTransparency = monsterDodgeOn and 0 or 0.35
        monsterFilterBtn.TextTransparency = 0
-       npcFilterBtn.TextTransparency = (not isMonster) and 0 or 0.35
+       npcFilterBtn.TextTransparency = 0
        monsterHealthFill.BackgroundColor3 = isMonster and MONSTER_COLOR or NPC_COLOR
        monsterPanelStroke.Color = isMonster and MONSTER_COLOR or NPC_COLOR
        local m, n = monsterGroupCounts.Monster or 0, monsterGroupCounts.NPC or 0
@@ -2830,10 +2858,20 @@ local okMonster, errMonster = pcall(function()
                "เปลี่ยนตัวกรองเป็น " .. modeLabel() .. " • กำลังเลือกเป้าหมายใหม่...", 0, 1)
        end
    end
-   trackConnection(monsterFilterBtn.Activated:Connect(function()
-        if states.MonsterWarp then stopMonsterWarp(true) else setMonsterFilter("Monster"); startMonsterWarp() end
-    end))
-   trackConnection(npcFilterBtn.Activated:Connect(function() setMonsterFilter("NPC") end))
+   local function toggleMonsterMode(mode)
+       if states.MonsterWarp then
+           if monsterFilterMode == mode then
+               stopMonsterWarp(true)
+           else
+               setMonsterFilter(mode)
+           end
+       else
+           setMonsterFilter(mode)
+           startMonsterWarp()
+       end
+   end
+   trackConnection(monsterFilterBtn.Activated:Connect(function() toggleMonsterMode("Monster") end))
+   trackConnection(npcFilterBtn.Activated:Connect(function() toggleMonsterMode("NPC") end))
    trackConnection(dodgeBtn.Activated:Connect(function()
        monsterDodgeOn = not monsterDodgeOn
        monsterDodgeUntil = 0
@@ -5050,8 +5088,8 @@ quickGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 SecureParentGui(quickGui)
 local quickBar = Instance.new("Frame", quickGui)
 quickBar.Name = "TayJayVisibilityBar"
-quickBar.Size = UDim2.fromOffset(180, 28)
-quickBar.Position = UDim2.new(0, 10, 0, 100)
+quickBar.Size = UDim2.fromOffset(194, 32)
+quickBar.Position = UDim2.new(0, 10, 0, 106)
 quickBar.BackgroundColor3 = GREEN.deep
 quickBar.BorderSizePixel = 0
 Instance.new("UICorner", quickBar).CornerRadius = UDim.new(0, 8)
@@ -5062,7 +5100,7 @@ local function getRoot(name) return screenGui:FindFirstChild(name) end
 local tayjayRoots = {
     "TayJayMainMenu", "TayJayMainToggle", "TayJaySpeedWidget", "TayJayFlyControl",
     "TayJayNoclipCircle", "KillAuraCircleBtn", "KillAuraNormalBtn", "TayJayTargetPanel",
-    "TayJayMonsterTargetPanel", "TayJayRapidBiteBtn",
+    "TayJayMonsterTargetPanel", "TayJayRapidBiteBtn", "TayJayWalk2Btn",
     "TayJayServerSelector", "DeathNoteGroup"
 }
 local mm2Roots = {"TayJayMM2Dock", "TayJayMM2PlayerList"}
@@ -5101,8 +5139,8 @@ end
 for index,key in ipairs({"TAYJAY","MM2","FPS"}) do
     local button = Instance.new("TextButton",quickBar)
     button.Name = "Visibility_" .. key
-    button.Size = UDim2.fromOffset(54,22)
-    button.Position = UDim2.fromOffset(4+(index-1)*58,3)
+    button.Size = UDim2.fromOffset(58,24)
+    button.Position = UDim2.fromOffset(4+(index-1)*62,4)
     button.BackgroundColor3 = Color3.fromRGB(36,164,104)
     button.BorderSizePixel = 0
     button.Font = Enum.Font.GothamBold
