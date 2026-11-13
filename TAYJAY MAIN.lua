@@ -546,14 +546,14 @@ local UI_LAYOUT = {
    PlayerList   = UDim2.fromScale(0.3242, 0.4600), -- ตาราง "ผู้เล่นทั้งหมด"
    TargetPanel  = UDim2.fromScale(0.3219, 0.8370), -- กรอบ Select target / TARGET (ย้ายลงให้พ้นตารางผู้เล่นที่สูงขึ้น)
    FlyBottom    = UDim2.fromScale(0.6387, 0.9921), -- กรอบ FLY CONTROL (AnchorPoint 0,1 = มุมซ้ายล่าง)
-   WarpCenter   = UDim2.fromScale(0.1728, 0.6150), -- ปุ่มวงกลม WARP เดิมสำหรับผู้เล่น
-   WalkCenter   = UDim2.fromScale(0.2389, 0.6978), -- ปุ่มวงกลม WALK เดิม
-   RapidBiteCenter = UDim2.fromScale(0.3650, 0.6150),   -- ปุ่มตีรัว (RAPID) แยกอิสระ
+   WarpCenter   = UDim2.fromScale(0.1500, 0.6900), -- ปุ่มวงกลม WARP (จัดเรียงฟันปลา)
+   WalkCenter   = UDim2.fromScale(0.2300, 0.6500), -- ปุ่มวงกลม WALK (จัดเรียงฟันปลา)
+   RapidBiteCenter = UDim2.fromScale(0.3100, 0.6900),   -- ปุ่มตีรัว RAPID (จัดเรียงฟันปลา)
    MonsterTargetPanel = UDim2.fromScale(0.5600, 0.8370), -- สถานะ Monster Warp แยกจาก Target ผู้เล่น
    MM2Dock      = UDim2.fromScale(0.8350, 0.4630), -- กรอบปุ่มดาบ/สมุด (MM2)
    PanelW       = 224, -- ความกว้างมาตรฐานของหน้าต่างหลัก (เท่ากันหมด; ไม่กว้างกว่านี้เพราะจะชนกับ NOCLIP/FLYในภาพ)
    FlyH         = 224, -- ความสูงกล่อง FLY (ดีไซน์ใหม่)
-   NoclipCenter = UDim2.fromScale(0.1000, 0.7000), -- ปุ่มวงกลม NOCLIP (AnchorPoint 0.5,0.5 = จุดกึ่งกลาง)
+   NoclipCenter = UDim2.fromScale(0.0700, 0.6500), -- ปุ่มวงกลม NOCLIP (AnchorPoint 0.5,0.5 = จุดกึ่งกลาง)
    SpeedStep    = 2, -- ปุ่มบวก/ลบความเร็วเดิน ครั้งละกี่หน่วย
    PanelH       = 300, -- ความสูงมาตรฐานของหน้าต่างใหญ่ (เมนู/รายชื่อ/FPS)
    -- สีประจำแต่ละหน้าต่าง (ขอบและไฮไลต์) ปรับได้ที่นี่
@@ -571,8 +571,8 @@ local UI_LAYOUT = {
    FPSPanel     = UDim2.fromScale(0.7309, 0.0430), -- กรอบ TAYJAY FPS BOOSTER
    FPSLauncher  = UDim2.fromScale(0.9217, 0.3631), -- ปุ่ม ⚡ เขียว เปิด/ปิด FPS Booster
    ToggleSize   = 68,  -- เส้นผ่านศูนย์กลางปุ่ม ⚡ เมนูหลัก (เดิม 48)
-   ActionSize   = 66,  -- ลดปุ่ม WARP / WALK ลงเล็กน้อย
-   NoclipSize   = 72,  -- คงขนาดปุ่ม NOCLIP เดิม
+   ActionSize   = 59,  -- ลดปุ่มวงกลมทั้งหมดลงประมาณ 10%
+   NoclipSize   = 65,  -- คงขนาดปุ่ม NOCLIP เดิม
 }
 
 -- =========================================================
@@ -3242,7 +3242,7 @@ do
    button.Name = "TayJayRap2Btn"
    button.AnchorPoint = Vector2.new(0.5, 0.5)
    button.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
-   button.Position = UDim2.fromScale(UI_LAYOUT.RapidBiteCenter.X.Scale + 0.075, UI_LAYOUT.RapidBiteCenter.Y.Scale)
+   button.Position = UDim2.fromScale(UI_LAYOUT.RapidBiteCenter.X.Scale + 0.080, UI_LAYOUT.RapidBiteCenter.Y.Scale - 0.040)
    button.BackgroundColor3 = GREEN.off
    button.RichText = true
    button.Text = '<font size="25">⚔</font>\n<font size="11">RAP2</font>\n<font size="10">OFF</font>'
