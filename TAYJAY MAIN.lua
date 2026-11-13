@@ -264,6 +264,7 @@ pcall(function()
                if v.Name == guiName
                    or v.Name == "TayJay_DeltaMenu_V68_Pastel"
                    or v.Name == "TayJay_DeltaMenu_V69_Pastel"
+                   or v.Name == "TayJay_DeltaMenu_V70_Pastel"
                    or v.Name == "TayJay_FPS_Booster_V72"
                     or v.Name == "TayJay_FPS_Booster_V73" then
                    pcall(function() v:Destroy() end)
@@ -3946,7 +3947,6 @@ local function applyEspToCharacter(character)
       espBoundCharacters[character] = true
       local scopedConnections = {}
       espConnectionsByCharacter[character] = scopedConnections
-       espBoundCharacters[character] = true
        table.insert(scopedConnections, humanoid.HealthChanged:Connect(function(health)
            if not healthLabel or not healthLabel.Parent then return end
            local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
@@ -4506,7 +4506,7 @@ end))
 
 task.spawn(function()
 -- =========================================================
--- TAYJAY FPS BOOSTER V72
+-- TAYJAY FPS BOOSTER V73
 -- =========================================================
 pcall(function()
    local previous = _G.TAYJAY_V73_PERF or _G.TAYJAY_V72_PERF or _G.TAYJAY_V70_PERF or _G.TAYJAY_V69_PERF
