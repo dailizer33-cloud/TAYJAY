@@ -4360,6 +4360,22 @@ pcall(function()
    LocalPlayer.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.Invisicam
 end)
 
+-- NoclipCam: keep camera occlusion in Invisicam mode without changing character collision.
+local _tjNoclipCamActive = true
+local function enforceNoclipCam()
+   if not _tjNoclipCamActive then return end
+   pcall(function()
+      if LocalPlayer.DevCameraOcclusionMode ~= Enum.DevCameraOcclusionMode.Invisicam then
+         LocalPlayer.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.Invisicam
+      end
+   end)
+end
+trackConnection(LocalPlayer:GetPropertyChangedSignal("DevCameraOcclusionMode"):Connect(enforceNoclipCam))
+trackConnection(LocalPlayer.CharacterAdded:Connect(function()
+   task.defer(enforceNoclipCam)
+end))
+enforceNoclipCam()
+
 local function isThemeContainer(obj)
    local names = {
        TayJayMainMenu=true, TayJayFlyControl=true, TayJaySpeedWidget=true,
@@ -5304,6 +5320,7 @@ _G.TAYJAY_STOP_ALL = function()
             end
         end
     end)
+    _tjNoclipCamActive = false
     pcall(function()
         LocalPlayer.CameraMode=originalCameraSettings.CameraMode
         LocalPlayer.CameraMaxZoomDistance=originalCameraSettings.CameraMaxZoomDistance
