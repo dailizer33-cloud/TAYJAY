@@ -3844,7 +3844,7 @@ do
 
    local mm2MainFrame = Instance.new("Frame")
    mm2MainFrame.Name = "TayJayMM2Dock"
-   mm2MainFrame.Size = UDim2.new(0, 98, 0, 48)
+   mm2MainFrame.Size = UDim2.new(0, 118, 0, 48)
    mm2MainFrame.Position = UI_LAYOUT.MM2Dock
    mm2MainFrame.BackgroundColor3 = GREEN.dark
    mm2MainFrame.BackgroundTransparency = 0.05
@@ -3869,14 +3869,52 @@ do
        return button
    end
 
-   local mm2ESPButton = createMM2Button("⚔️", 7)
-   mm2ESPButton.Name = "MM2RoleESPButton"
-   mm2ESPButton.BackgroundColor3 = Color3.fromRGB(35, 91, 145)
+   local mm2ESPButton = createMM2Button("🗡️", 7)
+   local mm2ListButton = createMM2Button("📋", 72)
 
-   local mm2ListButton = createMM2Button("☷", 53)
-   mm2ListButton.Name = "MM2PlayerListButton"
-   mm2ListButton.BackgroundColor3 = Color3.fromRGB(39, 111, 145)
-   mm2ListButton.TextSize = 25
+   local mm2ListFrame = Instance.new("Frame")
+   mm2ListFrame.Name = "TayJayMM2PlayerList"
+   mm2ListFrame.Size = UDim2.new(0, 224, 0, 300)
+   mm2ListFrame.AnchorPoint = Vector2.new(0, 1)
+   mm2ListFrame.Position = UDim2.new(0, 244, 1, -12)
+   mm2ListFrame.BackgroundColor3 = GREEN.deep
+   mm2ListFrame.BackgroundTransparency = 0.05
+   mm2ListFrame.Active = true
+   mm2ListFrame.Visible = false
+   mm2ListFrame.Parent = screenGui
+   Instance.new("UICorner", mm2ListFrame).CornerRadius = UDim.new(0, 10)
+   local mm2ListStroke = Instance.new("UIStroke")
+   mm2ListStroke.Color = GREEN.stroke
+   mm2ListStroke.Thickness = 1.5
+   mm2ListStroke.Parent = mm2ListFrame
+   makeDraggable(mm2ListFrame, false)
+
+   local mm2ListTitle = Instance.new("TextLabel")
+   mm2ListTitle.Size = UDim2.new(1, -74, 0, 32)
+   mm2ListTitle.BackgroundTransparency = 1
+   mm2ListTitle.Text = "👥 ผู้เล่นทั้งหมด (MM2)"
+   mm2ListTitle.TextColor3 = WHITE_TEXT
+   mm2ListTitle.Font = Enum.Font.GothamBold
+   mm2ListTitle.TextSize = 14
+   mm2ListTitle.TextStrokeColor3 = TEXT_OUTLINE
+   mm2ListTitle.TextStrokeTransparency = 0.48
+   mm2ListTitle.TextXAlignment = Enum.TextXAlignment.Left
+   mm2ListTitle.Position = UDim2.new(0, 10, 0, 0)
+   mm2ListTitle.Parent = mm2ListFrame
+
+   local mm2ScrollingFrame = Instance.new("ScrollingFrame")
+   mm2ScrollingFrame.Size = UDim2.new(1, -16, 1, -42)
+   mm2ScrollingFrame.Position = UDim2.new(0, 8, 0, 36)
+   mm2ScrollingFrame.BackgroundTransparency = 1
+   mm2ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+   mm2ScrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+   mm2ScrollingFrame.ScrollBarThickness = 4
+   mm2ScrollingFrame.Parent = mm2ListFrame
+
+   local mm2ListLayout = Instance.new("UIListLayout")
+   mm2ListLayout.Padding = UDim.new(0, 5)
+   mm2ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+   mm2ListLayout.Parent = mm2ScrollingFrame
 
    local function getMM2PlayerRole(player)
        local character = player.Character
@@ -3909,427 +3947,50 @@ do
        return "Unknown", Color3.fromRGB(255, 220, 110), "❔"
    end
 
-   -- MM2 PLAYER TABLE: reuses the Death Note card layout (avatar, display name, HP bar).
-   -- Separate MM2 view; does not alter Death Note selection or warp behavior.
-   local mm2ListFrame = Instance.new("Frame")
-   mm2ListFrame.Name = "TayJayMM2PlayerList"
-   mm2ListFrame.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH)
-   mm2ListFrame.Position = UDim2.fromScale(0.665, 0.455)
-   mm2ListFrame.BackgroundColor3 = GREEN.dark
-   mm2ListFrame.Visible = false
-   mm2ListFrame.Active = true
-   mm2ListFrame.Parent = screenGui
-   Instance.new("UICorner", mm2ListFrame).CornerRadius = UDim.new(0, 12)
-   local mm2ListStroke = Instance.new("UIStroke", mm2ListFrame)
-   mm2ListStroke.Color = Color3.fromRGB(72, 190, 245)
-   mm2ListStroke.Thickness = 2
-
-   local mm2ListTitle = Instance.new("TextLabel", mm2ListFrame)
-   mm2ListTitle.Size = UDim2.new(1, -64, 0, 32)
-   mm2ListTitle.Position = UDim2.fromOffset(10, 0)
-   mm2ListTitle.BackgroundTransparency = 1
-   mm2ListTitle.Text = "⚔ MM2 PLAYERS"
-   mm2ListTitle.TextColor3 = WHITE_TEXT
-   mm2ListTitle.Font = Enum.Font.GothamBold
-   mm2ListTitle.TextSize = 14
-   mm2ListTitle.TextXAlignment = Enum.TextXAlignment.Left
-   mm2ListTitle.TextStrokeColor3 = TEXT_OUTLINE
-   mm2ListTitle.TextStrokeTransparency = 0.48
-
-   local mm2ListLock = Instance.new("TextButton", mm2ListFrame)
-   mm2ListLock.Name = "WindowLockButton"
-   mm2ListLock.Size = UDim2.fromOffset(25, 25)
-   mm2ListLock.Position = UDim2.new(1, -57, 0, 5)
-   mm2ListLock.BackgroundColor3 = Color3.fromRGB(76, 158, 48)
-   mm2ListLock.Text = "🔓"
-   mm2ListLock.TextColor3 = WHITE_TEXT
-   mm2ListLock.Font = Enum.Font.GothamBold
-   mm2ListLock.TextSize = 15
-   Instance.new("UICorner", mm2ListLock).CornerRadius = UDim.new(0, 7)
-
-   local mm2ListLocked = false
-   local mm2Dragging, mm2DragInput, mm2DragStart, mm2StartPos = false, nil, nil, nil
-   local function setMM2ListDrag(panel)
-       panel.InputBegan:Connect(function(input)
-           if not mm2ListLocked and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-               mm2Dragging = true
-               mm2DragStart = input.Position
-               mm2StartPos = mm2ListFrame.Position
-               input.Changed:Connect(function()
-                   if input.UserInputState == Enum.UserInputState.End then mm2Dragging = false end
-               end)
-           end
-       end)
-       panel.InputChanged:Connect(function(input)
-           if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then mm2DragInput = input end
-       end)
-   end
-   setMM2ListDrag(mm2ListTitle)
-   trackConnection(UserInputService.InputChanged:Connect(function(input)
-       if input == mm2DragInput and mm2Dragging and not mm2ListLocked then
-           local delta = input.Position - mm2DragStart
-           mm2ListFrame.Position = UDim2.new(mm2StartPos.X.Scale, mm2StartPos.X.Offset + delta.X, mm2StartPos.Y.Scale, mm2StartPos.Y.Offset + delta.Y)
-       end
-   end))
-   mm2ListLock.Activated:Connect(function()
-       mm2ListLocked = not mm2ListLocked
-       mm2Dragging = false
-       mm2ListLock.Text = mm2ListLocked and "🔒" or "🔓"
-       mm2ListLock.BackgroundColor3 = mm2ListLocked and Color3.fromRGB(205, 48, 42) or Color3.fromRGB(76, 158, 48)
-   end)
-
-   local mm2ListClose = Instance.new("TextButton", mm2ListFrame)
-   mm2ListClose.Size = UDim2.fromOffset(22, 22)
-   mm2ListClose.Position = UDim2.new(1, -28, 0, 5)
-   mm2ListClose.BackgroundColor3 = Color3.fromRGB(215, 45, 40)
-   mm2ListClose.Text = "✕"
-   mm2ListClose.TextColor3 = WHITE_TEXT
-   mm2ListClose.Font = Enum.Font.GothamBold
-   mm2ListClose.TextSize = 13
-   Instance.new("UICorner", mm2ListClose).CornerRadius = UDim.new(1, 0)
-   mm2ListClose.Activated:Connect(function() mm2ListFrame.Visible = false end)
-
-   local mm2ListScroll = Instance.new("ScrollingFrame", mm2ListFrame)
-   mm2ListScroll.Size = UDim2.new(1, -16, 1, -42)
-   mm2ListScroll.Position = UDim2.fromOffset(8, 36)
-   mm2ListScroll.BackgroundTransparency = 1
-   mm2ListScroll.ScrollBarThickness = 5
-   mm2ListScroll.ScrollingDirection = Enum.ScrollingDirection.Y
-   mm2ListScroll.ClipsDescendants = true
-   mm2ListScroll.Active = true
-   mm2ListScroll.ScrollingEnabled = true
-   mm2ListScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-   mm2ListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-   local mm2ListLayout = Instance.new("UIListLayout", mm2ListScroll)
-   mm2ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-   mm2ListLayout.Padding = UDim.new(0, 5)
-   local mm2ListPadding = Instance.new("UIPadding", mm2ListScroll)
-   mm2ListPadding.PaddingTop = UDim.new(0, 2)
-   mm2ListPadding.PaddingBottom = UDim.new(0, 14)
-
-   -- MM2 row taps reuse the existing legacy teleport/attack routine.
-   local teleportAndAttack
-
-   local mm2RowsByUserId = {}
-
-   local function createMM2PlayerRow(playerObj)
-       local row = {}
-       local card = Instance.new("TextButton")
-       card.Name = "MM2_" .. tostring(playerObj.UserId)
-       card.Size = UDim2.new(1, 0, 0, 46)
-       card.BackgroundColor3 = Color3.fromRGB(30, 52, 78)
-       card.BorderSizePixel = 0
-       card.Text = ""
-       card.Active = true
-       card.AutoButtonColor = true
-       card.ZIndex = 40
-       card.Parent = mm2ListScroll
-       Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
-
-       local cardStroke = Instance.new("UIStroke", card)
-       cardStroke.Thickness = 1.5
-       cardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
-       local avatar = Instance.new("ImageLabel", card)
-       avatar.Name = "Avatar"
-       avatar.Size = UDim2.fromOffset(32, 32)
-       avatar.Position = UDim2.fromOffset(7, 7)
-       avatar.BackgroundTransparency = 1
-       avatar.ZIndex = 41
-       avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. playerObj.UserId .. "&w=150&h=150"
-       Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
-
-       local nameLabel = Instance.new("TextLabel", card)
-       nameLabel.Name = "PlayerName"
-       nameLabel.Size = UDim2.new(1, -112, 0, 21)
-       nameLabel.Position = UDim2.fromOffset(45, 2)
-       nameLabel.BackgroundTransparency = 1
-       nameLabel.TextColor3 = WHITE_TEXT
-       nameLabel.TextSize = 13
-       nameLabel.TextStrokeColor3 = TEXT_OUTLINE
-       nameLabel.TextStrokeTransparency = 0.48
-       nameLabel.Font = Enum.Font.GothamBold
-       nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-       nameLabel.ZIndex = 42
-       nameLabel.Parent = card
-
-       local hpBarBg = Instance.new("Frame", card)
-       hpBarBg.Name = "HPBackground"
-       hpBarBg.Size = UDim2.new(1, -115, 0, 8)
-       hpBarBg.Position = UDim2.fromOffset(45, 28)
-       hpBarBg.BackgroundColor3 = Color3.fromRGB(55, 82, 51)
-       hpBarBg.BorderSizePixel = 0
-       hpBarBg.ZIndex = 41
-       Instance.new("UICorner", hpBarBg).CornerRadius = UDim.new(1, 0)
-
-       local hpBarFill = Instance.new("Frame", hpBarBg)
-       hpBarFill.Name = "HPFill"
-       hpBarFill.Size = UDim2.new(0, 0, 1, 0)
-       hpBarFill.BackgroundColor3 = Color3.fromRGB(104, 211, 57)
-       hpBarFill.BorderSizePixel = 0
-       hpBarFill.ZIndex = 42
-       Instance.new("UICorner", hpBarFill).CornerRadius = UDim.new(1, 0)
-
-       local hpText = Instance.new("TextLabel", card)
-       hpText.Name = "HPText"
-       hpText.Size = UDim2.fromOffset(40, 14)
-       hpText.Position = UDim2.new(1, -49, 0, 26)
-       hpText.BackgroundTransparency = 1
-       hpText.TextColor3 = WHITE_TEXT
-       hpText.TextSize = 10
-       hpText.Font = Enum.Font.GothamBold
-       hpText.TextXAlignment = Enum.TextXAlignment.Right
-       hpText.ZIndex = 42
-       hpText.Parent = card
-
-       local roleTag = Instance.new("TextLabel", card)
-       roleTag.Name = "RoleTag"
-       roleTag.Size = UDim2.fromOffset(74, 18)
-       roleTag.Position = UDim2.new(1, -81, 0, 3)
-       roleTag.BackgroundTransparency = 0.08
-       roleTag.TextColor3 = Color3.fromRGB(255, 255, 255)
-       roleTag.TextSize = 9
-       roleTag.Font = Enum.Font.GothamBlack
-       roleTag.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-       roleTag.TextStrokeTransparency = 0.35
-       roleTag.ZIndex = 42
-       roleTag.Parent = card
-       Instance.new("UICorner", roleTag).CornerRadius = UDim.new(0, 5)
-
-       row.Player = playerObj
-       row.Card = card
-       row.Stroke = cardStroke
-       row.Avatar = avatar
-       row.Name = nameLabel
-       row.HPFill = hpBarFill
-       row.HPText = hpText
-       row.Role = roleTag
-
-       -- Keep one stable row per UserId and place a full-size touch hitbox above
-       -- decorative labels/images so Android taps are received consistently.
-       local function activateMM2Row()
-           local now = os.clock()
-           if row.LastTapAt and (now - row.LastTapAt) < 0.35 then return end
-           row.LastTapAt = now
-
-           local selectedPlayer = row.Player
-           if not selectedPlayer or selectedPlayer == LocalPlayer or selectedPlayer.Parent ~= Players then return end
-           local targetCharacter = selectedPlayer.Character
-           local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
-           if not targetHumanoid or targetHumanoid.Health <= 0 then
-               warn("[TAYJAY MM2] Selected player is not alive")
-               return
-           end
-           if not teleportAndAttack then
-               warn("[TAYJAY MM2] Row input received, but target action is not ready")
-               return
-           end
-
-           task.spawn(function()
-               local ok, err = pcall(teleportAndAttack, selectedPlayer)
-               if not ok then warn("[TAYJAY MM2] Row action error: " .. tostring(err)) end
-           end)
-       end
-
-       -- Parent button remains as a fallback for mouse/gamepad input.
-       card.Activated:Connect(activateMM2Row)
-
-       -- The transparent hitbox is the topmost object in the row and captures
-       -- the complete tap area, including avatar, name, role and health display.
-       local tapOverlay = Instance.new("TextButton")
-       tapOverlay.Name = "TapHitbox"
-       tapOverlay.Size = UDim2.fromScale(1, 1)
-       tapOverlay.Position = UDim2.fromOffset(0, 0)
-       tapOverlay.BackgroundTransparency = 1
-       tapOverlay.BorderSizePixel = 0
-       tapOverlay.Text = ""
-       tapOverlay.TextTransparency = 1
-       tapOverlay.AutoButtonColor = false
-       tapOverlay.Active = true
-       tapOverlay.Selectable = false
-       tapOverlay.ZIndex = 60
-       tapOverlay.Parent = card
-       tapOverlay.Activated:Connect(activateMM2Row)
-       row.TapOverlay = tapOverlay
-
-       return row
-   end
-
-   local function refreshMM2PlayerList()
-       if not mm2ListScroll or not mm2ListScroll.Parent then return end
-
-       local allPlayers = Players:GetPlayers()
-       local rolePriority = { Murderer = 1, Sheriff = 2, Innocent = 3, Unknown = 4 }
-       table.sort(allPlayers, function(a, b)
-           local roleA = string.gsub(getMM2PlayerRole(a), "%*", "")
-           local roleB = string.gsub(getMM2PlayerRole(b), "%*", "")
-           local priorityA = rolePriority[roleA] or 4
-           local priorityB = rolePriority[roleB] or 4
-           if priorityA ~= priorityB then return priorityA < priorityB end
-           return string.lower(a.DisplayName) < string.lower(b.DisplayName)
-       end)
-
-       local present = {}
-       for index, playerObj in ipairs(allPlayers) do
-           local userId = playerObj.UserId
-           present[userId] = true
-           local row = mm2RowsByUserId[userId]
-           if not row or not row.Card or not row.Card.Parent then
-               row = createMM2PlayerRow(playerObj)
-               mm2RowsByUserId[userId] = row
-           end
-           row.Player = playerObj
-           row.Card.LayoutOrder = index
-           row.Card.Visible = true
-
-           local roleName, roleColor, roleIcon = getMM2PlayerRole(playerObj)
-           row.Stroke.Color = roleColor
-           row.Role.BackgroundColor3 = roleColor
-           row.Role.Text = roleIcon .. " " .. string.upper(string.gsub(roleName, "%*", ""))
-           row.Name.Text = playerObj.DisplayName
-
-           local expectedAvatar = "rbxthumb://type=AvatarHeadShot&id=" .. userId .. "&w=150&h=150"
-           if row.Avatar.Image ~= expectedAvatar then row.Avatar.Image = expectedAvatar end
-
-           local character = playerObj.Character
-           local hum = character and character:FindFirstChildOfClass("Humanoid")
-           if hum and hum.MaxHealth > 0 then
-               local hp = math.max(0, math.floor(hum.Health))
-               local maxHp = math.max(1, math.floor(hum.MaxHealth))
-               row.HPFill.Size = UDim2.new(math.clamp(hp / maxHp, 0, 1), 0, 1, 0)
-               row.HPText.Text = hp .. "/" .. maxHp
-           else
-               row.HPFill.Size = UDim2.new(0, 0, 1, 0)
-               row.HPText.Text = "Dead"
-           end
-       end
-
-       -- Remove only cards belonging to players who have left.
-       for userId, row in pairs(mm2RowsByUserId) do
-           if not present[userId] then
-               if row.Card then row.Card:Destroy() end
-               mm2RowsByUserId[userId] = nil
-           end
-       end
-
-       mm2ListTitle.Text = "⚔ MM2 PLAYERS (" .. #allPlayers .. ")"
-   end
-
-   local mm2ListRefreshQueued = false
-   local function queueMM2ListRefresh()
-       if mm2ListRefreshQueued then return end
-       mm2ListRefreshQueued = true
-       task.defer(function()
-           mm2ListRefreshQueued = false
-           if mm2ListFrame.Visible then pcall(refreshMM2PlayerList) end
-       end)
-   end
-   mm2ListButton.Activated:Connect(function()
-       mm2ListFrame.Visible = not mm2ListFrame.Visible
-       if mm2ListFrame.Visible then refreshMM2PlayerList() end
-   end)
-   trackConnection(Players.PlayerAdded:Connect(queueMM2ListRefresh))
-   trackConnection(Players.PlayerRemoving:Connect(queueMM2ListRefresh))
-
-   local function findMM2WeaponForLocal()
-       local localRole = string.gsub(getMM2PlayerRole(LocalPlayer), "%*", "")
-       local wanted = {}
-       if localRole == "Murderer" then
-           wanted = { knife = true, murdererknife = true }
-       elseif localRole == "Sheriff" then
-           wanted = { gun = true, sheriffgun = true, revolver = true }
-       else
-           return nil, "Your MM2 role is not confirmed as Murderer or Sheriff"
-       end
+   local function teleportAndAttack(targetPlayer)
+       if isBusy or flyNowe or states.Fly or targetPlayer == LocalPlayer then return end
 
        local character = LocalPlayer.Character
-       local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-       local function findIn(container)
-           if not container then return nil end
-           for _, item in ipairs(container:GetChildren()) do
-               if item:IsA("Tool") and wanted[string.lower(item.Name)] then
-                   return item
-               end
-           end
-           return nil
-       end
-       return findIn(character) or findIn(backpack), nil
-   end
-
-   teleportAndAttack = function(targetPlayer)
-       if isBusy or targetPlayer == LocalPlayer then return end
-       if not AttackRemote then
-           warn("[TAYJAY MM2] Attack remote is unavailable; action cancelled")
-           return
-       end
-
-       local character = LocalPlayer.Character
-       local humanoid = character and character:FindFirstChildOfClass("Humanoid")
        local root = character and character:FindFirstChild("HumanoidRootPart")
        local targetCharacter = targetPlayer.Character
-       local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
        local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
-       if not (humanoid and root and targetHumanoid and targetHumanoid.Health > 0 and targetRoot) then
-           return
-       end
-
-       local weapon, weaponError = findMM2WeaponForLocal()
-       if not weapon then
-           warn("[TAYJAY MM2] No matching role weapon: " .. tostring(weaponError or "weapon not found"))
-           return
-       end
+       if not (root and targetRoot) then return end
 
        isBusy = true
        local ok, err = pcall(function()
            local originalCFrame = root.CFrame
-           local camera = workspace.CurrentCamera
-           local humanoidTool = weapon
-           if weapon.Parent ~= character then
-               humanoid:EquipTool(weapon)
+           local backpack = LocalPlayer:FindFirstChild("Backpack")
+           if backpack then
+               for _, tool in ipairs(backpack:GetChildren()) do
+                   if tool:IsA("Tool") then
+                       tool.Parent = character
+                       break
+                   end
+               end
            end
-           task.wait(0.12)
 
-           if weapon.Parent ~= character then
-               error("Could not equip the role weapon")
-           end
-
-           local deadline = os.clock() + 2
+           local startTime = tick()
            local followConnection
            followConnection = trackConnection(RunService.RenderStepped:Connect(function()
-               if os.clock() >= deadline then
+               if tick() - startTime > 2 then
                    if followConnection then followConnection:Disconnect() end
                    return
                end
 
                local currentTargetCharacter = targetPlayer.Character
-               local currentTargetHumanoid = currentTargetCharacter and currentTargetCharacter:FindFirstChildOfClass("Humanoid")
                local currentTargetRoot = currentTargetCharacter and currentTargetCharacter:FindFirstChild("HumanoidRootPart")
                local currentCharacter = LocalPlayer.Character
-               local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
                local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
-
-               if not currentTargetHumanoid or currentTargetHumanoid.Health <= 0 or not currentTargetRoot
-                   or not currentHumanoid or currentHumanoid.Health <= 0 or not currentRoot then
-                   if followConnection then followConnection:Disconnect() end
-                   return
-               end
-
-               -- Move beside the selected target and keep the camera pointed at that target.
-               _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.12
-               currentRoot.CFrame = currentTargetRoot.CFrame * CFrame.new(0, 0, 2.5)
-               if camera and workspace.CurrentCamera == camera then
-                   local cameraPosition = camera.CFrame.Position
-                   camera.CFrame = CFrame.lookAt(cameraPosition, currentTargetRoot.Position)
-               end
-
-               -- Use only the existing attack routine while the verified weapon is equipped.
-               if humanoidTool.Parent == currentCharacter and currentTargetHumanoid.Health > 0 then
-                   tryAttackTarget(currentTargetCharacter)
+               if currentTargetRoot and currentRoot then
+                   currentRoot.CFrame = currentTargetRoot.CFrame * CFrame.new(0, 0, 2.5)
+                   local targetHumanoid = currentTargetCharacter:FindFirstChildOfClass("Humanoid")
+                   if targetHumanoid and targetHumanoid.Health > 0 then
+                       tryAttackTarget(currentTargetCharacter)
+                   end
                end
            end))
 
            task.wait(2.1)
-           if followConnection then pcall(function() followConnection:Disconnect() end) end
            local currentCharacter = LocalPlayer.Character
            local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
            if currentRoot then
@@ -4337,7 +3998,7 @@ do
            end
        end)
        isBusy = false
-       if not ok then warn("[TAYJAY MM2] Target action stopped: " .. tostring(err)) end
+       if not ok then warn("[TAYJAY MM2] Follow action stopped: " .. tostring(err)) end
    end
 
    local mm2ESPEnabled = false
@@ -4418,6 +4079,88 @@ do
        clearMM2RoleESP()
    end
 
+   local function updateMM2PlayerList()
+       if not mm2ListFrame.Visible then return end
+       mm2ListTitle.Text = "👥 ผู้เล่นทั้งหมด (" .. math.max(0, #Players:GetPlayers() - 1) .. ")"
+
+       for _, child in ipairs(mm2ScrollingFrame:GetChildren()) do
+           if child:IsA("Frame") and not Players:FindFirstChild(child.Name) then
+               child:Destroy()
+           end
+       end
+
+       for _, player in ipairs(Players:GetPlayers()) do
+           if player ~= LocalPlayer then
+               local roleName, roleColor, roleIcon = getMM2PlayerRole(player)
+               local row = mm2ScrollingFrame:FindFirstChild(player.Name)
+
+               if not row then
+                   row = Instance.new("Frame")
+                   row.Name = player.Name
+                   row.Size = UDim2.new(1, 0, 0, 48)
+                   row.BackgroundColor3 = GREEN.panel
+                   row.Parent = mm2ScrollingFrame
+                   Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
+                   local rowStroke = Instance.new("UIStroke", row)
+                   rowStroke.Color = GREEN.stroke
+                   rowStroke.Thickness = 1.4
+
+                   local nameLabel = Instance.new("TextLabel")
+                   nameLabel.Name = "PlayerName"
+                   nameLabel.Size = UDim2.new(0.46, -8, 1, 0)
+                   nameLabel.Position = UDim2.new(0, 10, 0, 0)
+                   nameLabel.BackgroundTransparency = 1
+                   nameLabel.Text = player.Name
+                   nameLabel.TextColor3 = WHITE_TEXT
+                   nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+                   nameLabel.Font = Enum.Font.GothamBold
+                   nameLabel.TextSize = 16
+                   nameLabel.TextStrokeColor3 = TEXT_OUTLINE
+                   nameLabel.TextStrokeTransparency = 0.48
+                   nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+                   nameLabel.Parent = row
+
+                   local roleLabel = Instance.new("TextLabel")
+                   roleLabel.Name = "RoleLabel"
+                   roleLabel.Size = UDim2.new(0.31, 0, 1, 0)
+                   roleLabel.Position = UDim2.new(0.49, 0, 0, 0)
+                   roleLabel.BackgroundTransparency = 1
+                   roleLabel.Text = roleName
+                   roleLabel.TextColor3 = roleColor
+                   roleLabel.Font = Enum.Font.GothamBold
+                   roleLabel.TextSize = 13
+                   roleLabel.TextStrokeColor3 = TEXT_OUTLINE
+                   roleLabel.TextStrokeTransparency = 0.48
+                   roleLabel.TextXAlignment = Enum.TextXAlignment.Center
+                   roleLabel.Parent = row
+
+                   local actionButton = Instance.new("TextButton")
+                   actionButton.Name = "ActionBtn"
+                   actionButton.Size = UDim2.new(0, 32, 0, 30)
+                   actionButton.Position = UDim2.new(1, -37, 0.5, -15)
+                   actionButton.BackgroundColor3 = GREEN.warning
+                   actionButton.TextColor3 = WHITE_TEXT
+                   actionButton.Text = roleIcon
+                   actionButton.TextSize = 16
+                   actionButton.Font = Enum.Font.GothamBold
+                   actionButton.Parent = row
+                   Instance.new("UICorner", actionButton).CornerRadius = UDim.new(0, 6)
+                   trackConnection(actionButton.Activated:Connect(function()
+                       teleportAndAttack(player)
+                   end))
+               else
+                   local roleLabel = row:FindFirstChild("RoleLabel")
+                   local actionButton = row:FindFirstChild("ActionBtn")
+                   if roleLabel then
+                       roleLabel.Text = roleName
+                       roleLabel.TextColor3 = WHITE_TEXT
+                   end
+                   if actionButton then actionButton.Text = roleIcon end
+               end
+           end
+       end
+   end
+
    trackConnection(mm2ESPButton.Activated:Connect(function()
        mm2ESPEnabled = not mm2ESPEnabled
        states.MM2RoleESP = mm2ESPEnabled
@@ -4432,22 +4175,43 @@ do
        end
    end))
 
+   trackConnection(mm2ListButton.Activated:Connect(function()
+       mm2ListFrame.Visible = not mm2ListFrame.Visible
+       if mm2ListFrame.Visible then
+           mm2ListButton.BackgroundColor3 = GREEN.on
+           mm2ListButton:SetAttribute("TayJayEnabled", true)
+           updateMM2PlayerList()
+       else
+           mm2ListButton.BackgroundColor3 = GREEN.off
+           mm2ListButton:SetAttribute("TayJayEnabled", false)
+       end
+   end))
+
+   trackConnection(Players.PlayerAdded:Connect(function()
+       task.defer(updateMM2PlayerList)
+   end))
+   trackConnection(Players.PlayerRemoving:Connect(function()
+       task.defer(updateMM2PlayerList)
+   end))
+
    task.spawn(function()
        while screenGui.Parent do
            task.wait(0.5)
            if mm2ESPEnabled then
                updateMM2RoleESP()
            end
-           if mm2ListFrame.Visible then
-               pcall(refreshMM2PlayerList)
-           end
        end
        clearMM2RoleESP()
    end)
 
+   task.spawn(function()
+       while screenGui.Parent do
+           task.wait(1)
+           updateMM2PlayerList()
+       end
+   end)
 end
 
--- =========================================================
 -- Capture original camera values before applying this script's camera defaults.
 local originalCameraSettings = {
     CameraMode=LocalPlayer.CameraMode,
