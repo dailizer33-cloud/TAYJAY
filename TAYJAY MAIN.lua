@@ -3851,7 +3851,13 @@ local function cleanupEspCharacter(character)
    espBoundCharacters[character] = nil
 end
 local function cleanupAllEspCharacters()
-   for character in pairs(espConnectionsByCharacter) do cleanupEspCharacter(character) end
+   local characters = {}
+   for character in pairs(espConnectionsByCharacter) do
+      table.insert(characters, character)
+   end
+   for _, character in ipairs(characters) do
+      cleanupEspCharacter(character)
+   end
 end
 
 local function applyEspToCharacter(character)
@@ -3947,17 +3953,17 @@ local function applyEspToCharacter(character)
       espBoundCharacters[character] = true
       local scopedConnections = {}
       espConnectionsByCharacter[character] = scopedConnections
-       table.insert(scopedConnections, humanoid.HealthChanged:Connect(function(health)
-           if not healthLabel or not healthLabel.Parent then return end
-           local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
-           healthLabel.Text = tostring(math.max(0, math.floor(health + 0.5))) .. " / " .. tostring(maxHp) .. " HP"
-       end))
-       table.insert(scopedConnections, humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
-           if not healthLabel or not healthLabel.Parent then return end
-           local hp = math.max(0, math.floor(humanoid.Health + 0.5))
-           local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
-           healthLabel.Text = tostring(hp) .. " / " .. tostring(maxHp) .. " HP"
-       end))
+      table.insert(scopedConnections, humanoid.HealthChanged:Connect(function(health)
+         if not healthLabel or not healthLabel.Parent then return end
+         local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
+         healthLabel.Text = tostring(math.max(0, math.floor(health + 0.5))) .. " / " .. tostring(maxHp) .. " HP"
+      end))
+      table.insert(scopedConnections, humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+         if not healthLabel or not healthLabel.Parent then return end
+         local hp = math.max(0, math.floor(humanoid.Health + 0.5))
+         local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
+         healthLabel.Text = tostring(hp) .. " / " .. tostring(maxHp) .. " HP"
+      end))
    end
 end
 registerUiSync("ESP", function(isOn)
