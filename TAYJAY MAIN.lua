@@ -1,3 +1,10 @@
+-- TAYJAY V73 LIFECYCLE: stop the previous instance before bootstrapping a new one.
+do
+    local previousStop = rawget(_G, "TAYJAY_STOP_ALL")
+    if type(previousStop) == "function" then pcall(previousStop) end
+end
+_G.TAYJAY_STOPPED = false
+
 -- TAYJAY EARLY BOOTSTRAP: visible before game loading / PlayerGui waits.
 local _tjBootGui, _tjBootLabel
 local function _tjAttachBootGui()
@@ -214,7 +221,7 @@ local PlaceId = game.PlaceId
 -- =========================================================
 -- 🔴 100% BULLETPROOF GUI PARENTING
 -- =========================================================
-local guiName = "TayJay_DeltaMenu_V70_Pastel"
+local guiName = "TayJay_DeltaMenu_V73_Pastel"
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = guiName
@@ -257,7 +264,8 @@ pcall(function()
                if v.Name == guiName
                    or v.Name == "TayJay_DeltaMenu_V68_Pastel"
                    or v.Name == "TayJay_DeltaMenu_V69_Pastel"
-                   or v.Name == "TayJay_FPS_Booster_V72" then
+                   or v.Name == "TayJay_FPS_Booster_V72"
+                    or v.Name == "TayJay_FPS_Booster_V73" then
                    pcall(function() v:Destroy() end)
                end
            end
@@ -273,8 +281,16 @@ SecureParentGui(screenGui)
 -- Previously this helper was declared below the first calls, which caused
 -- an attempt to call a nil global and stopped the script before the menu appeared.
 local activeConnections = {}
+local V73Diagnostics = {
+   Version = "V73", StartedAt = os.clock(), TrackedConnectionRefs = 0,
+   StopCount = 0, IsStopped = false, LastStopAt = nil,
+}
+_G.TAYJAY_V73_DIAGNOSTICS = V73Diagnostics
 local function trackConnection(conn)
-   if conn then table.insert(activeConnections, conn) end
+   if conn then
+      table.insert(activeConnections, conn)
+      V73Diagnostics.TrackedConnectionRefs = #activeConnections
+   end
    return conn
 end
 
@@ -423,6 +439,16 @@ end
 local function syncButtonState(key, isOn)
    states[key] = isOn
    if uiSyncRegistry[key] then pcall(function() uiSyncRegistry[key](isOn) end) end
+end
+V73Diagnostics.GetSnapshot = function()
+   local activeFeatures = {}
+   for key, enabled in pairs(states) do if enabled == true then activeFeatures[key] = true end end
+   local perf = rawget(_G, "TAYJAY_V73_PERF") or rawget(_G, "TAYJAY_V70_PERF")
+   return {
+      Version = V73Diagnostics.Version, IsStopped = _G.TAYJAY_STOPPED == true,
+      TrackedConnectionRefs = #activeConnections, StopCount = V73Diagnostics.StopCount,
+      ActiveFeatures = activeFeatures, PerformancePreset = perf and perf.CurrentPreset or "N/A",
+   }
 end
 
 local function makeDraggable(gui, addLockButton)
@@ -1135,6 +1161,15 @@ dnPadding.PaddingTop = UDim.new(0, 2); dnPadding.PaddingBottom = UDim.new(0, 14)
 
 
 local originalTransparencies = {}
+local deathNoteConnections = {}
+local function trackDeathNoteConnection(connection)
+   if connection then table.insert(deathNoteConnections, connection) end
+   return connection
+end
+local function clearDeathNoteConnections()
+   for _, connection in ipairs(deathNoteConnections) do pcall(function() connection:Disconnect() end) end
+   table.clear(deathNoteConnections)
+end
 local selectedDeathNoteTarget = nil
 local lockedDeathNoteTarget = nil
 local isDeathNoteTargetLocked = false
@@ -1192,12 +1227,12 @@ local function setupCardContent(playerObj, hpBarFill, hpText)
    pcall(function()
        if playerObj.Character then
            local hum = playerObj.Character:FindFirstChildOfClass("Humanoid")
-           if hum then hum.HealthChanged:Connect(updateHealth) end
+           if hum then trackDeathNoteConnection(hum.HealthChanged:Connect(updateHealth)) end
        end
-       playerObj.CharacterAdded:Connect(function(newChar)
+       trackDeathNoteConnection(playerObj.CharacterAdded:Connect(function(newChar)
            local hum = newChar:WaitForChild("Humanoid", 5)
-           if hum then hum.HealthChanged:Connect(updateHealth); updateHealth() end
-       end)
+           if hum then trackDeathNoteConnection(hum.HealthChanged:Connect(updateHealth)); updateHealth() end
+       end))
    end)
    updateHealth()
 end
@@ -1266,8 +1301,6 @@ local function createPlayerCard(playerObj, parentScroll, isKiller)
            targetTitle.Text = "🚫 อยู่ใน blacklist"
            return
        end
-       -- Immediate one-shot attack through the same target/remote path as WALK2.
-       if playerObj.Character then walk2AttackTarget(playerObj.Character) end
        if selectedDeathNoteTarget == playerObj then
            -- กดชื่อเดิมอีกครั้ง = ยกเลิก แล้วกลับไปยืนที่จุดยืน
            selectedDeathNoteTarget = nil
@@ -1302,6 +1335,7 @@ local function updatePlayerList()
    task.defer(function()
        playerListRefreshQueued = false
        if not dnScroll or not dnScroll.Parent then return end
+       clearDeathNoteConnections()
        pcall(function()
            for _, child in ipairs(dnScroll:GetChildren()) do
                if child:IsA("TextButton") then child:Destroy() end
@@ -2902,12 +2936,15 @@ local okMonster, errMonster = pcall(function()
        if states.MonsterWarp then stopMonsterWarp(false) end
    end))
 
-   trackConnection(RunService.Heartbeat:Connect(monsterGlueStep))
-   trackConnection(RunService.Stepped:Connect(monsterNoclipStep))
    do
        local okPre, preRender = pcall(function() return RunService.PreRender end)
-       if okPre and preRender then trackConnection(preRender:Connect(monsterGlueStep)) end
+       if okPre and preRender then
+           trackConnection(preRender:Connect(monsterGlueStep))
+       else
+           trackConnection(RunService.Heartbeat:Connect(monsterGlueStep))
+       end
    end
+   trackConnection(RunService.Stepped:Connect(monsterNoclipStep))
 
    -- Throttled scan/follow loop: no per-frame Workspace:GetDescendants() calls.
    task.spawn(function()
@@ -3802,7 +3839,19 @@ local ESP_SILVER = Color3.fromRGB(255, 249, 210)
 local ESP_DARK_STROKE = Color3.fromRGB(36, 142, 68)
 local ESP_FILL = Color3.fromRGB(90, 175, 55)
 local ESP_OUTLINE = Color3.fromRGB(255, 211, 58)
-local espBoundCharacters = {}
+local espBoundCharacters = setmetatable({}, {__mode = "k"})
+local espConnectionsByCharacter = setmetatable({}, {__mode = "k"})
+local function cleanupEspCharacter(character)
+   local connections = espConnectionsByCharacter[character]
+   if connections then
+      for _, connection in ipairs(connections) do pcall(function() connection:Disconnect() end) end
+      espConnectionsByCharacter[character] = nil
+   end
+   espBoundCharacters[character] = nil
+end
+local function cleanupAllEspCharacters()
+   for character in pairs(espConnectionsByCharacter) do cleanupEspCharacter(character) end
+end
 
 local function applyEspToCharacter(character)
    if not character or not character.Parent then return end
@@ -3894,13 +3943,16 @@ local function applyEspToCharacter(character)
    end
 
    if not espBoundCharacters[character] then
+      espBoundCharacters[character] = true
+      local scopedConnections = {}
+      espConnectionsByCharacter[character] = scopedConnections
        espBoundCharacters[character] = true
-       trackConnection(humanoid.HealthChanged:Connect(function(health)
+       table.insert(scopedConnections, humanoid.HealthChanged:Connect(function(health)
            if not healthLabel or not healthLabel.Parent then return end
            local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
            healthLabel.Text = tostring(math.max(0, math.floor(health + 0.5))) .. " / " .. tostring(maxHp) .. " HP"
        end))
-       trackConnection(humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+       table.insert(scopedConnections, humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
            if not healthLabel or not healthLabel.Parent then return end
            local hp = math.max(0, math.floor(humanoid.Health + 0.5))
            local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
@@ -3939,6 +3991,7 @@ local function bindEspPlayer(player)
            end
        end)
    end
+   trackConnection(player.CharacterRemoving:Connect(cleanupEspCharacter))
    trackConnection(player.CharacterAdded:Connect(function(character)
        task.spawn(function()
            character:WaitForChild("Head", 8)
@@ -3955,14 +4008,20 @@ trackConnection(Players.PlayerAdded:Connect(bindEspPlayer))
 
 task.spawn(function()
    while screenGui.Parent do
-       task.wait(0.75)
-       for _, player in ipairs(Players:GetPlayers()) do
-           if player ~= LocalPlayer and player.Character then
-               local character = player.Character
-               if character:FindFirstChild("Head") and character:FindFirstChildOfClass("Humanoid") then
-                   applyEspToCharacter(character)
+       if states.ESP or states.MM2RoleESP then
+           task.wait(0.75)
+           if states.ESP or states.MM2RoleESP then
+               for _, player in ipairs(Players:GetPlayers()) do
+                   if player ~= LocalPlayer and player.Character then
+                       local character = player.Character
+                       if character:FindFirstChild("Head") and character:FindFirstChildOfClass("Humanoid") then
+                           applyEspToCharacter(character)
+                       end
+                   end
                end
            end
+       else
+           task.wait(1.5)
        end
    end
 end)
@@ -4450,7 +4509,7 @@ task.spawn(function()
 -- TAYJAY FPS BOOSTER V72
 -- =========================================================
 pcall(function()
-   local previous = _G.TAYJAY_V70_PERF or _G.TAYJAY_V69_PERF
+   local previous = _G.TAYJAY_V73_PERF or _G.TAYJAY_V72_PERF or _G.TAYJAY_V70_PERF or _G.TAYJAY_V69_PERF
    if previous and previous.Cleanup then previous.Cleanup() end
 end)
 
@@ -4474,7 +4533,7 @@ local V70Perf = {
    Options = {Shadows = true, Particles = true, PostEffects = true,
        Reflections = true, Water = true, Decals = true, Lights = true}
 }
-_G.TAYJAY_V70_PERF = V70Perf
+_G.TAYJAY_V73_PERF = V70Perf
 
 local function v70Track(list, connection)
    table.insert(list, connection)
@@ -4693,7 +4752,7 @@ local function v70ReadPing()
 end
 
 local perfGui = Instance.new("ScreenGui")
-perfGui.Name = "TayJay_FPS_Booster_V72"
+perfGui.Name = "TayJay_FPS_Booster_V73"
 perfGui.ResetOnSpawn = false
 perfGui.IgnoreGuiInset = true
 perfGui.DisplayOrder = 1000000
@@ -5088,12 +5147,12 @@ function V70Perf.Cleanup()
    table.clear(V70Perf.ContentConnections)
    if V70Perf.GUI then pcall(function() V70Perf.GUI:Destroy() end); V70Perf.GUI = nil end
    V70Perf.GraphBars = nil
-   if _G.TAYJAY_V70_PERF == V70Perf then _G.TAYJAY_V70_PERF = nil end
+   if _G.TAYJAY_V73_PERF == V70Perf then _G.TAYJAY_V73_PERF = nil end
 end
 
 renderTab()
-statusLabel.Text = "PROFILE: BALANCED  •  " .. (v70FPSUnlockApplied() and "FPS UNLOCK ON" or "FPS UNLOCK N/A") .. "  •  FLOATING UI READY"
-print("[TAYJAY V72 FPS BOOSTER] Dashboard ready | Collapsible + Floating Launcher")
+statusLabel.Text = "PROFILE: " .. string.upper(V70Perf.CurrentPreset or "POTATO") .. "  •  " .. (v70FPSUnlockApplied() and "FPS UNLOCK ON" or "FPS UNLOCK N/A") .. "  •  FLOATING UI READY"
+print("[TAYJAY V73 FPS BOOSTER] Dashboard ready | Collapsible + Floating Launcher")
 
 local function applyTayJayTextPass(guiRoot)
    if not guiRoot then return end
@@ -5294,7 +5353,12 @@ strengthenControlEdges(perfGui)
 _G.TAYJAY_STOP_ALL = function()
     if _G.TAYJAY_STOPPED then return end
     _G.TAYJAY_STOPPED=true
+    V73Diagnostics.StopCount = (V73Diagnostics.StopCount or 0) + 1
+    V73Diagnostics.IsStopped = true
+    V73Diagnostics.LastStopAt = os.clock()
     for key in pairs(states) do pcall(function() syncButtonState(key,false) end) end
+    pcall(clearDeathNoteConnections)
+    pcall(cleanupAllEspCharacters)
     pcall(function() stopFlying(false) end)
     pcall(function() setNoclip(false) end)
     pcall(function() if _G.TAYJAY_MONSTER_STOP then _G.TAYJAY_MONSTER_STOP() end end)
@@ -5330,13 +5394,14 @@ _G.TAYJAY_STOP_ALL = function()
     pcall(function() if V70Perf and V70Perf.Cleanup then V70Perf.Cleanup() end end)
     for _,connection in ipairs(activeConnections) do pcall(function() connection:Disconnect() end) end
     table.clear(activeConnections)
+    V73Diagnostics.TrackedConnectionRefs = 0
     pcall(function() if _tjLogConnection then _tjLogConnection:Disconnect(); _tjLogConnection=nil end end)
     pcall(function() if _tjBootGui then _tjBootGui:Destroy(); _tjBootGui=nil; _tjBootLabel=nil end end)
     pcall(function()
         if type(gethui)=="function" then
             local hidden=gethui()
             for _,child in ipairs(hidden:GetChildren()) do
-                if child.Name==guiName or child.Name=="TayJay_FPS_Booster_V72"
+                if child.Name==guiName or child.Name=="TayJay_FPS_Booster_V73" or child.Name=="TayJay_FPS_Booster_V72"
                     or child.Name=="TayJayLockGui" or child.Name=="TayJayQuickVisibility" then
                     pcall(function() child:Destroy() end)
                 end
@@ -5346,7 +5411,7 @@ _G.TAYJAY_STOP_ALL = function()
     for _,parent in ipairs({CoreGui,LocalPlayer:FindFirstChildOfClass("PlayerGui")}) do
         if parent then
             for _,child in ipairs(parent:GetChildren()) do
-                if child.Name==guiName or child.Name=="TayJay_FPS_Booster_V72"
+                if child.Name==guiName or child.Name=="TayJay_FPS_Booster_V73" or child.Name=="TayJay_FPS_Booster_V72"
                     or child.Name=="TayJayLockGui" or child.Name=="TayJayQuickVisibility"
                     or child.Name=="TayJay_IndependentStartupStatus" then
                     pcall(function() child:Destroy() end)
@@ -5357,7 +5422,7 @@ _G.TAYJAY_STOP_ALL = function()
     pcall(function() if screenGui then screenGui:Destroy() end end)
     pcall(function() if perfGui then perfGui:Destroy() end end)
     pcall(function() if quickGui then quickGui:Destroy() end end)
-    _G.TAYJAY_V70_PERF=nil
+    _G.TAYJAY_V73_PERF=nil
     _G.TAYJAY_MM2_STOP=nil
     _G.TAYJAY_MONSTER_STOP=nil
     _G.TAYJAY_MONSTER_PANEL_SET_VISIBLE=nil
