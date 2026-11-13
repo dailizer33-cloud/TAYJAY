@@ -549,7 +549,7 @@ local UI_LAYOUT = {
    FlyBottom    = UDim2.fromScale(0.6263, 1.0000), -- FLY CONTROL มุมขวาล่าง
    WarpCenter   = UDim2.fromScale(0.1550, 0.6000), -- ปุ่มวงกลม WARP
    WalkCenter   = UDim2.fromScale(0.2050, 0.6420), -- ปุ่มวงกลม WALK
-   Walk2Center  = UDim2.fromScale(0.2490, 0.6000), -- ปุ่มวงกลม WALK*2
+   Walk2Center  = UDim2.fromScale(0.2490, 0.6000), -- ปุ่มวงกลม WALK2
    RapidBiteCenter = UDim2.fromScale(0.4310, 0.8540), -- ปุ่ม RAPID ด้านล่างกึ่งกลาง
    MonsterTargetPanel = UDim2.fromScale(0.4820, 0.7300), -- ตาราง Monster/NPC ด้านล่างกึ่งกลาง
    MM2Dock      = UDim2.fromScale(0.8350, 0.4630), -- กรอบปุ่มดาบ/สมุด (MM2)
@@ -1266,7 +1266,7 @@ local function createPlayerCard(playerObj, parentScroll, isKiller)
            targetTitle.Text = "🚫 อยู่ใน blacklist"
            return
        end
-       -- Immediate one-shot attack through the same target/remote path as WALK*2.
+       -- Immediate one-shot attack through the same target/remote path as WALK2.
        if playerObj.Character then walk2AttackTarget(playerObj.Character) end
        if selectedDeathNoteTarget == playerObj then
            -- กดชื่อเดิมอีกครั้ง = ยกเลิก แล้วกลับไปยืนที่จุดยืน
@@ -2411,7 +2411,7 @@ local okMonster, errMonster = pcall(function()
            return nil
        end
        if humanoid and hasInteractionEvidence(model) then return "NPC", "interaction" end
-       if humanoid and not monsterNamed and hasHealthSource(model, humanoid) and hasHumanNpcBody(model, humanoid) then
+       if humanoid and not monsterNamed and not hasMonsterEvidence(model) and hasHealthSource(model, humanoid) and hasHumanNpcBody(model, humanoid) then
            return "NPC", "humanoid-rig"
        end
        return nil
@@ -2871,6 +2871,7 @@ local okMonster, errMonster = pcall(function()
        end
    end
    trackConnection(monsterFilterBtn.Activated:Connect(function() toggleMonsterMode("Monster") end))
+   trackConnection(npcFilterBtn.Activated:Connect(function() toggleMonsterMode("NPC") end))
    trackConnection(dodgeBtn.Activated:Connect(function()
        monsterDodgeOn = not monsterDodgeOn
        monsterDodgeUntil = 0
@@ -3272,9 +3273,9 @@ end
 
 
 -- =========================================================
--- WALK*2: independent WALK-target attack toggle (shared with Death Note cards)
+-- WALK2: independent WALK-target attack toggle (shared with Death Note cards)
 do
-   local WALK2_MASK_BASE64 = "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"
+   local WALK2_MASK_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAMAAABg3Am1AAAAkFBMVEXkniagbB7drFKll0+mizH03KPuzVRraTJxhUteKQjVfBVfdUb48uXLsZK5oIk3a06TbUx6gT7/1TxHcEv+1Ew7a01Dbkz7y0VXdEj6xDr9p0nlhRfahBw5bVD6tij+s1hnd0T3ujT2pxh4dzvzqiT++MXHgyWIeDa3ZADJt0z7rVanWQHXhSGFh0ilo0w7cFL2L5RyAAAEk0lEQVR42m2VC5uiOgyGk5arl5ndA61VygiiICPq//9350vRcWZ3M89Im+ZtGpoEKp5iDcSGgZVx8VNsWCsK+jJ1GcTBOBvHZLxl5mufYO10BsIKYG7j7abVphTRjXHz6GbFwDg9KpWMSZncQDorgE7EINnsdvLM3m8BKEfYOxnvVCkW2thRm3CkMQBqtwt7u6x8EMaJITZS8rxh5wDgkMEFPYDkCZQ3Vc4AhdkoEFk3agsi+QKC/2/yBEKI8ABHSYZNNwBU+Q9RfwDWwgxxC7D7hz0cvIAsxJCVm3KzCYCcafNNsKIC8JiF12rNGOYC7LabzQ9iIw7UE9CmIJON5joDQpCf1MNyW7ZEPijpoWoEuP6nsi1k03pxMXVIEoKoW9Z0XXDr241YbLXBkYzePkV2o6oxyJxuGJBEtu4q2tHk53XdKLylF9BW3k9VH1LO1HV4Ol9N3tNsgAcBiLZUHbdtu6WFr6q+sd+T2jTQVRGW2/ZYUQDwO0SiqJqOubA/y8A45s6RrPMAU4u/D7nt9mN7te9/lY0gpnaLY9te6wKmM+Cso48ylIw15psPO9dZzfTRW9t8AYMpuE1weuOarnHFww/KTKa2sA0OVBhgiABA1RXmulEoF54Qou+Hefsukoh91Ej+L8378AR67KmOfHd95UkRrBgHMUP1mPrGjFKgOFIkb4mi2mYlDTVXXsWnU6x8JS938hTHpzieqsjoMnFFHZEA+LVQ0LKOKoV12FDVGdyZxzCJT8miN0tC4pkA1NGBrZPMNVxh9XJRJ7WAB7cAfsYsrnrc33Y0RX/4LQD1cLBJCtMBUDPgrF2ykhkB4Noh/1zhSZKvgR9ktMKpF7tT3HN82vFSqbpDCISZ4LhrXKyn0PkQNG3bSLof70PQbPR+fzX8KTEnlCIBFJL1HZYAcKYr0pDvWuuGSSmdYn2/V8akkVKKr1pfrWRqSp0AuHHMjoxN93t0t7TRV73//Nxfr9rZ1Ab9kiT9aW7GeE9tAD5hpcPuMvzEQyEtZ3WPCpAThe4t2YuUVbOLQu0WO/GgFntlzax10xEm7tHuTfQhgM0QBd5no1MWJ5zKzEGZGecBROYFQBqplRRpZczdXpVemrt8VlzKbE1GsMh+AlGdLiryEQ+Nc1IWzi0H7j1VC1c/tnwBxw/id8sXXlQLJOnUQ7yvaFF5lrolWBydfQKZTL278yXP1VpNEzIcWT1NKlZ5zmndHI9HifL5jXMEBXGdnjlfrbRexXyKOV7p9WqV83mJEj0eD2SeH0V4PEDI1Xz5tXrL07dfebzOf73l+XqFE90bLwbRCzDRgfAXBRc5LNN8/Zbzm0wu5+WdKexnvwA8DgIgCiFWqzWvVmm8WiOAc7pE8siqKV5AHVx0VVfz+cJaMV8uzErz5cx3K/vRobHfAEQBHYp6sHw+8/zP4VkPuMuIQh59B5yozMB1gZvlNF0u0zBwXDVSAfTsbc8B6guFP3e9ur7j937HnvdoQqxYdPYPABU969COuAudvunEs7RB61Lzp4fiq227LuqF877/0tpXv6W/23X4lljXueJf8j9PhrFJN8S/ygAAAABJRU5ErkJggg=="
    local function decodeBase64(data)
       local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
       local lookup = {}
@@ -3375,7 +3376,7 @@ do
    nameLabel.Position = UDim2.new(0, 0, 0, 35)
    nameLabel.Size = UDim2.new(1, 0, 0, 12)
    nameLabel.BackgroundTransparency = 1
-   nameLabel.Text = "WALK*2"
+   nameLabel.Text = "WALK2"
    nameLabel.TextColor3 = WHITE_TEXT
    nameLabel.TextStrokeColor3 = TEXT_OUTLINE
    nameLabel.TextStrokeTransparency = 0.25
