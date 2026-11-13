@@ -3273,52 +3273,145 @@ end
 
 
 -- =========================================================
--- RAP2: independent WALK-target attack toggle
+-- WALK*2: independent WALK-target attack toggle (shared with Death Note cards)
 do
-   local rap2Enabled = false
+   local WALK2_MASK_BASE64 = "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"
+   local function decodeBase64(data)
+      local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+      local lookup = {}
+      for i = 1, #alphabet do lookup[alphabet:sub(i, i)] = i - 1 end
+      local buffer, bits, output = 0, 0, {}
+      for i = 1, #data do
+         local value = lookup[data:sub(i, i)]
+         if value ~= nil then
+            buffer = buffer * 64 + value
+            bits = bits + 6
+            if bits >= 8 then
+               bits = bits - 8
+               output[#output + 1] = string.char(math.floor(buffer / (2 ^ bits)) % 256)
+               buffer = buffer % (2 ^ bits)
+            end
+         end
+      end
+      return table.concat(output)
+   end
+   local walk2IconAsset = nil
+   pcall(function()
+      local assetPath = "TAYJAY_WALK2_MASK.png"
+      local assetLoader
+      if type(getcustomasset) == "function" then
+         assetLoader = getcustomasset
+      elseif type(getsynasset) == "function" then
+         assetLoader = getsynasset
+      end
+      if not assetLoader then return end
+      local fileReady = false
+      pcall(function()
+         fileReady = type(isfile) == "function" and isfile(assetPath) == true
+      end)
+      if not fileReady then
+         if type(writefile) ~= "function" then return end
+         writefile(assetPath, decodeBase64(WALK2_MASK_BASE64))
+         fileReady = true
+      end
+      if fileReady then walk2IconAsset = assetLoader(assetPath) end
+   end)
+
+   local walk2Enabled = false
    local button = Instance.new("TextButton", screenGui)
-   button.Name = "TayJayRap2Btn"
+   button.Name = "TayJayWalk2Btn"
    button.AnchorPoint = Vector2.new(0.5, 0.5)
    button.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
-   button.Position = UDim2.fromScale(UI_LAYOUT.RapidBiteCenter.X.Scale + 0.080, UI_LAYOUT.RapidBiteCenter.Y.Scale - 0.040)
+   button.Position = UI_LAYOUT.Walk2Center
    button.BackgroundColor3 = GREEN.off
-   button.RichText = true
-   button.Text = '<font size="25">⚔</font>\n<font size="11">RAP2</font>\n<font size="10">OFF</font>'
+   button.Text = ""
    button.TextColor3 = WHITE_TEXT
-   button.Font = Enum.Font.GothamBlack
-   button.TextSize = 15
-   button.Active = true
    button.AutoButtonColor = true
+   button.Active = true
+   button.ClipsDescendants = true
+   button:SetAttribute("TayJayKeepCustomStyle", true)
    Instance.new("UICorner", button).CornerRadius = UDim.new(1, 0)
    local stroke = Instance.new("UIStroke", button)
    stroke.Color = Color3.fromRGB(255, 96, 132)
    stroke.Thickness = 2.5
    makeDraggable(button)
 
-   local function updateRap2Visual()
-      button.BackgroundColor3 = rap2Enabled and GREEN.on or GREEN.off
-      button.Text = '<font size="25">⚔</font>\n<font size="11">RAP2</font>\n<font size="10">' .. (rap2Enabled and "ON" or "OFF") .. '</font>'
+   local icon = Instance.new("ImageLabel", button)
+   icon.Name = "Walk2MaskIcon"
+   icon.AnchorPoint = Vector2.new(0.5, 0)
+   icon.Position = UDim2.new(0.5, 0, 0, 1)
+   icon.Size = UDim2.fromOffset(35, 35)
+   icon.BackgroundTransparency = 1
+   icon.ScaleType = Enum.ScaleType.Fit
+   icon.ZIndex = button.ZIndex + 1
+   icon.Visible = false
+
+   local fallbackIcon = Instance.new("TextLabel", button)
+   fallbackIcon.Name = "Walk2FallbackIcon"
+   fallbackIcon.AnchorPoint = icon.AnchorPoint
+   fallbackIcon.Position = icon.Position
+   fallbackIcon.Size = icon.Size
+   fallbackIcon.BackgroundTransparency = 1
+   fallbackIcon.Text = "👹"
+   fallbackIcon.TextColor3 = WHITE_TEXT
+   fallbackIcon.TextStrokeColor3 = TEXT_OUTLINE
+   fallbackIcon.TextStrokeTransparency = 0.25
+   fallbackIcon.Font = Enum.Font.GothamBlack
+   fallbackIcon.TextSize = 29
+   fallbackIcon.ZIndex = button.ZIndex + 1
+
+   if walk2IconAsset then
+      local loaded = pcall(function()
+         icon.Image = walk2IconAsset
+         icon.Visible = true
+         fallbackIcon.Visible = false
+      end)
+      if not loaded then icon.Visible = false; fallbackIcon.Visible = true end
+   else
+      fallbackIcon.Visible = true
    end
 
+   local nameLabel = Instance.new("TextLabel", button)
+   nameLabel.Name = "Walk2Name"
+   nameLabel.Position = UDim2.new(0, 0, 0, 35)
+   nameLabel.Size = UDim2.new(1, 0, 0, 12)
+   nameLabel.BackgroundTransparency = 1
+   nameLabel.Text = "WALK*2"
+   nameLabel.TextColor3 = WHITE_TEXT
+   nameLabel.TextStrokeColor3 = TEXT_OUTLINE
+   nameLabel.TextStrokeTransparency = 0.25
+   nameLabel.Font = Enum.Font.GothamBlack
+   nameLabel.TextSize = 10
+   nameLabel.ZIndex = button.ZIndex + 1
+
+   local statusLabel = Instance.new("TextLabel", button)
+   statusLabel.Name = "Walk2Status"
+   statusLabel.Position = UDim2.new(0, 0, 0, 46)
+   statusLabel.Size = UDim2.new(1, 0, 0, 10)
+   statusLabel.BackgroundTransparency = 1
+   statusLabel.Text = "OFF"
+   statusLabel.TextColor3 = WHITE_TEXT
+   statusLabel.TextStrokeColor3 = TEXT_OUTLINE
+   statusLabel.TextStrokeTransparency = 0.25
+   statusLabel.Font = Enum.Font.GothamBold
+   statusLabel.TextSize = 9
+   statusLabel.ZIndex = button.ZIndex + 1
+
+   local function updateWalk2Visual()
+      button.BackgroundColor3 = walk2Enabled and GREEN.on or GREEN.off
+      statusLabel.Text = walk2Enabled and "ON" or "OFF"
+   end
    trackConnection(button.Activated:Connect(function()
-      rap2Enabled = not rap2Enabled
-      updateRap2Visual()
+      walk2Enabled = not walk2Enabled
+      updateWalk2Visual()
    end))
-
    trackConnection(RunService.Heartbeat:Connect(function()
-      if not rap2Enabled or not AttackRemote or isBusy then return end
+      if not walk2Enabled or not AttackRemote or isBusy then return end
       local targetChar = getClosestPlayer_V57(25)
-      if targetChar then
-         local humanoid = targetChar:FindFirstChildOfClass("Humanoid")
-         if humanoid and humanoid.Health > 0 then
-            tryAttackTarget(targetChar)
-         end
-      end
+      if targetChar then walk2AttackTarget(targetChar) end
    end))
-
-   updateRap2Visual()
+   updateWalk2Visual()
 end
-
 task.spawn(function()
    while screenGui.Parent do
        task.wait(0.05)
