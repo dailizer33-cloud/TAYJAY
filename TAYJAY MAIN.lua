@@ -2871,7 +2871,6 @@ local okMonster, errMonster = pcall(function()
        end
    end
    trackConnection(monsterFilterBtn.Activated:Connect(function() toggleMonsterMode("Monster") end))
-   trackConnection(npcFilterBtn.Activated:Connect(function() toggleMonsterMode("NPC") end))
    trackConnection(dodgeBtn.Activated:Connect(function()
        monsterDodgeOn = not monsterDodgeOn
        monsterDodgeUntil = 0
