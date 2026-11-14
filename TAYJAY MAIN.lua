@@ -4383,14 +4383,32 @@ local originalCameraSettings = {
 -- =========================================================
 -- 🌌 TAYJAY MIDNIGHT NEON THEME + CAMERA QUALITY OF LIFE
 -- =========================================================
-pcall(function()
-   LocalPlayer.CameraMode = Enum.CameraMode.Classic
-   LocalPlayer.CameraMaxZoomDistance = 70
-   LocalPlayer.CameraMinZoomDistance = 0.5
-   LocalPlayer.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.Invisicam
-end)
 
--- NoclipCam: keep camera occlusion in Invisicam mode without changing character collision.
+-- ZoomLimit: independently maintain the camera zoom range and Classic camera mode.
+local _tjZoomLimitActive = true
+local function enforceZoomLimit()
+   if not _tjZoomLimitActive then return end
+   pcall(function()
+      if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then
+         LocalPlayer.CameraMode = Enum.CameraMode.Classic
+      end
+      if LocalPlayer.CameraMaxZoomDistance ~= 70 then
+         LocalPlayer.CameraMaxZoomDistance = 70
+      end
+      if LocalPlayer.CameraMinZoomDistance ~= 0.5 then
+         LocalPlayer.CameraMinZoomDistance = 0.5
+      end
+   end)
+end
+trackConnection(LocalPlayer:GetPropertyChangedSignal("CameraMode"):Connect(enforceZoomLimit))
+trackConnection(LocalPlayer:GetPropertyChangedSignal("CameraMaxZoomDistance"):Connect(enforceZoomLimit))
+trackConnection(LocalPlayer:GetPropertyChangedSignal("CameraMinZoomDistance"):Connect(enforceZoomLimit))
+trackConnection(LocalPlayer.CharacterAdded:Connect(function()
+   task.defer(enforceZoomLimit)
+end))
+enforceZoomLimit()
+
+-- NoclipCam: independently maintain Invisicam occlusion only; it does not change character collision.
 local _tjNoclipCamActive = true
 local function enforceNoclipCam()
    if not _tjNoclipCamActive then return end
@@ -5351,6 +5369,7 @@ _G.TAYJAY_STOP_ALL = function()
         end
     end)
     _tjNoclipCamActive = false
+    _tjZoomLimitActive = false
     pcall(function()
         LocalPlayer.CameraMode=originalCameraSettings.CameraMode
         LocalPlayer.CameraMaxZoomDistance=originalCameraSettings.CameraMaxZoomDistance
