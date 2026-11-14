@@ -1,142 +1,5 @@
--- TAYJAY EARLY BOOTSTRAP: visible before game loading / PlayerGui waits.
-local _tjBootGui, _tjBootLabel
-local function _tjAttachBootGui()
-    if _tjBootGui and _tjBootGui.Parent then return true end
-    local parents = {}
-    local function addParent(parent)
-        if parent then
-            for _, existing in ipairs(parents) do
-                if existing == parent then return end
-            end
-            table.insert(parents, parent)
-        end
-    end
-    pcall(function()
-        if type(gethui) == "function" then addParent(gethui()) end
-    end)
-    pcall(function() addParent(game:GetService("CoreGui")) end)
-    pcall(function()
-        local player = game:GetService("Players").LocalPlayer
-        local playerGui = player and player:FindFirstChildOfClass("PlayerGui")
-        addParent(playerGui)
-    end)
-    for _, parent in ipairs(parents) do
-        local ok = pcall(function() _tjBootGui.Parent = parent end)
-        if ok and _tjBootGui.Parent == parent then return true end
-    end
-    return false
-end
-
-local function _tjShowDiagnostic(state, message)
-    local isError = state == "ERROR"
-    local body = tostring(message or "")
-    pcall(function()
-        if not _tjBootGui then
-            _tjBootGui = Instance.new("ScreenGui")
-            _tjBootGui.Name = "TayJay_IndependentStartupStatus"
-            _tjBootGui.ResetOnSpawn = false
-            _tjBootGui.IgnoreGuiInset = true
-            _tjBootGui.DisplayOrder = 1000000
-            _tjBootGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            _tjBootLabel = Instance.new("TextLabel")
-            _tjBootLabel.Name = "Status"
-            _tjBootLabel.Size = UDim2.new(1, -16, 0, 58)
-            _tjBootLabel.Position = UDim2.new(0, 8, 0, 8)
-            _tjBootLabel.BackgroundColor3 = Color3.fromRGB(28, 38, 54)
-            _tjBootLabel.BackgroundTransparency = 0.06
-            _tjBootLabel.BorderSizePixel = 0
-            _tjBootLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            _tjBootLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-            _tjBootLabel.TextStrokeTransparency = 0.25
-            _tjBootLabel.Font = Enum.Font.GothamBold
-            _tjBootLabel.TextSize = 13
-            _tjBootLabel.TextWrapped = true
-            _tjBootLabel.TextXAlignment = Enum.TextXAlignment.Left
-            _tjBootLabel.TextYAlignment = Enum.TextYAlignment.Center
-            _tjBootLabel.ZIndex = 10000
-            _tjBootLabel.Parent = _tjBootGui
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, 8)
-            corner.Parent = _tjBootLabel
-            local outline = Instance.new("UIStroke")
-            outline.Color = Color3.fromRGB(80, 210, 235)
-            outline.Thickness = 1.5
-            outline.Parent = _tjBootLabel
-        end
-        _tjAttachBootGui()
-        if _tjBootLabel then
-            _tjBootLabel.BackgroundColor3 = isError and Color3.fromRGB(105, 32, 35) or Color3.fromRGB(28, 38, 54)
-            local outline = _tjBootLabel:FindFirstChildOfClass("UIStroke")
-            if outline then outline.Color = isError and Color3.fromRGB(255, 90, 90) or Color3.fromRGB(80, 210, 235) end
-            _tjBootLabel.Text = isError
-                and ("TAYJAY ERROR\n" .. string.sub(body, 1, 500))
-                or ("TAYJAY " .. tostring(state) .. "\n" .. string.sub(body, 1, 260))
-        end
-    end)
-
-    -- Retry GUI parenting while PlayerGui becomes available; notification is a fallback.
-    pcall(function()
-        task.spawn(function()
-            for _ = 1, 12 do
-                if _tjBootGui and _tjBootGui.Parent then break end
-                pcall(_tjAttachBootGui)
-                task.wait(0.5)
-            end
-        end)
-    end)
-    if state == "STARTING" or state == "ERROR" or state == "READY" then
-        pcall(function()
-            task.spawn(function()
-                local starter = game:GetService("StarterGui")
-                for _ = 1, 10 do
-                    local ok = pcall(function()
-                        starter:SetCore("SendNotification", {
-                            Title = isError and "TAYJAY SCRIPT ERROR" or "TAYJAY",
-                            Text = string.sub(body ~= "" and body or tostring(state), 1, 180),
-                            Duration = isError and 10 or 5
-                        })
-                    end)
-                    if ok then break end
-                    task.wait(0.5)
-                end
-            end)
-        end)
-    end
-    if state == "READY" then
-        pcall(function()
-            task.delay(12, function()
-                if _tjBootGui and _tjBootGui.Parent then _tjBootGui:Destroy() end
-                _tjBootGui, _tjBootLabel = nil, nil
-            end)
-        end)
-    end
-end
-
-_G.TAYJAY_DIAGNOSTIC = _tjShowDiagnostic
-pcall(function() _tjShowDiagnostic("STARTING", "ไฟล์ถูกเรียกใช้งานแล้ว • กำลังเริ่มระบบ...") end)
-
--- Capture asynchronous Roblox/Luau errors as well as errors caught by xpcall below.
-local _tjLogConnection
-pcall(function()
-    local logService = game:GetService("LogService")
-    _tjLogConnection = logService.MessageOut:Connect(function(message, messageType)
-        if messageType == Enum.MessageType.MessageError then
-            pcall(function() _tjShowDiagnostic("ERROR", message) end)
-        end
-    end)
-    task.delay(120, function()
-        if _tjLogConnection then
-            pcall(function() _tjLogConnection:Disconnect() end)
-            _tjLogConnection = nil
-        end
-    end)
-end)
-
 -- Catch synchronous startup failures and keep the error visible on-screen.
 local _tjRunOK, _tjRunError = xpcall(function()
--- TAYJAY STARTUP DIAGNOSTIC: must be the first executable statement.
-print("[TAYJAY BOOT] File entered; startup sequence begins.")
-
 print("[TAYJAY SHADOW HUNTER + DEATH NOTE WARP] Starting initialization...")
 if not game:IsLoaded() then 
    pcall(function() game.Loaded:Wait() end)
@@ -2963,8 +2826,7 @@ end)
 if not okMW then
    pcall(function() warn("[TAYJAY M-WARP] initialization failed: " .. tostring(errMW)) end)
    pcall(function()
-       if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "M-WARP: " .. tostring(errMW)) end
-   end)
+          end)
 end
 end
 
@@ -3160,8 +3022,7 @@ end)
 if not okRB then
    pcall(function() warn("[TAYJAY RAPID] initialization failed: " .. tostring(errRB)) end)
    pcall(function()
-       if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "RAPID: " .. tostring(errRB)) end
-   end)
+          end)
 end
 end
 
@@ -4820,9 +4681,6 @@ end))
 if not screenGui or not screenGui.Parent then
    error("TAYJAY: main ScreenGui ไม่มี Parent จึงไม่สามารถแสดงเมนูได้")
 end
-if _G.TAYJAY_DIAGNOSTIC then
-   _G.TAYJAY_DIAGNOSTIC("READY", "เมนูหลักและระบบเริ่มต้นทำงานแล้ว")
-end
 print("[TAYJAY] Death Note Shadow Hunter + WARP UI + MM2 ESP initialized.")
 
 end) -- isolated FPS Booster scope; avoids main-chunk local limit
@@ -4834,7 +4692,4 @@ end)
 
 if not _tjRunOK then
     pcall(function() warn("[TAYJAY STARTUP ERROR]\n" .. tostring(_tjRunError)) end)
-    pcall(function()
-        if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", _tjRunError) end
-    end)
 end
