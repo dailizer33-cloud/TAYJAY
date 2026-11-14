@@ -1140,6 +1140,26 @@ local lockedDeathNoteTarget = nil
 local isDeathNoteTargetLocked = false
 local shadowTargetReleased = false
 
+-- Death Note attack lock: reuse the same target attack routine as WALK2.
+-- The shared 0.25s cooldown in tryAttackTarget remains the rate limiter.
+trackConnection(RunService.Heartbeat:Connect(function()
+    if not states.DNWarp or not isDeathNoteTargetLocked then return end
+    local lockedPlayer = lockedDeathNoteTarget
+    if not lockedPlayer or lockedPlayer.Parent ~= Players then return end
+
+    local targetCharacter = lockedPlayer.Character
+    local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
+    local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
+    local localCharacter = LocalPlayer.Character
+    local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
+
+    -- Match WALK2's 25-stud range, without switching to another player.
+    if targetRoot and targetHumanoid and targetHumanoid.Health > 0 and localRoot
+        and (localRoot.Position - targetRoot.Position).Magnitude <= 25 then
+        walk2AttackTarget(targetCharacter)
+    end
+end))
+
 -- Client-side visual hide only; this does not make the character server-invisible.
 local function setInvisibility(char, invisible)
    if not char then return end
@@ -1266,19 +1286,25 @@ local function createPlayerCard(playerObj, parentScroll, isKiller)
            targetTitle.Text = "🚫 อยู่ใน blacklist"
            return
        end
-       -- Immediate one-shot attack through the same target/remote path as WALK2.
-       if playerObj.Character then walk2AttackTarget(playerObj.Character) end
        if selectedDeathNoteTarget == playerObj then
-           -- กดชื่อเดิมอีกครั้ง = ยกเลิก แล้วกลับไปยืนที่จุดยืน
+           -- กดชื่อเดิมอีกครั้ง = ปลดล็อก หยุดโจมตี และหยุดติดตาม
            selectedDeathNoteTarget = nil
+           if lockedDeathNoteTarget == playerObj then lockedDeathNoteTarget = nil end
+           isDeathNoteTargetLocked = false
+           shadowTargetReleased = true
            syncButtonState("DNWarp", false)
            targetTitle.Text = "🎯 Target: none"
+           targetHpLabel.Text = "Target unlocked • Attack stopped"
            return
        end
-       -- กดชื่อใหม่ = เปลี่ยนเป้าหมายและเปิด WARP ตามเป้านั้น
+       -- กดชื่อใหม่ = ล็อก Player ตัวนี้เป็นเป้าหมายเดียวของ Death Note + WALK2
        selectedDeathNoteTarget = playerObj
+       lockedDeathNoteTarget = playerObj
+       isDeathNoteTargetLocked = true
        shadowTargetReleased = false
        syncButtonState("DNWarp", true)
+       -- เริ่มโจมตีทันทีหนึ่งครั้ง; Heartbeat จะใช้ WALK2 ซ้ำกับเป้าหมายเดิมในระยะ 25 studs
+       if playerObj.Character then walk2AttackTarget(playerObj.Character) end
        pcall(function() if setclipboard then setclipboard(playerObj.Name) end end)
        nameLabel.Text = "✓ SELECTED"
        targetTitle.Text = "🎯 Target: " .. playerObj.Name
@@ -1849,10 +1875,13 @@ task.spawn(function()
                    or dnHum.Health <= 0
                )
                 if dnGone then
-                   -- เป้าหมายตาย/ออก: กลับจุดยืน แล้วปิดโหมดและยกเลิกการเลือก
-                   goHome(myRootNow)
-                   selectedDeathNoteTarget = nil
-                   syncButtonState("DNWarp", false)
+                    -- เป้าหมายตาย/ออก: หยุดโจมตี ปลดล็อก แล้วกลับจุดยืน
+                    goHome(myRootNow)
+                    selectedDeathNoteTarget = nil
+                    lockedDeathNoteTarget = nil
+                    isDeathNoteTargetLocked = false
+                    shadowTargetReleased = true
+                    syncButtonState("DNWarp", false)
                else
                    targetPlayer = selectedDeathNoteTarget
                end
@@ -1898,11 +1927,12 @@ task.spawn(function()
                targetTitle.Text = (states.KillAura and "🕶 WARP: " or "🕶 DN: ") .. targetPlayer.Name
                local hp = math.max(0, math.floor(targetHumanoid.Health))
                local maxHp = math.max(1, math.floor(targetHumanoid.MaxHealth))
-               local followStatus = states.DNWarp and "FOLLOW ONLY" or (AttackRemote and "FOLLOW + ATTACK" or "FOLLOW • NO ATTACK REMOTE")
-               targetHpLabel.Text = hp .. " / " .. maxHp .. " HP  •  " .. followStatus
-               targetBarFill.Size = UDim2.new(math.clamp(hp / maxHp, 0, 1), 0, 1, 0)
-               -- Death Note DNWarp is follow-only and never depends on an attack Remote.
-               -- Keep the existing KillAura attack behavior separate from Death Note tracking.
+                local followStatus = states.DNWarp
+                    and (isDeathNoteTargetLocked and (AttackRemote and "LOCKED + WALK2 ATTACK" or "LOCKED • NO ATTACK REMOTE") or "FOLLOW ONLY")
+                    or (AttackRemote and "FOLLOW + ATTACK" or "FOLLOW • NO ATTACK REMOTE")
+                targetHpLabel.Text = hp .. " / " .. maxHp .. " HP  •  " .. followStatus
+                targetBarFill.Size = UDim2.new(math.clamp(hp / maxHp, 0, 1), 0, 1, 0)
+                -- Death Note lock calls the same walk2AttackTarget() path as WALK2; KillAura remains separate.
                if states.KillAura and AttackRemote then tryAttackTarget(targetCharacter) end
            else
                if shadowHiddenCharacter then
