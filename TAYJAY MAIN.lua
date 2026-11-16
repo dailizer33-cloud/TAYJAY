@@ -4762,6 +4762,7 @@ local V70Perf = {
 }
 _G.TAYJAY_V70_PERF = V70Perf
 
+local v70RestoreAll -- forward declaration for the FPS owner's stop callback
 local V70Owner = newCleanupOwner("FPS", function()
     v70RestoreAll()
     v70RestoreFPSCap()
@@ -4830,7 +4831,7 @@ local function v70SaveSet(object, property, value)
    if original ~= value then pcall(function() object[property] = value end) end
 end
 
-local function v70RestoreAll()
+v70RestoreAll = function()
    V70Perf.ScanToken = V70Perf.ScanToken + 1
    V70Perf.Enabled = false
    V70BoostBag:Clean()
