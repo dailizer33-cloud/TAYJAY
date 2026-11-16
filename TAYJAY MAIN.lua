@@ -5609,8 +5609,7 @@ _G.TAYJAY_STOP_ALL = function()
     _G.TAYJAY_POS_LOCK_UNTIL = nil
     _G.TAYJAY_FOLLOW = nil
     pcall(function() if _G.TAYJAY_MM2_STOP then _G.TAYJAY_MM2_STOP() end end)
-    pcall(v70RestoreAll)
-    pcall(v70RestoreFPSCap)
+    -- FPS restoration is owned by ResourceManager -> FPS Owner -> Cleanup Bags.
     pcall(function()
         for _,player in ipairs(Players:GetPlayers()) do
             local character=player.Character
