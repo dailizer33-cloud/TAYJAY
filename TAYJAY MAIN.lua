@@ -401,6 +401,67 @@ local GREEN = {
    warning = Color3.fromRGB(255, 190, 68),  
 }
 
+
+-- =========================================================
+-- TAYJAY RESOURCE MANAGER V1 — MONITOR MODE (NON-BLOCKING)
+-- Observes declared writes only. It never acquires, blocks, preempts,
+-- or changes the behavior of a registered feature.
+-- =========================================================
+local ResourceManager = {
+    Mode = "MONITOR",
+    Modules = {},
+    RecentWrites = {},
+    Conflicts = {},
+    TotalWrites = 0,
+    TotalConflicts = 0,
+    Window = 0.18,
+    MaxConflicts = 30
+}
+function ResourceManager:Register(definition)
+    if type(definition) ~= "table" or type(definition.id) ~= "string" then return false end
+    local writes = {}
+    for _, resource in ipairs(definition.writes or {}) do
+        if type(resource) == "string" then writes[resource] = true end
+    end
+    self.Modules[definition.id] = { id = definition.id, writes = writes, priority = tonumber(definition.priority) or 0 }
+    return true
+end
+function ResourceManager:RecordWrite(moduleId, resource)
+    local module = self.Modules[moduleId]
+    if not module or not module.writes[resource] then return end
+    local now = os.clock()
+    self.TotalWrites = self.TotalWrites + 1
+    local recent = self.RecentWrites[resource] or {}
+    local kept = {}
+    for _, event in ipairs(recent) do
+        if now - event.time <= self.Window then
+            kept[#kept + 1] = event
+            if event.module ~= moduleId then
+                self.TotalConflicts = self.TotalConflicts + 1
+                local conflict = {
+                    resource = resource, first = event.module, second = moduleId,
+                    time = now, priorityFirst = self.Modules[event.module] and self.Modules[event.module].priority or 0,
+                    prioritySecond = module.priority
+                }
+                self.Conflicts[#self.Conflicts + 1] = conflict
+                while #self.Conflicts > self.MaxConflicts do table.remove(self.Conflicts, 1) end
+            end
+        end
+    end
+    kept[#kept + 1] = { module = moduleId, time = now }
+    self.RecentWrites[resource] = kept
+end
+function ResourceManager:GetStatus()
+    return {
+        mode = self.Mode, modules = #((function()
+            local ids = {}; for id in pairs(self.Modules) do ids[#ids + 1] = id end; return ids
+        end)()),
+        writes = self.TotalWrites, conflicts = self.TotalConflicts,
+        latest = self.Conflicts[#self.Conflicts]
+    }
+end
+_G.TAYJAY_RESOURCE_MANAGER = ResourceManager
+
 local config = { WalkSpeed = 16 }
 local originalWalkSpeed = nil
 local isBusy = false 
@@ -409,6 +470,55 @@ local states = {
    Xray = false, ESP = true, DeathNote = false, KillAura = false, NormalKillAura = false, MonsterWarp = false,
    ServerSelector = false, MM2RoleESP = false, AutoWarp = false, DNWarp = false
 }
+
+
+-- Resource declarations: descriptive only in Monitor Mode.
+ResourceManager:Register({ id = "Speed", writes = { "WalkSpeed" }, priority = 10 })
+ResourceManager:Register({ id = "Fly", writes = { "Position", "HumanoidFlags", "AnimateState" }, priority = 30 })
+ResourceManager:Register({ id = "ShadowHunter", writes = { "Position", "Velocity", "Collision" }, priority = 50 })
+ResourceManager:Register({ id = "MonsterWarp", writes = { "Position", "Velocity", "Collision" }, priority = 60 })
+ResourceManager:Register({ id = "MM2Movement", writes = { "Position" }, priority = 50 })
+ResourceManager:Register({ id = "Noclip", writes = { "Collision" }, priority = 20 })
+ResourceManager:Register({ id = "ZoomLimit", writes = { "CameraSettings" }, priority = 20 })
+ResourceManager:Register({ id = "NoclipCam", writes = { "CameraOcclusion" }, priority = 20 })
+ResourceManager:Register({ id = "Attack", writes = {}, priority = 0 })
+
+local resourceMonitorGui = Instance.new("Frame")
+resourceMonitorGui.Name = "TayJayResourceMonitor"
+resourceMonitorGui.Size = UDim2.fromOffset(204, 48)
+resourceMonitorGui.Position = UDim2.new(0, 10, 0, 10)
+resourceMonitorGui.BackgroundColor3 = Color3.fromRGB(24, 34, 48)
+resourceMonitorGui.BackgroundTransparency = 0.12
+resourceMonitorGui.BorderSizePixel = 0
+resourceMonitorGui.ZIndex = 100
+resourceMonitorGui.Parent = screenGui
+local resourceMonitorCorner = Instance.new("UICorner")
+resourceMonitorCorner.CornerRadius = UDim.new(0, 9)
+resourceMonitorCorner.Parent = resourceMonitorGui
+local resourceMonitorStroke = Instance.new("UIStroke")
+resourceMonitorStroke.Color = Color3.fromRGB(65, 210, 180)
+resourceMonitorStroke.Thickness = 1.2
+resourceMonitorStroke.Parent = resourceMonitorGui
+local resourceMonitorText = Instance.new("TextLabel")
+resourceMonitorText.BackgroundTransparency = 1
+resourceMonitorText.Size = UDim2.new(1, -12, 1, -8)
+resourceMonitorText.Position = UDim2.fromOffset(6, 4)
+resourceMonitorText.Font = Enum.Font.GothamSemibold
+resourceMonitorText.TextSize = 11
+resourceMonitorText.TextColor3 = Color3.fromRGB(245, 250, 255)
+resourceMonitorText.TextXAlignment = Enum.TextXAlignment.Left
+resourceMonitorText.TextYAlignment = Enum.TextYAlignment.Center
+resourceMonitorText.TextWrapped = true
+resourceMonitorText.ZIndex = 101
+resourceMonitorText.Parent = resourceMonitorGui
+trackConnection(RunService.Heartbeat:Connect(function()
+    local status = ResourceManager:GetStatus()
+    local latest = status.latest
+    local conflictLine = latest and ("Last: " .. latest.first .. " / " .. latest.second .. " (" .. latest.resource .. ")") or "No conflicts detected"
+    resourceMonitorText.Text = "RESOURCE MONITOR · " .. status.mode
+        .. "\nModules " .. status.modules .. "  |  Writes " .. status.writes
+        .. "  |  Conflicts " .. status.conflicts .. "\n" .. conflictLine
+end))
 
 local uiSyncRegistry = {}
 local function registerUiSync(key, updateFunc)
@@ -950,13 +1060,16 @@ local function toggleFlyState()
 
    local animate = char:FindFirstChild("Animate")
    savedAnimateDisabled = animate and animate.Disabled or false
-   if animate then animate.Disabled = true end
+   if animate then ResourceManager:RecordWrite("Fly", "AnimateState"); animate.Disabled = true end
 
-   hum.AutoRotate = false
+   ResourceManager:RecordWrite("Fly", "HumanoidFlags")
+    hum.AutoRotate = false
    for _, stateType in ipairs(flyStateTypes) do
-       pcall(function() hum:SetStateEnabled(stateType, false) end)
+       ResourceManager:RecordWrite("Fly", "HumanoidFlags")
+        pcall(function() hum:SetStateEnabled(stateType, false) end)
    end
-   hum.PlatformStand = true
+   ResourceManager:RecordWrite("Fly", "HumanoidFlags")
+    hum.PlatformStand = true
    pcall(function() hum:ChangeState(Enum.HumanoidStateType.Swimming) end)
 
    local flyPart = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or root
@@ -994,12 +1107,14 @@ local function toggleFlyState()
        local move = hum.MoveDirection
        if not mwLocked and move.Magnitude > 0.001 then
            local frameScale = math.clamp(dt * 60, 0, 2)
-           char:TranslateBy(move * flySpeeds * frameScale)
+           ResourceManager:RecordWrite("Fly", "Position")
+            char:TranslateBy(move * flySpeeds * frameScale)
        end
 
        if not mwLocked and verticalInput ~= 0 then
            local frameScale = math.clamp(dt * 60, 0, 2)
-           char:TranslateBy(Vector3.new(0, verticalInput * flySpeeds * frameScale, 0))
+           ResourceManager:RecordWrite("Fly", "Position")
+            char:TranslateBy(Vector3.new(0, verticalInput * flySpeeds * frameScale, 0))
        end
 
        bv.Velocity = Vector3.new(0, 0.1, 0)
@@ -1663,9 +1778,11 @@ do
        local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
        if not myRootNow or not tRoot or not tHum or tHum.Health <= 0 then return end
        _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.3 -- บอก Fly ว่า WARP คุมตำแหน่งอยู่ (ไม่ขยับซ้ำ)
-       myRootNow.AssemblyLinearVelocity = Vector3.zero
+       ResourceManager:RecordWrite("ShadowHunter", "Velocity")
+        myRootNow.AssemblyLinearVelocity = Vector3.zero
        myRootNow.AssemblyAngularVelocity = Vector3.zero
-       myRootNow.CFrame = tRoot.CFrame * FOLLOW_OFFSET
+       ResourceManager:RecordWrite("ShadowHunter", "Position")
+        myRootNow.CFrame = tRoot.CFrame * FOLLOW_OFFSET
    end))
 
    -- NOCLIP ทุกเฟรมระหว่าง WARP ล็อกเป้า (ทะลุสิ่งกีดขวาง) และคืนค่าการชนเมื่อ WARP หยุดล็อก
@@ -2785,10 +2902,12 @@ local okMonster, errMonster = pcall(function()
        if dodging then
            destination = CFrame.new(targetRoot.Position + Vector3.new(0, MONSTER_DODGE_HEIGHT, 0))
        end
-       myRoot.AssemblyLinearVelocity = Vector3.zero
+       ResourceManager:RecordWrite("MonsterWarp", "Velocity")
+        myRoot.AssemblyLinearVelocity = Vector3.zero
        myRoot.AssemblyAngularVelocity = Vector3.zero
        if orbiting or monsterLastRoot ~= targetRoot or (myRoot.Position - destination.Position).Magnitude > MONSTER_SNAP_DISTANCE then
-           myRoot.CFrame = destination
+           ResourceManager:RecordWrite("MonsterWarp", "Position")
+            myRoot.CFrame = destination
            monsterLastRoot = targetRoot
        end
    end
@@ -3771,7 +3890,8 @@ trackConnection(RunService.RenderStepped:Connect(function()
    local hum = char and char:FindFirstChildOfClass("Humanoid")
    if states.Speed and hum then
        if originalWalkSpeed == nil then originalWalkSpeed = hum.WalkSpeed end
-       hum.WalkSpeed = config.WalkSpeed
+       ResourceManager:RecordWrite("Speed", "WalkSpeed")
+        hum.WalkSpeed = config.WalkSpeed
    end
 end))
 
@@ -4166,7 +4286,8 @@ do
                local currentCharacter = LocalPlayer.Character
                local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
                if currentTargetRoot and currentRoot then
-                   currentRoot.CFrame = currentTargetRoot.CFrame * CFrame.new(0, 0, 2.5)
+                   ResourceManager:RecordWrite("MM2Movement", "Position")
+                    currentRoot.CFrame = currentTargetRoot.CFrame * CFrame.new(0, 0, 2.5)
                    local targetHumanoid = currentTargetCharacter:FindFirstChildOfClass("Humanoid")
                    if targetHumanoid and targetHumanoid.Health > 0 then
                        tryAttackTarget(currentTargetCharacter)
@@ -4178,7 +4299,8 @@ do
            local currentCharacter = LocalPlayer.Character
            local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
            if currentRoot then
-               currentRoot.CFrame = originalCFrame
+               ResourceManager:RecordWrite("MM2Movement", "Position")
+                currentRoot.CFrame = originalCFrame
            end
        end)
        isBusy = false
@@ -4428,7 +4550,8 @@ local _tjZoomLimitActive = true
 local function enforceZoomLimit()
    if not _tjZoomLimitActive then return end
    pcall(function()
-      if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then
+      ResourceManager:RecordWrite("ZoomLimit", "CameraSettings")
+       if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then
          LocalPlayer.CameraMode = Enum.CameraMode.Classic
       end
       if LocalPlayer.CameraMaxZoomDistance ~= 70 then
@@ -4452,7 +4575,8 @@ local _tjNoclipCamActive = true
 local function enforceNoclipCam()
    if not _tjNoclipCamActive then return end
    pcall(function()
-      if LocalPlayer.DevCameraOcclusionMode ~= Enum.DevCameraOcclusionMode.Invisicam then
+      ResourceManager:RecordWrite("NoclipCam", "CameraOcclusion")
+       if LocalPlayer.DevCameraOcclusionMode ~= Enum.DevCameraOcclusionMode.Invisicam then
          LocalPlayer.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.Invisicam
       end
    end)
