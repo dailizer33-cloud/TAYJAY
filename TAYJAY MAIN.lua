@@ -4035,7 +4035,7 @@ do
 
    local mm2ListFrame = Instance.new("Frame")
    mm2ListFrame.Name = "TayJayMM2PlayerList"
-   mm2ListFrame.Size = UDim2.new(0, 224, 0, 300)
+   mm2ListFrame.Size = UDim2.new(0, 252, 0, 316)
    mm2ListFrame.AnchorPoint = Vector2.new(0, 1)
    mm2ListFrame.Position = UDim2.new(0, 244, 1, -12)
    mm2ListFrame.BackgroundColor3 = GREEN.deep
@@ -4077,35 +4077,58 @@ do
    mm2ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
    mm2ListLayout.Parent = mm2ScrollingFrame
 
-   local function getMM2PlayerRole(player)
-       local character = player.Character
-       local backpack = player:FindFirstChild("Backpack")
-       local hasKnife, hasGun = false, false
+   local function detectMM2ExplicitRole(player)
+       local value = player:GetAttribute("Role")
+       if type(value) ~= "string" then
+           local object = player:FindFirstChild("Role")
+           if object and object:IsA("StringValue") then value = object.Value end
+       end
+       if type(value) ~= "string" then return nil end
+       value = string.lower(value)
+       if value == "murderer" then return "Murderer" end
+       if value == "sheriff" then return "Sheriff" end
+       if value == "innocent" then return "Innocent" end
+       return nil
+   end
 
-       local function inspectTools(container)
-           if not container then return end
-           for _, item in ipairs(container:GetChildren()) do
-               if item:IsA("Tool") then
-                   local toolName = string.lower(item.Name)
-                   if toolName == "knife" or toolName == "murdererknife" then
-                       hasKnife = true
-                   elseif toolName == "gun" or toolName == "sheriffgun" or toolName == "revolver" then
-                       hasGun = true
+   local function detectMM2MurdererTool(player)
+       for _, container in ipairs({player.Character, player:FindFirstChild("Backpack")}) do
+           if container then
+               for _, item in ipairs(container:GetChildren()) do
+                   if item:IsA("Tool") then
+                       local name = string.lower(item.Name)
+                       if name == "knife" or name == "murdererknife" then return true end
                    end
                end
            end
        end
-       inspectTools(character)
-       inspectTools(backpack)
+       return false
+   end
 
-       if hasGun and hasKnife then
-           return "Unknown", Color3.fromRGB(255, 220, 110), "❔"
-       elseif hasGun then
-           return "Sheriff*", Color3.fromRGB(65, 155, 255), "🔫"
-       elseif hasKnife then
-           return "Murderer*", Color3.fromRGB(255, 65, 65), "🔪"
+   local function detectMM2SheriffTool(player)
+       for _, container in ipairs({player.Character, player:FindFirstChild("Backpack")}) do
+           if container then
+               for _, item in ipairs(container:GetChildren()) do
+                   if item:IsA("Tool") then
+                       local name = string.lower(item.Name)
+                       if name == "gun" or name == "sheriffgun" or name == "revolver" then return true end
+                   end
+               end
+           end
        end
-       return "Unknown", Color3.fromRGB(255, 220, 110), "❔"
+       return false
+   end
+
+   local function getMM2PlayerRole(player)
+       local role = detectMM2ExplicitRole(player)
+       if role == "Murderer" then return "Murderer", Color3.fromRGB(255, 55, 65), "🔪", 1 end
+       if role == "Sheriff" then return "Sheriff", Color3.fromRGB(55, 155, 255), "🔫", 2 end
+       if role == "Innocent" then return "Innocent", Color3.fromRGB(65, 220, 105), "•", 3 end
+       local knife = detectMM2MurdererTool(player)
+       local gun = detectMM2SheriffTool(player)
+       if knife and not gun then return "Murderer*", Color3.fromRGB(255, 75, 80), "🔪", 1 end
+       if gun and not knife then return "Sheriff*", Color3.fromRGB(75, 165, 255), "🔫", 2 end
+       return "Unknown", Color3.fromRGB(255, 215, 95), "❔", 4
    end
 
    local function teleportAndAttack(targetPlayer)
@@ -4252,15 +4275,27 @@ do
 
        for _, player in ipairs(Players:GetPlayers()) do
            if player ~= LocalPlayer then
-               local roleName, roleColor, roleIcon = getMM2PlayerRole(player)
+               local roleName, roleColor, roleIcon, roleOrder = getMM2PlayerRole(player)
                local row = mm2ScrollingFrame:FindFirstChild(player.Name)
 
                if not row then
                    row = Instance.new("Frame")
                    row.Name = player.Name
-                   row.Size = UDim2.new(1, 0, 0, 48)
+                   row.Size = UDim2.new(1, 0, 0, 50)
                    row.BackgroundColor3 = GREEN.panel
                    row.Parent = mm2ScrollingFrame
+                   row.LayoutOrder = roleOrder
+                   local rowTap = Instance.new("TextButton")
+                   rowTap.Name = "RowTap"
+                   rowTap.Size = UDim2.new(1, 0, 1, 0)
+                   rowTap.BackgroundTransparency = 1
+                   rowTap.Text = ""
+                   rowTap.AutoButtonColor = false
+                   rowTap.ZIndex = 1
+                   rowTap.Parent = row
+                   trackConnection(rowTap.Activated:Connect(function()
+                       teleportAndAttack(player)
+                   end))
                    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
                    local rowStroke = Instance.new("UIStroke", row)
                    rowStroke.Color = GREEN.stroke
@@ -4279,6 +4314,7 @@ do
                    nameLabel.TextStrokeColor3 = TEXT_OUTLINE
                    nameLabel.TextStrokeTransparency = 0.48
                    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+                   nameLabel.ZIndex = 2
                    nameLabel.Parent = row
 
                    local roleLabel = Instance.new("TextLabel")
@@ -4293,6 +4329,7 @@ do
                    roleLabel.TextStrokeColor3 = TEXT_OUTLINE
                    roleLabel.TextStrokeTransparency = 0.48
                    roleLabel.TextXAlignment = Enum.TextXAlignment.Center
+                   roleLabel.ZIndex = 2
                    roleLabel.Parent = row
 
                    local actionButton = Instance.new("TextButton")
@@ -4304,6 +4341,7 @@ do
                    actionButton.Text = roleIcon
                    actionButton.TextSize = 16
                    actionButton.Font = Enum.Font.GothamBold
+                   actionButton.ZIndex = 3
                    actionButton.Parent = row
                    Instance.new("UICorner", actionButton).CornerRadius = UDim.new(0, 6)
                    trackConnection(actionButton.Activated:Connect(function()
@@ -4314,9 +4352,10 @@ do
                    local actionButton = row:FindFirstChild("ActionBtn")
                    if roleLabel then
                        roleLabel.Text = roleName
-                       roleLabel.TextColor3 = WHITE_TEXT
+                       roleLabel.TextColor3 = roleColor
                    end
                    if actionButton then actionButton.Text = roleIcon end
+                   row.LayoutOrder = roleOrder
                end
            end
        end
