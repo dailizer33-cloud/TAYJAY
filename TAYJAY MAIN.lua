@@ -4762,10 +4762,21 @@ local V70Perf = {
 }
 _G.TAYJAY_V70_PERF = V70Perf
 
-local v70RestoreAll -- forward declaration for the FPS owner's stop callback
+local v70RestoreAll
+local v70RestoreFPSCap -- both callbacks must be forward-declared before FPS Owner creation
+
 local V70Owner = newCleanupOwner("FPS", function()
-    v70RestoreAll()
-    v70RestoreFPSCap()
+    -- Isolate each restoration so one failure cannot skip the final state reset.
+    local restoreAllOK, restoreAllErr = pcall(v70RestoreAll)
+    if not restoreAllOK then
+        warn("[TAYJAY FPS Owner] RestoreAll failed: " .. tostring(restoreAllErr))
+    end
+
+    local restoreCapOK, restoreCapErr = pcall(v70RestoreFPSCap)
+    if not restoreCapOK then
+        warn("[TAYJAY FPS Owner] RestoreFPSCap failed: " .. tostring(restoreCapErr))
+    end
+
     V70Perf.Alive = false
 end)
 local V70MonitorBag, V70ContentBag, V70BoostBag = newBag(), newBag(), newBag()
@@ -4808,7 +4819,7 @@ local function v70SetFPSUnlock(enabled)
    return true
 end
 
-local function v70RestoreFPSCap()
+v70RestoreFPSCap = function()
    if type(setfpscap) == "function" then
        pcall(setfpscap, V70Perf.OriginalFPSCap or 60)
    end
