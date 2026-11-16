@@ -411,6 +411,7 @@ local ResourceManager = {
     Mode = "MONITOR",
     Modules = {},
     RecentWrites = {},
+    LastConflictAt = {},
     Conflicts = {},
     TotalWrites = 0,
     TotalConflicts = 0,
@@ -437,14 +438,20 @@ function ResourceManager:RecordWrite(moduleId, resource)
         if now - event.time <= self.Window then
             kept[#kept + 1] = event
             if event.module ~= moduleId then
-                self.TotalConflicts = self.TotalConflicts + 1
-                local conflict = {
-                    resource = resource, first = event.module, second = moduleId,
-                    time = now, priorityFirst = self.Modules[event.module] and self.Modules[event.module].priority or 0,
-                    prioritySecond = module.priority
-                }
-                self.Conflicts[#self.Conflicts + 1] = conflict
-                while #self.Conflicts > self.MaxConflicts do table.remove(self.Conflicts, 1) end
+                local firstId, secondId = event.module, moduleId
+                if firstId > secondId then firstId, secondId = secondId, firstId end
+                local conflictKey = resource .. "|" .. firstId .. "|" .. secondId
+                if now - (self.LastConflictAt[conflictKey] or 0) >= 0.5 then
+                    self.LastConflictAt[conflictKey] = now
+                    self.TotalConflicts = self.TotalConflicts + 1
+                    local conflict = {
+                        resource = resource, first = event.module, second = moduleId,
+                        time = now, priorityFirst = self.Modules[event.module] and self.Modules[event.module].priority or 0,
+                        prioritySecond = module.priority
+                    }
+                    self.Conflicts[#self.Conflicts + 1] = conflict
+                    while #self.Conflicts > self.MaxConflicts do table.remove(self.Conflicts, 1) end
+                end
             end
         end
     end
@@ -511,14 +518,17 @@ resourceMonitorText.TextYAlignment = Enum.TextYAlignment.Center
 resourceMonitorText.TextWrapped = true
 resourceMonitorText.ZIndex = 101
 resourceMonitorText.Parent = resourceMonitorGui
-trackConnection(RunService.Heartbeat:Connect(function()
-    local status = ResourceManager:GetStatus()
-    local latest = status.latest
-    local conflictLine = latest and ("Last: " .. latest.first .. " / " .. latest.second .. " (" .. latest.resource .. ")") or "No conflicts detected"
-    resourceMonitorText.Text = "RESOURCE MONITOR · " .. status.mode
-        .. "\nModules " .. status.modules .. "  |  Writes " .. status.writes
-        .. "  |  Conflicts " .. status.conflicts .. "\n" .. conflictLine
-end))
+task.spawn(function()
+    while screenGui.Parent do
+        local status = ResourceManager:GetStatus()
+        local latest = status.latest
+        local conflictLine = latest and ("Last: " .. latest.first .. " / " .. latest.second .. " (" .. latest.resource .. ")") or "No conflicts detected"
+        resourceMonitorText.Text = "RESOURCE MONITOR · " .. status.mode
+            .. "\nModules " .. status.modules .. "  |  Writes " .. status.writes
+            .. "  |  Conflicts " .. status.conflicts .. "\n" .. conflictLine
+        task.wait(0.5)
+    end
+end)
 
 local uiSyncRegistry = {}
 local function registerUiSync(key, updateFunc)
