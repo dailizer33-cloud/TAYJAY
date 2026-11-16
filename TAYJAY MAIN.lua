@@ -469,6 +469,71 @@ function ResourceManager:GetStatus()
 end
 _G.TAYJAY_RESOURCE_MANAGER = ResourceManager
 
+-- TAYJAY CLEANUP CORE V1: ResourceManager -> Owner -> Bag.
+local function cleanupBagItem(obj)
+    local objectType = typeof(obj)
+    if objectType == "RBXScriptConnection" then obj:Disconnect()
+    elseif objectType == "Instance" then obj:Destroy()
+    elseif type(obj) == "function" then obj() end
+end
+local function newBag()
+    local items, bag = {}, { Cleaned = false }
+    function bag:Add(obj)
+        if obj == nil then return obj end
+        if self.Cleaned then pcall(cleanupBagItem, obj); return obj end
+        items[#items + 1] = obj
+        return obj
+    end
+    function bag:Clean()
+        if self.Cleaned then return false end
+        self.Cleaned = true
+        for i = #items, 1, -1 do
+            local obj = items[i]; items[i] = nil
+            local ok, err = pcall(cleanupBagItem, obj)
+            if not ok then warn("[TAYJAY CleanupBag] " .. tostring(err)) end
+        end
+        return true
+    end
+    function bag:Reset()
+        if not self.Cleaned then return false end
+        self.Cleaned = false
+        return true
+    end
+    function bag:Count() return #items end
+    return bag
+end
+local function newCleanupOwner(ownerId, onStop)
+    local owner = { Id = ownerId, Stopped = false, Bag = newBag() }
+    function owner:OwnBag(bag)
+        if type(bag) ~= "table" or type(bag.Clean) ~= "function" then return false end
+        self.Bag:Add(function() bag:Clean() end)
+        return true
+    end
+    function owner:Stop()
+        if self.Stopped then return false end
+        self.Stopped = true
+        if type(onStop) == "function" then
+            local ok, err = pcall(onStop)
+            if not ok then warn("[TAYJAY Owner] " .. self.Id .. ": " .. tostring(err)) end
+        end
+        self.Bag:Clean()
+        return true
+    end
+    return owner
+end
+function ResourceManager:RegisterOwner(ownerId, owner)
+    if type(ownerId) ~= "string" or type(owner) ~= "table" or type(owner.Stop) ~= "function" then return false end
+    if self.Owners[ownerId] ~= nil then return false end
+    self.Owners[ownerId] = owner
+    return true
+end
+function ResourceManager:StopOwner(ownerId)
+    local owner = self.Owners[ownerId]
+    if not owner then return false end
+    return owner:Stop()
+end
+ResourceManager.Owners = {}
+
 local config = { WalkSpeed = 16 }
 local originalWalkSpeed = nil
 local isBusy = false 
@@ -4697,8 +4762,25 @@ local V70Perf = {
 }
 _G.TAYJAY_V70_PERF = V70Perf
 
+local V70Owner = newCleanupOwner("FPS", function()
+    v70RestoreAll()
+    v70RestoreFPSCap()
+    V70Perf.Alive = false
+end)
+local V70MonitorBag, V70ContentBag, V70BoostBag = newBag(), newBag(), newBag()
+V70Owner:OwnBag(V70MonitorBag)
+V70Owner:OwnBag(V70ContentBag)
+V70Owner:OwnBag(V70BoostBag)
+assert(ResourceManager:RegisterOwner("FPS", V70Owner), "FPS owner registration failed")
+V70Perf.Owner = V70Owner
+V70Perf.MonitorBag, V70Perf.ContentBag, V70Perf.BoostBag = V70MonitorBag, V70ContentBag, V70BoostBag
+
 local function v70Track(list, connection)
    table.insert(list, connection)
+   local ownerBag = list == V70Perf.MonitorConnections and V70MonitorBag
+       or list == V70Perf.ContentConnections and V70ContentBag
+       or list == V70Perf.BoostConnections and V70BoostBag
+   if ownerBag then ownerBag:Add(connection) end
    return connection
 end
 
@@ -4751,7 +4833,8 @@ end
 local function v70RestoreAll()
    V70Perf.ScanToken = V70Perf.ScanToken + 1
    V70Perf.Enabled = false
-   for _, connection in ipairs(V70Perf.BoostConnections) do pcall(function() connection:Disconnect() end) end
+   V70BoostBag:Clean()
+   V70BoostBag:Reset()
    table.clear(V70Perf.BoostConnections)
    for object, properties in pairs(V70Perf.Saved) do
        for property, originalValue in pairs(properties) do
@@ -4944,6 +5027,7 @@ updatePerfScale()
 if workspace.CurrentCamera then v70Track(V70Perf.MonitorConnections, workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updatePerfScale)) end
 v70Track(V70Perf.MonitorConnections, perfGui.ChildAdded:Connect(function() task.defer(updatePerfScale) end))
 V70Perf.GUI = perfGui
+ V70Owner.Bag:Add(perfGui)
 
 local function ui(className, props, parent)
    local obj = Instance.new(className)
@@ -5004,9 +5088,8 @@ end))
 local currentTab = "FPS"
 local statusLabel
 local function clearContent()
-   for _, connection in ipairs(V70Perf.ContentConnections) do
-       pcall(function() connection:Disconnect() end)
-   end
+   V70ContentBag:Clean()
+   V70ContentBag:Reset()
    table.clear(V70Perf.ContentConnections)
    for _, child in ipairs(content:GetChildren()) do
        if not child:IsA("UIListLayout") then child:Destroy() end
@@ -5299,17 +5382,15 @@ v70Track(V70Perf.MonitorConnections, RunService.Heartbeat:Connect(function(dt)
 end))
 
 function V70Perf.Cleanup()
-   if not V70Perf.Alive then return end
-   v70RestoreAll()
-   v70RestoreFPSCap()
-   V70Perf.Alive = false
-   for _, connection in ipairs(V70Perf.MonitorConnections) do pcall(function() connection:Disconnect() end) end
+   if not V70Perf.Alive then return false end
+   local stopped = ResourceManager:StopOwner("FPS")
    table.clear(V70Perf.MonitorConnections)
-   for _, connection in ipairs(V70Perf.ContentConnections) do pcall(function() connection:Disconnect() end) end
    table.clear(V70Perf.ContentConnections)
-   if V70Perf.GUI then pcall(function() V70Perf.GUI:Destroy() end); V70Perf.GUI = nil end
+   table.clear(V70Perf.BoostConnections)
+   V70Perf.GUI = nil
    V70Perf.GraphBars = nil
    if _G.TAYJAY_V70_PERF == V70Perf then _G.TAYJAY_V70_PERF = nil end
+   return stopped
 end
 
 renderTab()
