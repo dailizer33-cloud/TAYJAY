@@ -1,0 +1,8 @@
+# Build output (Phase 2 bundler)
+/dist/
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
