@@ -57,6 +57,16 @@ MAIN:4329 -> src/features/mm2.lua:135
 $ python3 tools/where.py --map      # ดูช่วงบรรทัดของทุกโมดูล
 ```
 
+### ตรวจ Luau และข้อจำกัด 200 local
+
+Luau จำกัด register (local + ค่าชั่วคราว) ไว้ที่ 200 ต่อฟังก์ชัน และ MAIN เก็บ state เป็น local ใน scope ใหญ่ scope เดียว workflow `Luau` จะ:
+
+- คอมไพล์ไฟล์ build และ `Tayjay Farm.lua` ที่ -O1 (fail ถ้าคอมไพล์ไม่ผ่าน พร้อมบอกโมดูล:บรรทัด)
+- วัดว่า main scope และ FPS scope ยังเหลือ register ว่างกี่ตัว และขึ้น **warning** ถ้าเหลือน้อยกว่า 30
+- รายงานผล -O0 เป็นข้อมูลเท่านั้น (ตอนนี้ -O0 คอมไพล์ไม่ผ่านอยู่แล้ว)
+
+รันเองได้ด้วย `python3 tools/check_locals.py --luau-compile /path/to/luau-compile`
+
 ## เวอร์ชัน
 
 | Tag | ไฟล์ |
