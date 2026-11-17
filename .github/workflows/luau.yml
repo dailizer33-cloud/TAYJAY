@@ -1,0 +1,37 @@
+name: Luau
+
+# Compile the build at -O1 and warn when the 200-register limit is getting close.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LUAU_VERSION: "0.747"
+  WARN_BELOW: "30"
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install luau-compile ${{ env.LUAU_VERSION }}
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/luau.zip" \
+            "https://github.com/luau-lang/luau/releases/download/${LUAU_VERSION}/luau-ubuntu.zip"
+          unzip -q "$RUNNER_TEMP/luau.zip" -d "$RUNNER_TEMP/luau"
+          chmod +x "$RUNNER_TEMP/luau/luau-compile"
+      - name: Compile at -O1 and check local headroom
+        run: |
+          python3 tools/check_locals.py \
+            --luau-compile "$RUNNER_TEMP/luau/luau-compile" \
+            --warn-below "$WARN_BELOW" \
+            --extra "Tayjay Farm.lua"

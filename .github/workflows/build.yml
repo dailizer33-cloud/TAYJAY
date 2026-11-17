@@ -1,0 +1,94 @@
+name: Build
+
+# push: rebuild "TAYJAY MAIN.lua" from src/ and commit it back to the same branch.
+# pull_request: read-only check that "TAYJAY MAIN.lua" matches src/.
+#
+# Safety guard: if "TAYJAY MAIN.lua" was edited directly (uploaded) and no longer
+# matches src/, the job fails instead of overwriting those edits.
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "tools/build.py"
+      - "TAYJAY MAIN.lua"
+      - ".github/workflows/build.yml"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify TAYJAY MAIN.lua matches src/
+        run: python3 tools/build.py --check
+
+  autobuild:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Find base commit
+        id: base
+        env:
+          BEFORE: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ -n "$BEFORE" ] && ! echo "$BEFORE" | grep -q '^0*$' && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "sha=$BEFORE" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$(git merge-base HEAD "origin/$DEFAULT_BRANCH" 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Guard against overwriting direct MAIN edits
+        id: guard
+        env:
+          BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          if python3 tools/build.py --check; then
+            echo "MAIN already matches src/. Nothing to build."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "$BASE" ] && ! git diff --quiet "$BASE" HEAD -- "TAYJAY MAIN.lua"; then
+            echo "::error::TAYJAY MAIN.lua was edited directly in this push and does not match src/. Move the change into src/ (see README). Not overwriting."
+            exit 1
+          fi
+          if [ -n "$BASE" ] && git cat-file -e "$BASE:tools/build.py" 2>/dev/null; then
+            git worktree add -q "$RUNNER_TEMP/base" "$BASE"
+            if ! (cd "$RUNNER_TEMP/base" && python3 tools/build.py --check); then
+              echo "::error::TAYJAY MAIN.lua was already out of sync with src/ before this push (direct edit). Not overwriting."
+              exit 1
+            fi
+          fi
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build and commit
+        if: steps.guard.outputs.build == 'true'
+        run: |
+          python3 tools/build.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "TAYJAY MAIN.lua"
+          git commit -m "Build TAYJAY MAIN.lua from src/ (${GITHUB_SHA::7})"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

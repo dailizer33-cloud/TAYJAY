@@ -1,0 +1,190 @@
+-- =========================================================
+-- QUICK VISIBILITY CONTROLS + GLOBAL STOP ALL
+-- =========================================================
+local quickGui = Instance.new("ScreenGui")
+quickGui.Name = "TayJayQuickVisibility"
+quickGui.ResetOnSpawn = false
+quickGui.IgnoreGuiInset = true
+quickGui.DisplayOrder = 1000002
+quickGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+SecureParentGui(quickGui)
+local quickBar = Instance.new("Frame", quickGui)
+quickBar.Name = "TayJayVisibilityBar"
+quickBar.Size = UDim2.fromOffset(194, 32)
+quickBar.Position = UDim2.new(0, 10, 0, 106)
+quickBar.BackgroundColor3 = GREEN.deep
+quickBar.BorderSizePixel = 0
+Instance.new("UICorner", quickBar).CornerRadius = UDim.new(0, 8)
+local quickEdge = Instance.new("UIStroke", quickBar)
+quickEdge.Color = UI_LAYOUT.Accent.Main
+quickEdge.Thickness = 1.5
+local function getRoot(name) return screenGui:FindFirstChild(name) end
+local tayjayRoots = {
+    "TayJayMainMenu", "TayJayMainToggle", "TayJaySpeedWidget", "TayJayFlyControl",
+    "TayJayNoclipCircle", "KillAuraCircleBtn", "KillAuraNormalBtn", "TayJayTargetPanel",
+    "TayJayMonsterTargetPanel", "TayJayRapidBiteBtn", "TayJayWalk2Btn",
+    "TayJayServerSelector", "DeathNoteGroup"
+}
+local mm2Roots = {"TayJayMM2Dock", "TayJayMM2PlayerList"}
+local visibility = {TAYJAY=true, MM2=true, FPS=true}
+local tayjayVisibilityCache, mm2VisibilityCache = {}, {}
+local quickButtons = {}
+local function setRootGroup(names, visible, cache)
+    cache = cache or {}
+    for _, name in ipairs(names) do
+        local root = getRoot(name)
+        if root and root:IsA("GuiObject") then
+            if visible then
+                if cache[name] ~= nil then root.Visible = cache[name]; cache[name] = nil end
+            else
+                if cache[name] == nil then cache[name] = root.Visible end
+                root.Visible = false
+            end
+        end
+    end
+end
+local function refreshQuickButton(key)
+    local button = quickButtons[key]
+    if not button then return end
+    button.Text = key .. (visibility[key] and " ON" or " OFF")
+    button.BackgroundColor3 = visibility[key] and Color3.fromRGB(36,164,104) or Color3.fromRGB(174,52,54)
+    local edge = button:FindFirstChildOfClass("UIStroke")
+    if edge then edge.Color = visibility[key] and Color3.fromRGB(160,255,198) or Color3.fromRGB(255,145,130) end
+end
+local function setVisibility(key, value)
+    visibility[key] = value == true
+    if key == "TAYJAY" then setRootGroup(tayjayRoots,visibility[key],tayjayVisibilityCache)
+    elseif key == "MM2" then setRootGroup(mm2Roots,visibility[key],mm2VisibilityCache)
+    elseif key == "FPS" then perfGui.Enabled = visibility[key] end
+    refreshQuickButton(key)
+end
+for index,key in ipairs({"TAYJAY","MM2","FPS"}) do
+    local button = Instance.new("TextButton",quickBar)
+    button.Name = "Visibility_" .. key
+    button.Size = UDim2.fromOffset(58,24)
+    button.Position = UDim2.fromOffset(4+(index-1)*62,4)
+    button.BackgroundColor3 = Color3.fromRGB(36,164,104)
+    button.BorderSizePixel = 0
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 10
+    button.TextColor3 = WHITE_TEXT
+    button.TextStrokeColor3 = TEXT_OUTLINE
+    button.TextStrokeTransparency = 0.3
+    button.AutoButtonColor = true
+    Instance.new("UICorner",button).CornerRadius = UDim.new(0,6)
+    local edge = Instance.new("UIStroke",button)
+    edge.Thickness = 1.2
+    quickButtons[key] = button
+    refreshQuickButton(key)
+    trackConnection(button.Activated:Connect(function() setVisibility(key,not visibility[key]) end))
+end
+local function applySecondaryScale(guiRoot,excluded)
+    for _,root in ipairs(guiRoot:GetChildren()) do
+        if root:IsA("GuiObject") and not excluded[root.Name] then
+            local scale=root:FindFirstChild("TayJaySecondaryScale")
+            if not scale then scale=Instance.new("UIScale");scale.Name="TayJaySecondaryScale";scale.Parent=root end
+            scale.Scale=0.9
+        end
+    end
+end
+applySecondaryScale(screenGui,{TayJayMainMenu=true,TayJayMainToggle=true})
+applySecondaryScale(perfGui,{})
+local function strengthenControlEdges(guiRoot)
+    for _,obj in ipairs(guiRoot:GetDescendants()) do
+        if obj:IsA("TextButton") and obj.Name~="WindowLockButton" then
+            local edge=obj:FindFirstChildOfClass("UIStroke")
+            if not edge then edge=Instance.new("UIStroke");edge.Parent=obj end
+            edge.Thickness=math.max(edge.Thickness,1.6)
+            edge.Transparency=0.04
+            local label=string.upper(tostring(obj.Text or ""))
+            local enabled=obj:GetAttribute("TayJayEnabled")==true or label:find(" ON",1,true)~=nil
+            edge.Color=enabled and Color3.fromRGB(170,255,190) or Color3.fromRGB(255,145,130)
+        end
+    end
+end
+strengthenControlEdges(screenGui)
+strengthenControlEdges(perfGui)
+_G.TAYJAY_STOP_ALL = function()
+    if _G.TAYJAY_STOPPED then return end
+    _G.TAYJAY_STOPPED=true
+    for key in pairs(states) do pcall(function() syncButtonState(key,false) end) end
+    pcall(function() stopFlying(false) end)
+    pcall(function() setNoclip(false) end)
+    pcall(function() if _G.TAYJAY_MONSTER_STOP then _G.TAYJAY_MONSTER_STOP() end end)
+    states.KillAura = false
+    states.NormalKillAura = false
+    states.AutoWarp = false
+    states.DNWarp = false
+    pcall(updateKaBtnDisplay)
+    _G.TAYJAY_POS_LOCK_UNTIL = nil
+    _G.TAYJAY_FOLLOW = nil
+    pcall(function() if _G.TAYJAY_MM2_STOP then _G.TAYJAY_MM2_STOP() end end)
+    -- FPS restoration is owned by ResourceManager -> FPS Owner -> Cleanup Bags.
+    pcall(function()
+        for _,player in ipairs(Players:GetPlayers()) do
+            local character=player.Character
+            if character then
+                local highlight=character:FindFirstChild(ESP_HIGHLIGHT)
+                if highlight then highlight:Destroy() end
+                local head=character:FindFirstChild("Head") or character.PrimaryPart
+                local billboard=head and head:FindFirstChild(ESP_NAME)
+                if billboard then billboard:Destroy() end
+            end
+        end
+    end)
+    _tjNoclipCamActive = false
+    _tjZoomLimitActive = false
+    pcall(function()
+        LocalPlayer.CameraMode=originalCameraSettings.CameraMode
+        LocalPlayer.CameraMaxZoomDistance=originalCameraSettings.CameraMaxZoomDistance
+        LocalPlayer.CameraMinZoomDistance=originalCameraSettings.CameraMinZoomDistance
+        LocalPlayer.DevCameraOcclusionMode=originalCameraSettings.DevCameraOcclusionMode
+    end)
+    pcall(function() if V70Perf and V70Perf.Cleanup then V70Perf.Cleanup() end end)
+    for _,connection in ipairs(activeConnections) do pcall(function() connection:Disconnect() end) end
+    table.clear(activeConnections)
+    pcall(function() if _tjLogConnection then _tjLogConnection:Disconnect(); _tjLogConnection=nil end end)
+    pcall(function() if _tjBootGui then _tjBootGui:Destroy(); _tjBootGui=nil; _tjBootLabel=nil end end)
+    pcall(function()
+        if type(gethui)=="function" then
+            local hidden=gethui()
+            for _,child in ipairs(hidden:GetChildren()) do
+                if child.Name==guiName or child.Name=="TayJay_FPS_Booster_V72"
+                    or child.Name=="TayJayLockGui" or child.Name=="TayJayQuickVisibility" then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        end
+    end)
+    for _,parent in ipairs({CoreGui,LocalPlayer:FindFirstChildOfClass("PlayerGui")}) do
+        if parent then
+            for _,child in ipairs(parent:GetChildren()) do
+                if child.Name==guiName or child.Name=="TayJay_FPS_Booster_V72"
+                    or child.Name=="TayJayLockGui" or child.Name=="TayJayQuickVisibility"
+                    or child.Name=="TayJay_IndependentStartupStatus" then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        end
+    end
+    pcall(function() if screenGui then screenGui:Destroy() end end)
+    pcall(function() if perfGui then perfGui:Destroy() end end)
+    pcall(function() if quickGui then quickGui:Destroy() end end)
+    _G.TAYJAY_V70_PERF=nil
+    _G.TAYJAY_MM2_STOP=nil
+    _G.TAYJAY_MONSTER_STOP=nil
+    _G.TAYJAY_MONSTER_PANEL_SET_VISIBLE=nil
+    _G.TAYJAY_MONSTER_PANEL_GET_VISIBLE=nil
+    _G.TAYJAY_STOP_ALL=nil
+    print("[TAYJAY] STOP ALL completed: features restored, connections disconnected, UI removed.")
+end
+
+
+if not screenGui or not screenGui.Parent then
+   error("TAYJAY: main ScreenGui ไม่มี Parent จึงไม่สามารถแสดงเมนูได้")
+end
+if _G.TAYJAY_DIAGNOSTIC then
+   _G.TAYJAY_DIAGNOSTIC("READY", "เมนูหลักและระบบเริ่มต้นทำงานแล้ว")
+end
+print("[TAYJAY] Death Note Shadow Hunter + WARP UI + MM2 ESP initialized.")
+
