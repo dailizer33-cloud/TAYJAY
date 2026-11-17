@@ -38,11 +38,24 @@ tools/build.py
 
 ### วิธีแก้โค้ด
 
-1. แก้ไฟล์ใน `src/`
-2. รัน `python3 tools/build.py` เพื่อสร้าง `TAYJAY MAIN.lua` ใหม่
-3. commit ทั้ง `src/` และ `TAYJAY MAIN.lua`
+1. แก้ไฟล์ใน `src/` (แก้บนเว็บ GitHub หรืออัปโหลดไฟล์โมดูลได้เลย)
+2. push/commit เข้า branch ใดก็ได้
+3. GitHub Actions (`Build`) จะสร้าง `TAYJAY MAIN.lua` ใหม่และ commit กลับให้อัตโนมัติ (`github-actions[bot]`) ภายในประมาณ 1 นาที
 
-GitHub Actions จะรัน `python3 tools/build.py --check` ทุกครั้งที่ push ถ้า `TAYJAY MAIN.lua` ไม่ตรงกับ `src/` (เช่น อัปโหลดไฟล์ MAIN ทับโดยตรง) check จะขึ้นสีแดง
+ถ้ามีเครื่องที่มี Python จะรัน `python3 tools/build.py` เองก่อน commit ก็ได้ ผลลัพธ์เหมือนกัน
+
+**ห้ามแก้หรืออัปโหลด `TAYJAY MAIN.lua` ทับโดยตรง** ถ้าไฟล์นี้ไม่ตรงกับ `src/` workflow จะขึ้นสีแดงและ**ไม่เขียนทับ** การแก้ไขนั้น ให้ย้ายการแก้ไขไปไว้ในโมดูลที่ถูกต้องใน `src/` แล้วรัน build ใหม่
+
+### หาตำแหน่ง error
+
+error ในเกมจะบอกเลขบรรทัดของ `TAYJAY MAIN.lua` ใช้ `tools/where.py` แปลงเป็นโมดูล:
+
+```
+$ python3 tools/where.py "TAYJAY MAIN.lua:4329: attempt to index nil"
+MAIN:4329 -> src/features/mm2.lua:135
+
+$ python3 tools/where.py --map      # ดูช่วงบรรทัดของทุกโมดูล
+```
 
 ## เวอร์ชัน
 
