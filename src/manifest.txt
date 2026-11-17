@@ -1,0 +1,34 @@
+# Build order for TAYJAY MAIN.lua (python3 tools/build.py)
+# path | description
+boot/early_bootstrap.lua | Early bootstrap: error dot GUI + diagnostic + log hook (outside xpcall)
+boot/main_open.lua | Opens main xpcall(function() scope
+core/startup_diagnostic.lua | Startup diagnostic + services
+core/gui_parenting.lua | Bulletproof GUI parenting (SecureParentGui) + screen scale
+core/utils_state.lua | Core utils & state management, text contrast
+core/resource_manager.lua | Resource Manager V1 (monitor mode)
+core/cleanup.lua | Cleanup Core V1: ResourceManager -> Owner -> Bag
+core/app_state.lua | Shared config + feature states
+core/resource_monitor.lua | Resource declarations + monitor widget
+ui/ui_sync_draggable.lua | UI sync registry + makeDraggable
+ui/ui_control.lua | UI control: lock position / visual effects
+features/blacklist.lua | WARP blacklist
+ui/layout.lua | Default UI layout
+ui/hp_frame.lua | My HP frame
+ui/speed_widget.lua | Speed widget
+features/noclip_button.lua | Noclip floating button
+features/fly.lua | Fly widget + fly logic
+features/death_note.lua | Death Note player list + cards
+features/warp.lua | WARP circle button + Shadow Hunter tracking
+features/monster_warp.lua | Monster WARP + Auto-Dodge
+features/rapid_bite.lua | Rapid Bite attack button
+features/walk2.lua | WALK2 attack toggle
+ui/server_selector.lua | Server selector
+ui/main_menu.lua | Main menu UI
+core/logic.lua | Logic systems (noclip, inf jump, etc.)
+features/player_esp.lua | Auto player ESP
+features/mm2.lua | MM2 role ESP + player list
+ui/theme.lua | Midnight neon theme + camera QoL
+boot/fps_scope_open.lua | Opens isolated FPS scope: task.spawn(function()
+features/fps_booster.lua | FPS Booster V72
+ui/quick_visibility.lua | Quick visibility controls + global STOP ALL + ready
+boot/main_close.lua | Closes FPS scope + xpcall + startup error report

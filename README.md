@@ -6,7 +6,7 @@
 
 | ไฟล์ | สถานะ | รายละเอียด |
 |---|---|---|
-| `TAYJAY MAIN.lua` | หลัก | สคริปต์รวม: Bootstrap/Diagnostic, Resource Manager V1, Cleanup Core (ResourceManager → Owner → Bag), WARP / Death Note Shadow Hunter, Auto-Dodge, Rapid Bite, WALK2, FPS Booster V72, Quick Visibility Controls + STOP ALL |
+| `TAYJAY MAIN.lua` | หลัก (ไฟล์ build) | สร้างจาก `src/` ด้วย `tools/build.py` ห้ามแก้ไฟล์นี้โดยตรง สคริปต์รวม: Bootstrap/Diagnostic, Resource Manager V1, Cleanup Core (ResourceManager → Owner → Bag), WARP / Death Note Shadow Hunter, Auto-Dodge, Rapid Bite, WALK2, FPS Booster V72, Quick Visibility Controls + STOP ALL |
 | `Tayjay Farm.lua` | หลัก | Ant Evolution Radar **V26.2** (Delta Tablet Fixed) |
 | `archive/Tayjay Farm V25.lua` | เก็บถาวร | Ant Evolution Radar V25 (Tablet Pure) ไม่พัฒนาต่อ |
 
@@ -20,6 +20,30 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/dailizer33-cloud/TAYJ
 loadstring(game:HttpGet("https://raw.githubusercontent.com/dailizer33-cloud/TAYJAY/main/Tayjay%20Farm.lua"))()
 ```
 
+## โครงสร้างโค้ด MAIN
+
+`TAYJAY MAIN.lua` แยกเป็นโมดูลใน `src/` และรวมกลับเป็นไฟล์เดียวตามลำดับใน `src/manifest.txt`
+
+```
+src/
+  boot/      ตัวเปิด/ปิด scope (xpcall, FPS scope) + early bootstrap
+  core/      diagnostic, GUI parenting, utils, Resource Manager, Cleanup, state, logic
+  features/  blacklist, noclip, fly, death note, warp, monster warp, rapid bite, walk2, ESP, MM2, FPS booster
+  ui/        layout, widgets, main menu, server selector, theme, quick visibility
+  manifest.txt
+tools/build.py
+```
+
+ทุกโมดูลรันอยู่ใน scope เดียวกัน (local ที่ประกาศในไฟล์ก่อนหน้าใช้ได้ในไฟล์ถัดไป) ดังนั้นลำดับใน `manifest.txt` สำคัญ และแต่ละไฟล์ไม่ใช่สคริปต์ที่รันเดี่ยวได้
+
+### วิธีแก้โค้ด
+
+1. แก้ไฟล์ใน `src/`
+2. รัน `python3 tools/build.py` เพื่อสร้าง `TAYJAY MAIN.lua` ใหม่
+3. commit ทั้ง `src/` และ `TAYJAY MAIN.lua`
+
+GitHub Actions จะรัน `python3 tools/build.py --check` ทุกครั้งที่ push ถ้า `TAYJAY MAIN.lua` ไม่ตรงกับ `src/` (เช่น อัปโหลดไฟล์ MAIN ทับโดยตรง) check จะขึ้นสีแดง
+
 ## เวอร์ชัน
 
 | Tag | ไฟล์ |
@@ -32,7 +56,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/dailizer33-cloud/TAYJ
 - ใช้ข้อความ commit ที่บอกว่าแก้อะไร เช่น `Fix FPS owner restore callback scope` แทน `Add files via upload`
 - ทุก loop / connection ใหม่ควรลงทะเบียนผ่าน Cleanup Owner/Bag เพื่อให้ STOP ALL ล้างได้ครบ
 - ระวังข้อจำกัด Luau 200 local ต่อ scope: เก็บ state ไว้ในตารางแทนการประกาศ local ระดับบนสุดเพิ่ม
-- ตรวจ syntax ก่อน push: `luau-compile --null "TAYJAY MAIN.lua"`
+- ตรวจ syntax ก่อน push: `python3 tools/build.py && luau-compile --null "TAYJAY MAIN.lua"`
 
 ## Roadmap
 
