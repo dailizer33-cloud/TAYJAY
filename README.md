@@ -26,7 +26,6 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/dailizer33-cloud/TAYJ
 |---|---|
 | `main-v1` | `TAYJAY MAIN.lua` (Resource Manager V1 + Cleanup Core V1 + FPS Booster V72) |
 | `farm-v26.2` | `Tayjay Farm.lua` |
-| `farm-v25` | `archive/Tayjay Farm V25.lua` |
 
 ## แนวทางการพัฒนา
 
