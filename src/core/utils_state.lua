@@ -17,7 +17,6 @@ local PROTECTED_BRAND_NAMES = {
    KillAuraCircleBtn = true,
    KillAuraNormalBtn = true,
    TayJayRapidBiteBtn = true,
-   TayJayWalk2Btn = true,
 }
 local function isProtectedMainBrandPart(obj)
    if not obj then return false end
