@@ -144,7 +144,7 @@ do
       if shadowMode then
           target = selectedDeathNoteTarget and selectedDeathNoteTarget.Character or nil
       else
-          local searchDist = states.NormalKillAura and 25 or maxAttackDistance
+          local searchDist = states.NormalKillAura and math.huge or maxAttackDistance
           target = getClosestPlayer_V57(searchDist)
       end
 
