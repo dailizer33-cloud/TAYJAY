@@ -32,8 +32,9 @@ local okRun, errRun = xpcall(function()
 	-- CONFIG & STATE
 	--=========================================================
 	local CFG = {
-		GUARD=true, HP_LOW=0.35, HP_RESUME=0.80, THREAT_RADIUS=90, THREAT_WAIT_MAX=45,
-		NO_REGEN_TIMEOUT=35, GUARD_COOLDOWN=60, SAFE_HEIGHT=350, CAUTION_HP=0.60, CAUTION_RADIUS=50,
+		GUARD=true, HP_LOW=0.30, HP_RESUME=0.80, THREAT_RADIUS=90, THREAT_WAIT_MAX=45,
+		NO_REGEN_TIMEOUT=35, GUARD_COOLDOWN=25, SAFE_HEIGHT=350, CAUTION_HP=0.60, CAUTION_RADIUS=50,
+		REJOIN_ON_LOW_HP=true, -- เปิดใช้ rejoin แทนการวาร์ปขึ้นแท่น
 		HP_TEXT_PATH="",
 		REBIRTH=true, REBIRTH_POLL=0.30, REBIRTH_STEP_DELAY=1.0,
 		EVOLVE=true, EVOLVE_COOLDOWN=2, EVOLVE_GUI_WORD="action",
@@ -1952,39 +1953,100 @@ local okRun, errRun = xpcall(function()
 				.." • "..(CFG.MOVE_MODE=="glide" and "🛼" or "🌀").." "..ST.currentAction
 		end
 	end
+	--=========================================================
+	-- GUARD (Rejoin แทน Safe Pad)
+	--=========================================================
 	function F.enterSafe(root)
 		GL.stop()
-		ST.guard=true
-		ST.fleeFrom=root.Position
-		ST.fleeAt=os.clock()
-		ST.lastRise=ST.fleeAt
-		ST.lastHp=ST.hp
-		ST.resumeReadyAt=nil
+		ST.guard = true
+		ST.fleeFrom = root and root.Position or nil
+		ST.fleeAt = os.clock()
+		ST.lastRise = ST.fleeAt
+		ST.lastHp = ST.hp
+		ST.resumeReadyAt = nil
 		NC.set(false)
-		local away=F.threatVector(root.Position)
-		local padPos=ST.fleeFrom+Vector3.new(0,CFG.SAFE_HEIGHT,0)+away*60
-		if not (ST.pad and ST.pad.Parent) then
-			local pad=Instance.new("Part")
-			pad.Name="SafeZonePad_TJ"; pad.Anchored=true; pad.CanCollide=true
-			pad.Size=Vector3.new(30,2,30); pad.Transparency=0.6; pad.Parent=Workspace
-			ST.pad=pad
+
+		-- ถ้าปิดโหมด rejoin ให้ใช้พฤติกรรมเดิม (ขึ้นแท่น)
+		if not CFG.REJOIN_ON_LOW_HP then
+			local away = F.threatVector(root.Position)
+			local padPos = ST.fleeFrom + Vector3.new(0, CFG.SAFE_HEIGHT, 0) + away * 60
+			if not (ST.pad and ST.pad.Parent) then
+				local pad = Instance.new("Part")
+				pad.Name = "SafeZonePad_TJ"
+				pad.Anchored = true
+				pad.CanCollide = true
+				pad.Size = Vector3.new(30, 2, 30)
+				pad.Transparency = 0.6
+				pad.Parent = Workspace
+				ST.pad = pad
+			end
+			ST.pad.CFrame = CFrame.new(padPos)
+			F.warpTo(root, padPos + Vector3.new(0, 4, 0))
+			F.setNote("เลือดต่ำ → ขึ้นแท่นปลอดภัย", 4)
+			return
 		end
-		ST.pad.CFrame=CFrame.new(padPos)
-		F.warpTo(root,padPos+Vector3.new(0,4,0))
-	end
-	function F.exitSafe(reason,cooldown)
-		ST.guard=false; ST.resumeReadyAt=nil
-		ST.cooldownUntil=os.clock()+(cooldown or 3)
-		NC.safeCF=nil
-		local root=F.getRoot()
-		if root and ST.fleeFrom then
-			GL.stop()
-			F.warpTo(root,ST.fleeFrom+Vector3.new(0,3,0))
+
+		-- ===== โหมดใหม่: Rejoin ห้องเดิม =====
+		F.setNote("เลือดต่ำกว่า "..F.pct(CFG.HP_LOW).."% → กำลัง Rejoin ห้องเดิม...", 6)
+
+		local TeleportService = game:GetService("TeleportService")
+		local PlaceId = game.PlaceId
+		local JobId = game.JobId
+
+		-- กัน rejoin รัว ๆ
+		ST.cooldownUntil = os.clock() + (CFG.GUARD_COOLDOWN or 25)
+
+		local ok, err = pcall(function()
+			if JobId and JobId ~= "" then
+				TeleportService:TeleportToPlaceInstance(PlaceId, JobId, player)
+			else
+				TeleportService:Teleport(PlaceId, player)
+			end
+		end)
+
+		if not ok then
+			F.setNote("Rejoin ล้มเหลว: "..tostring(err), 8)
+			-- fallback: ขึ้นแท่นแทน
+			if root then
+				local away = F.threatVector(root.Position)
+				local padPos = (ST.fleeFrom or root.Position) + Vector3.new(0, CFG.SAFE_HEIGHT, 0) + away * 60
+				if not (ST.pad and ST.pad.Parent) then
+					local pad = Instance.new("Part")
+					pad.Name = "SafeZonePad_TJ"
+					pad.Anchored = true
+					pad.CanCollide = true
+					pad.Size = Vector3.new(30, 2, 30)
+					pad.Transparency = 0.6
+					pad.Parent = Workspace
+					ST.pad = pad
+				end
+				ST.pad.CFrame = CFrame.new(padPos)
+				F.warpTo(root, padPos + Vector3.new(0, 4, 0))
+			end
 		end
-		if ST.pad then pcall(function() ST.pad:Destroy() end); ST.pad=nil end
-		F.setNote(reason,5)
 	end
 
+	function F.exitSafe(reason, cooldown)
+		ST.guard = false
+		ST.resumeReadyAt = nil
+		ST.cooldownUntil = os.clock() + (cooldown or 3)
+		NC.safeCF = nil
+
+		local root = F.getRoot()
+		if root and ST.fleeFrom and not CFG.REJOIN_ON_LOW_HP then
+			GL.stop()
+			F.warpTo(root, ST.fleeFrom + Vector3.new(0, 3, 0))
+		end
+
+		if ST.pad then
+			pcall(function() ST.pad:Destroy() end)
+			ST.pad = nil
+		end
+
+		if reason then
+			F.setNote(reason, 5)
+		end
+	end
 	--=========================================================
 	-- WORKERS
 	--=========================================================
@@ -1992,33 +2054,41 @@ local okRun, errRun = xpcall(function()
 		while gui.Parent do
 			F.refreshThreats()
 			F.updateFollow()
-			local r=F.readHPRatio()
+			local r = F.readHPRatio()
 			if r then
-				ST.hp=r
-				if r>=0.5 then ST.everHealthy=true end
+				ST.hp = r
+				if r >= 0.5 then ST.everHealthy = true end
 			end
-			local root=F.getRoot()
-			local now=os.clock()
+			local root = F.getRoot()
+			local now = os.clock()
 			F.checkCharacterStatus()
+
 			if ST.guard and not CFG.GUARD then
-				F.exitSafe("ปิดระบบหลบ - กลับไปเก็บของ",0)
+				F.exitSafe("ปิดระบบหลบ", 0)
 			elseif CFG.GUARD and root and r then
 				if not ST.guard then
-					if r<CFG.HP_LOW and ST.everHealthy and now>=ST.cooldownUntil then F.enterSafe(root) end
+					-- เลือดต่ำกว่าเกณฑ์ + เคยมีเลือดดีมาก่อน + ไม่อยู่ในคูลดาวน์ → Rejoin
+					if r < CFG.HP_LOW and ST.everHealthy and now >= ST.cooldownUntil then
+						F.enterSafe(root)
+					end
 				else
-					if r>ST.lastHp+0.005 then ST.lastRise=now end
-					ST.lastHp=r
-					if r>=CFG.HP_RESUME then
-						ST.resumeReadyAt=ST.resumeReadyAt or now
-						if not F.nearThreat(ST.fleeFrom,CFG.THREAT_RADIUS) then
-							F.exitSafe("เลือดฟื้นแล้ว ไม่มีศัตรู",3)
-						elseif now-ST.resumeReadyAt>CFG.THREAT_WAIT_MAX then
-							F.exitSafe("รอศัตรูนานเกินไป",10)
-						end
-					else
-						ST.resumeReadyAt=nil
-						if now-ST.lastRise>CFG.NO_REGEN_TIMEOUT then
-							F.exitSafe("เลือดไม่ฟื้น - เลิกรอ",CFG.GUARD_COOLDOWN)
+					-- โหมด rejoin จะไม่ค้างอยู่ในสถานะ guard นาน
+					-- (เพราะ Teleport จะพาออกไปแล้ว) แต่เผื่อกรณี fallback ขึ้นแท่น
+					if not CFG.REJOIN_ON_LOW_HP then
+						if r > ST.lastHp + 0.005 then ST.lastRise = now end
+						ST.lastHp = r
+						if r >= CFG.HP_RESUME then
+							ST.resumeReadyAt = ST.resumeReadyAt or now
+							if not F.nearThreat(ST.fleeFrom, CFG.THREAT_RADIUS) then
+								F.exitSafe("เลือดฟื้นแล้ว ไม่มีศัตรู", 3)
+							elseif now - ST.resumeReadyAt > CFG.THREAT_WAIT_MAX then
+								F.exitSafe("รอศัตรูนานเกินไป", 10)
+							end
+						else
+							ST.resumeReadyAt = nil
+							if now - ST.lastRise > CFG.NO_REGEN_TIMEOUT then
+								F.exitSafe("เลือดไม่ฟื้น - เลิกรอ", CFG.GUARD_COOLDOWN)
+							end
 						end
 					end
 				end
