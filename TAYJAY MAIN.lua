@@ -967,23 +967,70 @@ Instance.new("UICorner", myHealthBar).CornerRadius = UDim.new(0, 5)
 local myHpText = Instance.new("TextLabel", myBarBG)
 myHpText.Size = UDim2.new(1, 0, 1, 0); myHpText.BackgroundTransparency = 1; myHpText.Text = "100 / 100 HP"; myHpText.TextColor3 = WHITE_TEXT; myHpText.Font = Enum.Font.GothamBold; myHpText.TextSize = 12
 
-local function bindMyHealth(hum)
-   if not hum then return end
+local myHpOwner = nil
+local myHpCharacter = nil
+
+local function stopMyHpOwner(reason)
+   if myHpOwner and not myHpOwner.Stopped then
+       ResourceManager:StopOwner("MyHP", reason or "character_replaced")
+   end
+   myHpOwner = nil
+   myHpCharacter = nil
+end
+
+local function bindMyHealth(hum, character)
+   if not hum or not character or character ~= LocalPlayer.Character then return end
+
+   -- A single stable Owner is recreated for each current character.
+   stopMyHpOwner("character_replaced")
+   local owner = ResourceManager:CreateOwner("MyHP", function()
+       if myHpOwner == owner then
+           myHpOwner = nil
+           myHpCharacter = nil
+       end
+   end)
+   if not owner then return end
+   myHpOwner = owner
+   myHpCharacter = character
+
    local function updateMyHp()
+       if not owner:IsAlive() or LocalPlayer.Character ~= character or not character.Parent then return end
        pcall(function()
-           local hp = math.clamp(hum.Health, 0, hum.MaxHealth)
            local maxHp = hum.MaxHealth > 0 and hum.MaxHealth or 100
-           local pct = hp / maxHp
+           local hp = math.clamp(hum.Health, 0, maxHp)
+           local pct = math.clamp(hp / maxHp, 0, 1)
            myHealthBar.Size = UDim2.new(pct, 0, 1, 0)
            myHpText.Text = math.round(hp) .. " / " .. math.round(maxHp) .. " HP"
            myHealthBar.BackgroundColor3 = pct < 0.25 and Color3.fromRGB(255, 132, 24) or pct < 0.5 and Color3.fromRGB(255, 205, 65) or Color3.fromRGB(104, 211, 57)
        end)
    end
-   trackConnection(hum.HealthChanged:Connect(updateMyHp)); trackConnection(hum:GetPropertyChangedSignal("MaxHealth"):Connect(updateMyHp)); updateMyHp()
+
+   owner:Own(hum.HealthChanged:Connect(updateMyHp))
+   owner:Own(hum:GetPropertyChangedSignal("MaxHealth"):Connect(updateMyHp))
+   updateMyHp()
 end
 
-if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then bindMyHealth(LocalPlayer.Character:FindFirstChildOfClass("Humanoid")) end
-trackConnection(LocalPlayer.CharacterAdded:Connect(function(char) local hum = char:WaitForChild("Humanoid", 10); if hum then bindMyHealth(hum) end end))
+local function bindMyHpCharacter(character)
+   if not character then return end
+   local hum = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 10)
+   if hum and LocalPlayer.Character == character and character.Parent then
+       bindMyHealth(hum, character)
+   end
+end
+
+if LocalPlayer.Character then
+   bindMyHpCharacter(LocalPlayer.Character)
+end
+
+trackConnection(LocalPlayer.CharacterAdded:Connect(function(character)
+   bindMyHpCharacter(character)
+end))
+
+trackConnection(LocalPlayer.CharacterRemoving:Connect(function(character)
+   if myHpCharacter == character then
+       stopMyHpOwner("character_removing")
+   end
+end))
 
 -- =========================================================
 -- ⚡ SPEED WIDGET
