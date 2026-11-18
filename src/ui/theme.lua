@@ -107,6 +107,9 @@ local function applyGreenTheme(root)
        styleDynamicObject(obj)
    end
 end
+-- Expose the callback for UI modules initialized in a separate local scope.
+TJ.Main.ApplyDynamicStyle = styleDynamicObject
+
 applyGreenTheme(screenGui)
 trackConnection(screenGui.DescendantAdded:Connect(function(obj)
    task.defer(function()
