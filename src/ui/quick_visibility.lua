@@ -183,8 +183,8 @@ _G.TAYJAY_STOP_ALL = function()
             end
         end
     end)
-    _tjNoclipCamActive = false
-    _tjZoomLimitActive = false
+    TJ.Main.NoclipCamActive = false
+    TJ.Main.ZoomLimitActive = false
     pcall(function()
         LocalPlayer.CameraMode=TJ.Main.OriginalCameraSettings.CameraMode
         LocalPlayer.CameraMaxZoomDistance=TJ.Main.OriginalCameraSettings.CameraMaxZoomDistance
