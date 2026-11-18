@@ -57,11 +57,31 @@ end
 
 local shadowOwner = ResourceManager:CreateOwner("WarpRuntime")
 local radius = 15; local numParts = 36; local circleParts = {}
-for i = 1, numParts do
-   local part = Instance.new("Part"); part.Anchored = true; part.CanCollide = false; part.Material = Enum.Material.Neon; part.Color = Color3.fromRGB(255, 211, 58); part.Size = Vector3.new(1, 0.1, (2 * math.pi * radius) / numParts); part.Transparency = 1; part.Parent = workspace
-   shadowOwner:Own(part)
-   table.insert(circleParts, part)
+
+local function destroyCircleParts()
+   for i = #circleParts, 1, -1 do
+       local part = circleParts[i]
+       circleParts[i] = nil
+       if part and part.Parent then pcall(function() part:Destroy() end) end
+   end
 end
+
+local function ensureCircleParts()
+   if #circleParts > 0 then return end
+   for i = 1, numParts do
+       local part = Instance.new("Part")
+       part.Anchored = true
+       part.CanCollide = false
+       part.Material = Enum.Material.Neon
+       part.Color = Color3.fromRGB(255, 211, 58)
+       part.Size = Vector3.new(1, 0.1, (2 * math.pi * radius) / numParts)
+       part.Transparency = 1
+       part.Parent = workspace
+       shadowOwner:Own(part)
+       table.insert(circleParts, part)
+   end
+end
+shadowOwner:Own(destroyCircleParts)
 
 local function getClosestPlayer_V57(maxDist)
    local closestPlayer = nil; local shortestDistance = maxDist or maxAttackDistance
@@ -83,9 +103,10 @@ end
 local function updateCirclePosition()
    local char = LocalPlayer.Character
    if not char or not char:FindFirstChild("HumanoidRootPart") or not (states.KillAura or states.NormalKillAura) then
-       for _, part in ipairs(circleParts) do part.Transparency = 1 end
+       destroyCircleParts()
        return
    end
+   ensureCircleParts()
    local cframe = char.HumanoidRootPart.CFrame
    local angleInc = math.rad(360 / numParts)
    for i, part in ipairs(circleParts) do
@@ -98,7 +119,7 @@ end
 trackConnection(RunService.RenderStepped:Connect(function()
    if not (states.KillAura or states.AutoWarp or states.NormalKillAura or states.DNWarp) then
        targetGui.Visible = false
-       for _, part in ipairs(circleParts) do part.Transparency = 1 end
+       destroyCircleParts()
        return
    end
    targetGui.Visible = true
