@@ -4282,6 +4282,12 @@ local ESP_SILVER = Color3.fromRGB(255, 249, 210)
 local ESP_DARK_STROKE = Color3.fromRGB(36, 142, 68)
 local ESP_FILL = Color3.fromRGB(90, 175, 55)
 local ESP_OUTLINE = Color3.fromRGB(255, 211, 58)
+TJ.Main.PlayerESP = {
+   Name = ESP_NAME,
+   Highlight = ESP_HIGHLIGHT,
+   FillColor = ESP_FILL,
+   OutlineColor = ESP_OUTLINE,
+}
 local espBoundCharacters = {}
 
 local function cleanupEspCharacter(character)
@@ -4502,6 +4508,7 @@ end)
 end
 TJ.Main._TayJayPlayerESPInit()
 TJ.Main._TayJayPlayerESPInit = nil
+TJ.Main._TayJayMM2Init = function()
 -- =========================================================
 -- 🗡️ MM2 ROLE ESP + PLAYER LIST 
 -- =========================================================
@@ -4751,8 +4758,8 @@ do
            if character then
                local highlight = character:FindFirstChild("TayJay_PlayerHighlight")
                if highlight then
-                   highlight.FillColor = ESP_FILL
-                   highlight.OutlineColor = ESP_OUTLINE
+                   highlight.FillColor = TJ.Main.PlayerESP.FillColor
+                   highlight.OutlineColor = TJ.Main.PlayerESP.OutlineColor
                    highlight.FillTransparency = 0.78
                    highlight.OutlineTransparency = 0.08
                end
@@ -4940,12 +4947,16 @@ do
 end
 
 -- Capture original camera values before applying this script's camera defaults.
-local originalCameraSettings = {
+TJ.Main.OriginalCameraSettings = {
     CameraMode=LocalPlayer.CameraMode,
     CameraMaxZoomDistance=LocalPlayer.CameraMaxZoomDistance,
     CameraMinZoomDistance=LocalPlayer.CameraMinZoomDistance,
     DevCameraOcclusionMode=LocalPlayer.DevCameraOcclusionMode
 }
+
+end
+TJ.Main._TayJayMM2Init()
+TJ.Main._TayJayMM2Init = nil
 -- =========================================================
 -- 🌌 TAYJAY MIDNIGHT NEON THEME + CAMERA QUALITY OF LIFE
 -- =========================================================
@@ -6006,10 +6017,10 @@ _G.TAYJAY_STOP_ALL = function()
         for _,player in ipairs(Players:GetPlayers()) do
             local character=player.Character
             if character then
-                local highlight=character:FindFirstChild(ESP_HIGHLIGHT)
+                local highlight=character:FindFirstChild(TJ.Main.PlayerESP.Highlight)
                 if highlight then highlight:Destroy() end
                 local head=character:FindFirstChild("Head") or character.PrimaryPart
-                local billboard=head and head:FindFirstChild(ESP_NAME)
+                local billboard=head and head:FindFirstChild(TJ.Main.PlayerESP.Name)
                 if billboard then billboard:Destroy() end
             end
         end
@@ -6017,10 +6028,10 @@ _G.TAYJAY_STOP_ALL = function()
     _tjNoclipCamActive = false
     _tjZoomLimitActive = false
     pcall(function()
-        LocalPlayer.CameraMode=originalCameraSettings.CameraMode
-        LocalPlayer.CameraMaxZoomDistance=originalCameraSettings.CameraMaxZoomDistance
-        LocalPlayer.CameraMinZoomDistance=originalCameraSettings.CameraMinZoomDistance
-        LocalPlayer.DevCameraOcclusionMode=originalCameraSettings.DevCameraOcclusionMode
+        LocalPlayer.CameraMode=TJ.Main.OriginalCameraSettings.CameraMode
+        LocalPlayer.CameraMaxZoomDistance=TJ.Main.OriginalCameraSettings.CameraMaxZoomDistance
+        LocalPlayer.CameraMinZoomDistance=TJ.Main.OriginalCameraSettings.CameraMinZoomDistance
+        LocalPlayer.DevCameraOcclusionMode=TJ.Main.OriginalCameraSettings.DevCameraOcclusionMode
     end)
     pcall(function() if V70Perf and V70Perf.Cleanup then V70Perf.Cleanup() end end)
     for _,connection in ipairs(activeConnections) do pcall(function() connection:Disconnect() end) end
