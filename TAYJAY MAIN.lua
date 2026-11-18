@@ -1209,47 +1209,59 @@ local function setVerticalInput(value)
 end
 
 local function stopFlying(syncState)
+   if not flyNowe and not flyOwner then
+      return
+   end
+
    flyNowe = false
    verticalInput = 0
-
    flyUi.setVisual(false)
 
-   if flyLoop then flyLoop:Disconnect(); flyLoop = nil end
-   if bg then pcall(function() bg:Destroy() end); bg = nil end
-   if bv then pcall(function() bv:Destroy() end); bv = nil end
-
+   -- คืนค่า Humanoid / Animate ก่อนล้าง physics objects
    local char = LocalPlayer.Character
    local hum = char and char:FindFirstChildOfClass("Humanoid")
    if hum then
-       for _, stateType in ipairs(flyStateTypes) do
-           local oldEnabled = savedStateEnabled[stateType]
-           if oldEnabled ~= nil then
-               pcall(function() hum:SetStateEnabled(stateType, oldEnabled) end)
-           else
-               pcall(function() hum:SetStateEnabled(stateType, true) end)
-           end
-       end
-       hum.PlatformStand = savedPlatformStand
-       hum.AutoRotate = savedAutoRotate
-       pcall(function() hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics) end)
+      for _, stateType in ipairs(flyStateTypes) do
+         local oldEnabled = savedStateEnabled[stateType]
+         if oldEnabled ~= nil then
+            pcall(function() hum:SetStateEnabled(stateType, oldEnabled) end)
+         else
+            pcall(function() hum:SetStateEnabled(stateType, true) end)
+         end
+      end
+      hum.PlatformStand = savedPlatformStand
+      hum.AutoRotate = savedAutoRotate
+      pcall(function() hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics) end)
    end
 
    if char then
-       local animate = char:FindFirstChild("Animate")
-       if animate then animate.Disabled = savedAnimateDisabled end
-       local root = char:FindFirstChild("HumanoidRootPart")
-       if root then
-           for _, obj in ipairs(root:GetChildren()) do
-               if obj.Name == "TayJayFlyGyro" or obj.Name == "TayJayFlyVelocity" then
-                   obj:Destroy()
-               end
-           end
-       end
+      local animate = char:FindFirstChild("Animate")
+      if animate then animate.Disabled = savedAnimateDisabled end
+      local root = char:FindFirstChild("HumanoidRootPart")
+      if root then
+         for _, obj in ipairs(root:GetChildren()) do
+            if obj.Name == "TayJayFlyGyro" or obj.Name == "TayJayFlyVelocity" then
+               pcall(function() obj:Destroy() end)
+            end
+         end
+      end
    end
+
+   -- หยุด Owner → Bag จะ Disconnect flyLoop และ Destroy bg/bv
+   local owner = flyOwner
+   flyOwner = nil
+   flyLoop = nil
+   bg = nil
+   bv = nil
+   if owner and owner.Stopped ~= true then
+      pcall(function()
+         ResourceManager:StopOwner("Fly", syncState and "sync" or "stopFlying")
+      end)
+   end
+
    savedHumanoid = nil
    savedStateEnabled = {}
 end
-
 trackConnection(flyEmergencyStop.Activated:Connect(function()
    verticalInput = 0
    local char = LocalPlayer.Character
