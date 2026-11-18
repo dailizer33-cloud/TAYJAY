@@ -22,7 +22,7 @@ local function getRoot(name) return screenGui:FindFirstChild(name) end
 local tayjayRoots = {
     "TayJayMainMenu", "TayJayMainToggle", "TayJaySpeedWidget", "TayJayFlyControl",
     "TayJayNoclipCircle", "KillAuraCircleBtn", "KillAuraNormalBtn", "TayJayTargetPanel",
-    "TayJayMonsterTargetPanel", "TayJayRapidBiteBtn", "TayJayWalk2Btn",
+    "TayJayMonsterTargetPanel", "TayJayRapidBiteBtn",
     "TayJayServerSelector", "DeathNoteGroup"
 }
 local mm2Roots = {"TayJayMM2Dock", "TayJayMM2PlayerList"}
