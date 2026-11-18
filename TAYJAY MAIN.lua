@@ -5066,6 +5066,9 @@ local function applyGreenTheme(root)
        styleDynamicObject(obj)
    end
 end
+-- Export the theme callback because the FPS module is initialized outside this local scope.
+TJ.Main.ApplyDynamicStyle = styleDynamicObject
+
 applyGreenTheme(screenGui)
 trackConnection(screenGui.DescendantAdded:Connect(function(obj)
    task.defer(function()
@@ -5830,8 +5833,13 @@ if _G.TAYJAY_CLEAN_LOOK then _G.TAYJAY_CLEAN_LOOK(perfGui) end
 trackConnection(screenGui.DescendantAdded:Connect(function(uiObject)
    task.defer(function()
        if uiObject and uiObject.Parent then
-           styleDynamicObject(uiObject)
-           applyTayJayTextContrast(uiObject)
+           local dynamicStyle = TJ and TJ.Main and TJ.Main.ApplyDynamicStyle
+           if type(dynamicStyle) == "function" then
+               pcall(dynamicStyle, uiObject)
+           end
+           if type(applyTayJayTextContrast) == "function" then
+               pcall(applyTayJayTextContrast, uiObject)
+           end
        end
    end)
 end))
