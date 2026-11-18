@@ -5080,6 +5080,8 @@ end))
 end
 TJ.Main._TayJayThemeInit()
 TJ.Main._TayJayThemeInit = nil
+
+-- Build trigger: keep generated MAIN synchronized with manifest sources.
 -- =========================================================
 -- FPS MAIN-UI INTEGRATION ADAPTER
 -- Runs in the main script scope so main-menu locals stay explicit
