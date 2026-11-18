@@ -305,6 +305,17 @@ updatePerfScale()
 if workspace.CurrentCamera then v70Track(V70Perf.MonitorConnections, workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updatePerfScale)) end
 v70Track(V70Perf.MonitorConnections, perfGui.ChildAdded:Connect(function() task.defer(updatePerfScale) end))
 V70Perf.GUI = perfGui
+-- Stable module boundary: Core/UI code talks to FPS through TJ.Main.FPS,
+-- not through locals hidden inside the isolated FPS task scope.
+local fpsModule = {
+   GUI = perfGui,
+   Perf = V70Perf,
+   SetVisible = function(visible)
+      if fpsModule.GUI then fpsModule.GUI.Enabled = visible == true end
+      return fpsModule.GUI ~= nil
+   end,
+}
+TJ.Main.FPS = fpsModule
  V70Owner.Bag:Add(perfGui)
 
 local function ui(className, props, parent)
@@ -666,9 +677,23 @@ function V70Perf.Cleanup()
    table.clear(V70Perf.ContentConnections)
    table.clear(V70Perf.BoostConnections)
    V70Perf.GUI = nil
+   fpsModule.GUI = nil
    V70Perf.GraphBars = nil
    if _G.TAYJAY_V70_PERF == V70Perf then _G.TAYJAY_V70_PERF = nil end
    return stopped
+end
+
+fpsModule.Cleanup = function()
+   return V70Perf.Cleanup()
+end
+fpsModule.GetStatus = function()
+   return {
+      Alive = V70Perf.Alive == true,
+      Enabled = V70Perf.Enabled == true,
+      Preset = V70Perf.CurrentPreset,
+      FPS = V70Perf.FPS,
+      Ping = V70Perf.Ping,
+   }
 end
 
 renderTab()
