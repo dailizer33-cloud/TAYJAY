@@ -6203,6 +6203,14 @@ end, function(_tjErr)
 end)
 
 if not _tjRunOK then
+    -- Startup may fail after one or more feature Owners have acquired resources.
+    -- Stop registered Owners even when the main STOP ALL UI has not been created yet.
+    pcall(function()
+        local manager = _G.TAYJAY_RESOURCE_MANAGER
+        if type(manager) == "table" and type(manager.StopAllOwners) == "function" then
+            manager:StopAllOwners("STARTUP_ERROR")
+        end
+    end)
     pcall(function() warn("[TAYJAY STARTUP ERROR]\n" .. tostring(_tjRunError)) end)
     pcall(function()
         if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", _tjRunError) end
