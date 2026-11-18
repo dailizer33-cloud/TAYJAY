@@ -1,6 +1,6 @@
 # V76 FPS External Module Contract (Phase 3)
 
-Status: dependency inventory only. No FPS runtime code was moved or behavior changed in this phase.
+Status: Phase 5 context boundary implemented. FPS behavior and feature logic were not changed.
 
 Target branch: `v76/fps-module-phase1`
 
@@ -98,3 +98,23 @@ The first main-UI adapter extraction is now implemented:
 - The FPS source no longer directly references `screenGui`, `mainFrame`, `styleDynamicObject`, `TAYJAY_UI`, `TAYJAY_CLEAN_LOOK`, `updateScreenScale`, `makeDraggable`, or the main-scope connection tracker.
 
 This is an internal boundary improvement only. FPS still uses injected-by-lexical-scope Roblox/runtime and theme helpers such as `SecureParentGui`, `UI_LAYOUT`, `GREEN`, `WHITE_TEXT`, and `applyTayJayTextContrast`. These remain to be formalized into the external module context in a later phase. The external remote loader is still not enabled.
+
+
+## Phase 5 implementation note
+
+The main-scope adapter now publishes `TJ.Main.FPSContext` before `boot/fps_scope_open.lua` starts the isolated task. The context is versioned (`Version = 1`) and explicitly supplies the main-scope dependencies used by FPS:
+
+- Cleanup/resource lifecycle: `newCleanupOwner`, `newBag`, `ResourceManager`
+- GUI/layout/theme: `SecureParentGui`, `UI_LAYOUT`, `GREEN`, `WHITE_TEXT`, `applyTayJayTextContrast`
+- Runtime services: `Players`, `RunService`, `UserInputService`, `Lighting`
+
+At startup, `src/features/fps_booster.lua` validates the context version and asserts each required dependency before initializing the FPS owner or GUI. The module uses local aliases sourced from that context, so missing integration dependencies fail immediately with a specific message instead of silently resolving as nil globals.
+
+The manifest order remains important: `ui/fps_main_ui_adapter.lua` is loaded before `boot/fps_scope_open.lua`, and the latter publishes the stable `TJ.Main.FPS` placeholder before yielding to `task.spawn`.
+
+### Remaining gates
+
+- This is an internal context boundary, not yet a standalone downloadable module. Roblox and executor APIs remain runtime globals by design.
+- The generated `TAYJAY MAIN.lua` must be regenerated from the current manifest before the Build consistency check can pass. The Build workflow on commit `8ba17664f36c5e9864ae45d65c152ee59cba9148` failed specifically at that consistency check; the Luau compile job passed.
+- No Remote Loader was introduced. STOP ALL continues to use the stable FPS API and ResourceManager owner key `FPS`.
+- Combat, Warp, Fly, Player ESP, and MM2 source files were not modified in this phase.
