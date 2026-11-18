@@ -1,6 +1,9 @@
 -- =========================================================
 -- QUICK VISIBILITY CONTROLS + GLOBAL STOP ALL
 -- =========================================================
+-- FPS is initialized in its own task scope; access it only through the shared module API.
+local fpsModule = TJ and TJ.Main and TJ.Main.FPS
+local perfGui = fpsModule and fpsModule.GUI
 local quickGui = Instance.new("ScreenGui")
 quickGui.Name = "TayJayQuickVisibility"
 quickGui.ResetOnSpawn = false
@@ -55,7 +58,9 @@ local function setVisibility(key, value)
     visibility[key] = value == true
     if key == "TAYJAY" then setRootGroup(tayjayRoots,visibility[key],tayjayVisibilityCache)
     elseif key == "MM2" then setRootGroup(mm2Roots,visibility[key],mm2VisibilityCache)
-    elseif key == "FPS" then perfGui.Enabled = visibility[key] end
+    elseif key == "FPS" then
+        if fpsModule and fpsModule.SetVisible then fpsModule.SetVisible(visibility[key]) end
+    end
     refreshQuickButton(key)
 end
 for index,key in ipairs({"TAYJAY","MM2","FPS"}) do
@@ -88,7 +93,7 @@ local function applySecondaryScale(guiRoot,excluded)
     end
 end
 applySecondaryScale(screenGui,{TayJayMainMenu=true,TayJayMainToggle=true})
-applySecondaryScale(perfGui,{})
+if perfGui then applySecondaryScale(perfGui,{}) end
 local function strengthenControlEdges(guiRoot)
     for _,obj in ipairs(guiRoot:GetDescendants()) do
         if obj:IsA("TextButton") and obj.Name~="WindowLockButton" then
@@ -103,7 +108,7 @@ local function strengthenControlEdges(guiRoot)
     end
 end
 strengthenControlEdges(screenGui)
-strengthenControlEdges(perfGui)
+if perfGui then strengthenControlEdges(perfGui) end
 -- Reset the per-execution guard on every script launch. Delta keeps _G across re-executions,
 -- so a flag left true by the previous run would otherwise make STOP ALL a no-op on run 2.
 _G.TAYJAY_STOPPED = false
@@ -191,7 +196,7 @@ _G.TAYJAY_STOP_ALL = function()
         LocalPlayer.CameraMinZoomDistance=TJ.Main.OriginalCameraSettings.CameraMinZoomDistance
         LocalPlayer.DevCameraOcclusionMode=TJ.Main.OriginalCameraSettings.DevCameraOcclusionMode
     end)
-    pcall(function() if V70Perf and V70Perf.Cleanup then V70Perf.Cleanup() end end)
+    pcall(function() if fpsModule and fpsModule.Cleanup then fpsModule.Cleanup() end end)
     for _,connection in ipairs(activeConnections) do pcall(function() connection:Disconnect() end) end
     table.clear(activeConnections)
     pcall(function() if _tjLogConnection then _tjLogConnection:Disconnect(); _tjLogConnection=nil end end)
