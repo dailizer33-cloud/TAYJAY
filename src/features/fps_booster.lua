@@ -585,49 +585,6 @@ v70Track(V70Perf.MonitorConnections, launcher.Activated:Connect(function()
    if panel.Visible then setCollapsed(false) end
 end))
 
-local function finishThemePass(guiRoot)
-   for _, object in ipairs(guiRoot:GetDescendants()) do
-       if not isProtectedMainBrandPart(object) then
-           applyTayJayTextContrast(object)
-           if object:IsA("TextButton") then
-               object.TextWrapped = true
-               object.AutoButtonColor = true
-               if object.Name == "WindowLockButton" then
-                   object.BackgroundColor3 = Color3.fromRGB(34, 92, 86)
-               end
-           elseif object:IsA("TextLabel") then
-               object.TextWrapped = object.TextWrapped or false
-           end
-       end
-   end
-   local panelNames = {
-       TayJayFlyControl=true, TayJaySpeedWidget=true, DeathNoteGroup=true, DeathNoteMain=true, TayJayMainMenu=true,
-       TayJayMM2Dock=true, TayJayMM2PlayerList=true, FPSBoosterPanel=true,
-       TayJayTargetPanel=true, TayJayServerSelector=true, TayJayMonsterTargetPanel=true,
-   }
-   for _, object in ipairs(guiRoot:GetDescendants()) do
-       if object:IsA("Frame") and (panelNames[object.Name] or object == mainFrame) then
-           local edge = object:FindFirstChildOfClass("UIStroke")
-           if not edge then edge = Instance.new("UIStroke"); edge.Parent = object end
-           edge.Color = GREEN.stroke
-           edge.Thickness = 1.6
-           local gradient = object:FindFirstChildOfClass("UIGradient")
-           object.BackgroundColor3 = GREEN.dark
-           if not gradient then gradient = Instance.new("UIGradient"); gradient.Parent = object end
-           gradient.Color = ColorSequence.new({
-               ColorSequenceKeypoint.new(0, GREEN.panel),
-               ColorSequenceKeypoint.new(1, GREEN.dark),
-           })
-           gradient.Rotation = 90
-       end
-   end
-end
-finishThemePass(screenGui)
-finishThemePass(perfGui)
-updateScreenScale()
-
-if makeDraggable then pcall(function() makeDraggable(panel, false) end) end
-
 v70Track(V70Perf.MonitorConnections, RunService.Heartbeat:Connect(function(dt)
    if not V70Perf.Alive then return end
    if dt > 0 then
@@ -704,7 +661,7 @@ print("[TAYJAY V72 FPS BOOSTER] Dashboard ready | Collapsible + Floating Launche
 -- Main-menu styling, lock bar and dynamic UI hooks live in the main-scope adapter.
 -- FPS runtime only requests the adapter; it no longer owns Core UI behavior.
 if TJ and TJ.Main and type(TJ.Main.ApplyFPSMainUIAdapter) == "function" then
-   local adapterOK, adapterErr = pcall(TJ.Main.ApplyFPSMainUIAdapter, perfGui)
+   local adapterOK, adapterErr = pcall(TJ.Main.ApplyFPSMainUIAdapter, perfGui, panel)
    if not adapterOK then
       warn("[TAYJAY FPS] Main UI adapter failed: " .. tostring(adapterErr))
    end
