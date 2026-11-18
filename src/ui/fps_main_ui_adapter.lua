@@ -4,6 +4,9 @@
 -- and are not captured as undeclared globals by the isolated FPS task.
 -- =========================================================
 TJ.Main = TJ.Main or {}
+TJ.Main.IsWindowLocked = function()
+   return _G.TAYJAY_UI ~= nil and _G.TAYJAY_UI.locked == true
+end
 TJ.Main.ApplyFPSMainUIAdapter = function(fpsGui, fpsPanel)
    if not fpsGui then return false end
    -- Apply the shared main-menu theme/layout pass from the main script scope.
