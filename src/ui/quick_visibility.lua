@@ -104,6 +104,9 @@ local function strengthenControlEdges(guiRoot)
 end
 strengthenControlEdges(screenGui)
 strengthenControlEdges(perfGui)
+-- Reset the per-execution guard on every script launch. Delta keeps _G across re-executions,
+-- so a flag left true by the previous run would otherwise make STOP ALL a no-op on run 2.
+_G.TAYJAY_STOPPED = false
 _G.TAYJAY_STOP_ALL = function()
     if _G.TAYJAY_STOPPED then return end
     _G.TAYJAY_STOPPED=true
