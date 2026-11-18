@@ -4267,7 +4267,7 @@ registerUiSync("Xray", function(isOn)
    end
 end)
 
-(function()
+;(function()
 -- =========================================================
 -- 🌟 AUTO PLAYER ESP (BACKGROUND)
 -- =========================================================
