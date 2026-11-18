@@ -4,6 +4,24 @@
 -- and are not captured as undeclared globals by the isolated FPS task.
 -- =========================================================
 TJ.Main = TJ.Main or {}
+
+-- Explicit dependency boundary for the isolated FPS task scope.
+-- Keep this table limited to main-scope locals required by FPS.
+TJ.Main.FPSContext = {
+   Version = 1,
+   newCleanupOwner = newCleanupOwner,
+   newBag = newBag,
+   ResourceManager = ResourceManager,
+   SecureParentGui = SecureParentGui,
+   UI_LAYOUT = UI_LAYOUT,
+   GREEN = GREEN,
+   WHITE_TEXT = WHITE_TEXT,
+   applyTayJayTextContrast = applyTayJayTextContrast,
+   Players = Players,
+   RunService = RunService,
+   UserInputService = UserInputService,
+   Lighting = Lighting,
+}
 TJ.Main.IsWindowLocked = function()
    return _G.TAYJAY_UI ~= nil and _G.TAYJAY_UI.locked == true
 end
