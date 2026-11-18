@@ -5,7 +5,7 @@ name: Luau
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, v76/fps-module-phase1]
   workflow_dispatch:
 
 permissions:
