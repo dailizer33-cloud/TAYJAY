@@ -4957,14 +4957,15 @@ TJ.Main.OriginalCameraSettings = {
 end
 TJ.Main._TayJayMM2Init()
 TJ.Main._TayJayMM2Init = nil
+TJ.Main._TayJayThemeInit = function()
 -- =========================================================
 -- 🌌 TAYJAY MIDNIGHT NEON THEME + CAMERA QUALITY OF LIFE
 -- =========================================================
 
 -- ZoomLimit: independently maintain the camera zoom range and Classic camera mode.
-local _tjZoomLimitActive = true
+TJ.Main.ZoomLimitActive = true
 local function enforceZoomLimit()
-   if not _tjZoomLimitActive then return end
+   if not TJ.Main.ZoomLimitActive then return end
    pcall(function()
       ResourceManager:RecordWrite("ZoomLimit", "CameraSettings")
        if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then
@@ -4987,9 +4988,9 @@ end))
 enforceZoomLimit()
 
 -- NoclipCam: independently maintain Invisicam occlusion only; it does not change character collision.
-local _tjNoclipCamActive = true
+TJ.Main.NoclipCamActive = true
 local function enforceNoclipCam()
-   if not _tjNoclipCamActive then return end
+   if not TJ.Main.NoclipCamActive then return end
    pcall(function()
       ResourceManager:RecordWrite("NoclipCam", "CameraOcclusion")
        if LocalPlayer.DevCameraOcclusionMode ~= Enum.DevCameraOcclusionMode.Invisicam then
@@ -5072,6 +5073,10 @@ trackConnection(screenGui.DescendantAdded:Connect(function(obj)
    end)
 end))
 
+
+end
+TJ.Main._TayJayThemeInit()
+TJ.Main._TayJayThemeInit = nil
 task.spawn(function()
 -- =========================================================
 -- TAYJAY FPS BOOSTER V72
@@ -6025,8 +6030,8 @@ _G.TAYJAY_STOP_ALL = function()
             end
         end
     end)
-    _tjNoclipCamActive = false
-    _tjZoomLimitActive = false
+    TJ.Main.NoclipCamActive = false
+    TJ.Main.ZoomLimitActive = false
     pcall(function()
         LocalPlayer.CameraMode=TJ.Main.OriginalCameraSettings.CameraMode
         LocalPlayer.CameraMaxZoomDistance=TJ.Main.OriginalCameraSettings.CameraMaxZoomDistance
