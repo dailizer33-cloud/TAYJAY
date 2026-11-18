@@ -5077,6 +5077,11 @@ end))
 end
 TJ.Main._TayJayThemeInit()
 TJ.Main._TayJayThemeInit = nil
+-- Publish the shared API table before yielding to the isolated FPS task.
+-- This prevents Quick Visibility / STOP ALL from capturing a nil module during startup.
+TJ = TJ or {}
+TJ.Main = TJ.Main or {}
+TJ.Main.FPS = TJ.Main.FPS or {}
 task.spawn(function()
 -- =========================================================
 -- TAYJAY FPS BOOSTER V72
@@ -5387,16 +5392,16 @@ v70Track(V70Perf.MonitorConnections, perfGui.ChildAdded:Connect(function() task.
 V70Perf.GUI = perfGui
 -- Stable module boundary: Core/UI code talks to FPS through TJ.Main.FPS,
 -- not through locals hidden inside the isolated FPS task scope.
-local fpsModule
-fpsModule = {
-   GUI = perfGui,
-   Perf = V70Perf,
-   SetVisible = function(visible)
-      if fpsModule.GUI then fpsModule.GUI.Enabled = visible == true end
-      return fpsModule.GUI ~= nil
-   end,
-}
+-- Reuse the placeholder published before task.spawn so Core/UI can safely
+-- resolve the API even when this isolated scope has not finished initializing.
+local fpsModule = TJ.Main.FPS or {}
 TJ.Main.FPS = fpsModule
+fpsModule.GUI = perfGui
+fpsModule.Perf = V70Perf
+fpsModule.SetVisible = function(visible)
+   if fpsModule.GUI then fpsModule.GUI.Enabled = visible == true end
+   return fpsModule.GUI ~= nil
+end
  V70Owner.Bag:Add(perfGui)
 
 local function ui(className, props, parent)
@@ -5875,8 +5880,13 @@ end))
 -- QUICK VISIBILITY CONTROLS + GLOBAL STOP ALL
 -- =========================================================
 -- FPS is initialized in its own task scope; access it only through the shared module API.
-local fpsModule = TJ and TJ.Main and TJ.Main.FPS
-local perfGui = fpsModule and fpsModule.GUI
+local function getFPSModule()
+    return TJ and TJ.Main and TJ.Main.FPS
+end
+local function getFPSGui()
+    local module = getFPSModule()
+    return module and module.GUI
+end
 local quickGui = Instance.new("ScreenGui")
 quickGui.Name = "TayJayQuickVisibility"
 quickGui.ResetOnSpawn = false
@@ -5932,7 +5942,8 @@ local function setVisibility(key, value)
     if key == "TAYJAY" then setRootGroup(tayjayRoots,visibility[key],tayjayVisibilityCache)
     elseif key == "MM2" then setRootGroup(mm2Roots,visibility[key],mm2VisibilityCache)
     elseif key == "FPS" then
-        if fpsModule and fpsModule.SetVisible then fpsModule.SetVisible(visibility[key]) end
+        local module = getFPSModule()
+        if module and module.SetVisible then module.SetVisible(visibility[key]) end
     end
     refreshQuickButton(key)
 end
@@ -5966,7 +5977,7 @@ local function applySecondaryScale(guiRoot,excluded)
     end
 end
 applySecondaryScale(screenGui,{TayJayMainMenu=true,TayJayMainToggle=true})
-if perfGui then applySecondaryScale(perfGui,{}) end
+if getFPSGui() then applySecondaryScale(getFPSGui(),{}) end
 local function strengthenControlEdges(guiRoot)
     for _,obj in ipairs(guiRoot:GetDescendants()) do
         if obj:IsA("TextButton") and obj.Name~="WindowLockButton" then
@@ -5981,7 +5992,7 @@ local function strengthenControlEdges(guiRoot)
     end
 end
 strengthenControlEdges(screenGui)
-if perfGui then strengthenControlEdges(perfGui) end
+if getFPSGui() then strengthenControlEdges(getFPSGui()) end
 -- Reset the per-execution guard on every script launch. Delta keeps _G across re-executions,
 -- so a flag left true by the previous run would otherwise make STOP ALL a no-op on run 2.
 _G.TAYJAY_STOPPED = false
@@ -5998,7 +6009,7 @@ _G.TAYJAY_STOP_ALL = function()
 
     -- Hide and destroy UI first so a later feature-cleanup error cannot leave menus visible.
     pcall(function() if screenGui then screenGui.Enabled = false end end)
-    pcall(function() if perfGui then perfGui.Enabled = false end end)
+    pcall(function() local gui = getFPSGui(); if gui then gui.Enabled = false end end)
     pcall(function() if quickGui then quickGui.Enabled = false end end)
     local _tjGuiParents = {}
     local function _tjAddGuiParent(parent)
@@ -6034,7 +6045,7 @@ _G.TAYJAY_STOP_ALL = function()
         end)
     end
     pcall(function() if screenGui then screenGui:Destroy() end end)
-    pcall(function() if perfGui then perfGui:Destroy() end end)
+    pcall(function() local gui = getFPSGui(); if gui then gui:Destroy() end end)
     pcall(function() if quickGui then quickGui:Destroy() end end)
     for key in pairs(states) do pcall(function() syncButtonState(key,false) end) end
     pcall(function() stopFlying(false) end)
@@ -6069,7 +6080,10 @@ _G.TAYJAY_STOP_ALL = function()
         LocalPlayer.CameraMinZoomDistance=TJ.Main.OriginalCameraSettings.CameraMinZoomDistance
         LocalPlayer.DevCameraOcclusionMode=TJ.Main.OriginalCameraSettings.DevCameraOcclusionMode
     end)
-    pcall(function() if fpsModule and fpsModule.Cleanup then fpsModule.Cleanup() end end)
+    pcall(function()
+        local module = getFPSModule()
+        if module and module.Cleanup then module.Cleanup() end
+    end)
     for _,connection in ipairs(activeConnections) do pcall(function() connection:Disconnect() end) end
     table.clear(activeConnections)
     pcall(function() if _tjLogConnection then _tjLogConnection:Disconnect(); _tjLogConnection=nil end end)
