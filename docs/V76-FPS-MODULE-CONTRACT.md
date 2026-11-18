@@ -85,3 +85,16 @@ Do not create or switch the main script to a remote `TAYJAY FPS.lua` loader unti
 ## Scope protection
 
 This phase changes documentation only. Combat, Warp, Fly, Player ESP, MM2, and their commands are untouched.
+
+
+## Phase 4 implementation note
+
+The first main-UI adapter extraction is now implemented:
+
+- `src/ui/fps_main_ui_adapter.lua` owns the lock bar, main-menu text fitting/contrast passes, clean-look calls, dynamic descendant styling, shared theme pass, and main-window drag setup.
+- The adapter is registered in `src/manifest.txt` before `boot/fps_scope_open.lua`, so it is defined in the main xpcall scope before the isolated FPS task starts.
+- `src/features/fps_booster.lua` now requests the adapter through `TJ.Main.ApplyFPSMainUIAdapter(fpsGui, fpsPanel)`.
+- Main window lock state is exposed through `TJ.Main.IsWindowLocked()`; the FPS launcher no longer reads `_G.TAYJAY_UI` directly.
+- The FPS source no longer directly references `screenGui`, `mainFrame`, `styleDynamicObject`, `TAYJAY_UI`, `TAYJAY_CLEAN_LOOK`, `updateScreenScale`, `makeDraggable`, or the main-scope connection tracker.
+
+This is an internal boundary improvement only. FPS still uses injected-by-lexical-scope Roblox/runtime and theme helpers such as `SecureParentGui`, `UI_LAYOUT`, `GREEN`, `WHITE_TEXT`, and `applyTayJayTextContrast`. These remain to be formalized into the external module context in a later phase. The external remote loader is still not enabled.
