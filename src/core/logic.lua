@@ -1,3 +1,4 @@
+TJ.Main._TayJayLogicInit = function()
 -- =========================================================
 -- LOGIC SYSTEMS
 -- =========================================================
@@ -27,7 +28,7 @@ trackConnection(UserInputService.JumpRequest:Connect(function()
 end))
 
 local noclipCache = {}
-local function setNoclip(enabled)
+TJ.Main.SetNoclip = function(enabled)
    local char = LocalPlayer.Character
    if enabled and char then
        for _, part in ipairs(char:GetDescendants()) do
@@ -44,9 +45,9 @@ local function setNoclip(enabled)
    end
 end
 
-registerUiSync("Noclip", setNoclip)
+registerUiSync("Noclip", TJ.Main.SetNoclip)
 trackConnection(RunService.Stepped:Connect(function()
-   if states.Noclip then setNoclip(true) end
+   if states.Noclip then TJ.Main.SetNoclip(true) end
 end))
 trackConnection(LocalPlayer.CharacterAdded:Connect(function()
    table.clear(noclipCache)
@@ -68,3 +69,6 @@ registerUiSync("Xray", function(isOn)
    end
 end)
 
+
+TJ.Main._TayJayLogicInit()
+TJ.Main._TayJayLogicInit = nil

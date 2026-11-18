@@ -160,7 +160,7 @@ _G.TAYJAY_STOP_ALL = function()
     pcall(function() if quickGui then quickGui:Destroy() end end)
     for key in pairs(states) do pcall(function() syncButtonState(key,false) end) end
     pcall(function() stopFlying(false) end)
-    pcall(function() setNoclip(false) end)
+    pcall(function() if TJ and TJ.Main and TJ.Main.SetNoclip then TJ.Main.SetNoclip(false) end end)
     pcall(function() if _G.TAYJAY_MONSTER_STOP then _G.TAYJAY_MONSTER_STOP() end end)
     states.KillAura = false
     states.NormalKillAura = false
