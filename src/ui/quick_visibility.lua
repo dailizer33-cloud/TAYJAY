@@ -107,6 +107,47 @@ strengthenControlEdges(perfGui)
 _G.TAYJAY_STOP_ALL = function()
     if _G.TAYJAY_STOPPED then return end
     _G.TAYJAY_STOPPED=true
+
+    -- Hide and destroy UI first so a later feature-cleanup error cannot leave menus visible.
+    pcall(function() if screenGui then screenGui.Enabled = false end end)
+    pcall(function() if perfGui then perfGui.Enabled = false end end)
+    pcall(function() if quickGui then quickGui.Enabled = false end end)
+    local _tjGuiParents = {}
+    local function _tjAddGuiParent(parent)
+        if not parent then return end
+        for _, known in ipairs(_tjGuiParents) do
+            if known == parent then return end
+        end
+        _tjGuiParents[#_tjGuiParents + 1] = parent
+    end
+    pcall(function() if type(gethui) == "function" then _tjAddGuiParent(gethui()) end end)
+    pcall(function() _tjAddGuiParent(CoreGui) end)
+    pcall(function()
+        local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        _tjAddGuiParent(playerGui)
+    end)
+    local _tjGuiNames = {
+        [guiName] = true,
+        ["TayJay_FPS_Booster_V72"] = true,
+        ["TayJayLockGui"] = true,
+        ["TayJayQuickVisibility"] = true,
+        ["TayJay_IndependentStartupStatus"] = true
+    }
+    for _, parent in ipairs(_tjGuiParents) do
+        pcall(function()
+            for _, child in ipairs(parent:GetChildren()) do
+                if _tjGuiNames[child.Name] then
+                    pcall(function()
+                        if child:IsA("ScreenGui") then child.Enabled = false end
+                        child:Destroy()
+                    end)
+                end
+            end
+        end)
+    end
+    pcall(function() if screenGui then screenGui:Destroy() end end)
+    pcall(function() if perfGui then perfGui:Destroy() end end)
+    pcall(function() if quickGui then quickGui:Destroy() end end)
     for key in pairs(states) do pcall(function() syncButtonState(key,false) end) end
     pcall(function() stopFlying(false) end)
     pcall(function() setNoclip(false) end)
