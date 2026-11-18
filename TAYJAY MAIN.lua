@@ -5066,6 +5066,9 @@ local function applyGreenTheme(root)
        styleDynamicObject(obj)
    end
 end
+-- Export callback for the FPS UI code, which runs outside this local scope.
+TJ.Main.ApplyDynamicStyle = styleDynamicObject
+
 applyGreenTheme(screenGui)
 trackConnection(screenGui.DescendantAdded:Connect(function(obj)
    task.defer(function()
@@ -5224,8 +5227,13 @@ TJ.Main.ApplyFPSMainUIAdapter = function(fpsGui, fpsPanel)
    trackConnection(screenGui.DescendantAdded:Connect(function(uiObject)
       task.defer(function()
           if uiObject and uiObject.Parent then
-              styleDynamicObject(uiObject)
-              applyTayJayTextContrast(uiObject)
+              local dynamicStyle = TJ and TJ.Main and TJ.Main.ApplyDynamicStyle
+              if type(dynamicStyle) == "function" then
+                  pcall(dynamicStyle, uiObject)
+              end
+              if type(applyTayJayTextContrast) == "function" then
+                  pcall(applyTayJayTextContrast, uiObject)
+              end
           end
       end)
    end))
