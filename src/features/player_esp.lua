@@ -1,4 +1,4 @@
-;(function()
+TJ.Main._TayJayPlayerESPInit = function()
 -- =========================================================
 -- 🌟 AUTO PLAYER ESP (BACKGROUND)
 -- =========================================================
@@ -225,4 +225,6 @@ task.spawn(function()
 end)
 
 
-end)()
+end
+TJ.Main._TayJayPlayerESPInit()
+TJ.Main._TayJayPlayerESPInit = nil
