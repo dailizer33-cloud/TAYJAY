@@ -61,7 +61,24 @@ SecureParentGui(screenGui)
 -- an attempt to call a nil global and stopped the script before the menu appeared.
 local activeConnections = {}
 local function trackConnection(conn)
-   if conn then table.insert(activeConnections, conn) end
+   if conn then
+      table.insert(activeConnections, conn)
+      -- ResourceManager is declared later in the concatenated build. Resolve it
+      -- through the shared environment instead of a lexical local/global lookup.
+      pcall(function()
+         local resourceEnv = _G
+         if type(getgenv) == "function" then
+            local shared = getgenv()
+            if type(shared) == "table" then
+               resourceEnv = shared
+            end
+         end
+         local manager = resourceEnv.TAYJAY_RESOURCE_MANAGER
+         if type(manager) == "table" and type(manager.Own) == "function" then
+            manager:Own(conn)
+         end
+      end)
+   end
    return conn
 end
 

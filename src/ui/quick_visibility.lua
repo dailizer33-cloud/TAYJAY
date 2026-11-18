@@ -109,7 +109,14 @@ strengthenControlEdges(perfGui)
 _G.TAYJAY_STOPPED = false
 _G.TAYJAY_STOP_ALL = function()
     if _G.TAYJAY_STOPPED then return end
-    _G.TAYJAY_STOPPED=true
+    _G.TAYJAY_STOPPED = true
+
+    -- Stop every registered Owner first (Fly, Warp, Global, etc.).
+    pcall(function()
+        if ResourceManager and ResourceManager.StopAllOwners then
+            ResourceManager:StopAllOwners("STOP_ALL")
+        end
+    end)
 
     -- Hide and destroy UI first so a later feature-cleanup error cannot leave menus visible.
     pcall(function() if screenGui then screenGui.Enabled = false end end)
