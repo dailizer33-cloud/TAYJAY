@@ -105,6 +105,7 @@ flyUi.setVisual(false)
 local flySpeeds = 1
 local flyNowe = false
 local bg, bv, flyLoop
+local flyOwner = nil
 local verticalInput = 0
 local savedHumanoid = nil
 local savedPlatformStand = false
