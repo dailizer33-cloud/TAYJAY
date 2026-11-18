@@ -403,7 +403,7 @@ local GREEN = {
 
 
 -- =========================================================
--- TAYJAY RESOURCE MANAGER V1 — MONITOR MODE (NON-BLOCKING)
+-- TAYJAY RESOURCE MANAGER V2 — PERSISTENT MONITOR MODE
 -- Observes declared writes only. It never acquires, blocks, preempts,
 -- or changes the behavior of a registered feature.
 -- =========================================================
@@ -416,49 +416,50 @@ pcall(function()
 end)
 local TJ = _tjRMEnv.TJ
 if type(TJ) ~= "table" then TJ = {}; _tjRMEnv.TJ = TJ end
-local ResourceManager = TJ.ResourceManager or {}
+local ResourceManager = TJ.ResourceManager
+if type(ResourceManager) ~= "table" then ResourceManager = {}; TJ.ResourceManager = ResourceManager end
+-- Preserve active owner registrations and diagnostic history on re-execution.
 ResourceManager.Mode = "MONITOR"
-ResourceManager.Modules = {}
-ResourceManager.RecentWrites = {}
-ResourceManager.LastConflictAt = {}
-ResourceManager.Conflicts = {}
-ResourceManager.TotalWrites = 0
-ResourceManager.TotalConflicts = 0
-ResourceManager.Window = 0.18
-ResourceManager.MaxConflicts = 30
---
+ResourceManager.Modules = ResourceManager.Modules or {}
+ResourceManager.RecentWrites = ResourceManager.RecentWrites or {}
+ResourceManager.LastConflictAt = ResourceManager.LastConflictAt or {}
+ResourceManager.Conflicts = ResourceManager.Conflicts or {}
+ResourceManager.TotalWrites = tonumber(ResourceManager.TotalWrites) or 0
+ResourceManager.TotalConflicts = tonumber(ResourceManager.TotalConflicts) or 0
+ResourceManager.Window = tonumber(ResourceManager.Window) or 0.18
+ResourceManager.MaxConflicts = tonumber(ResourceManager.MaxConflicts) or 30
+ResourceManager.Owners = ResourceManager.Owners or {}
 function ResourceManager:Register(definition)
-    if type(definition) ~= "table" or type(definition.id) ~= "string" then return false end
+    if type(definition) ~= "table" or type(definition.id) ~= "string" or definition.id == "" then return false end
     local writes = {}
-    for _, resource in ipairs(definition.writes or {}) do
-        if type(resource) == "string" then writes[resource] = true end
+    if type(definition.writes) == "table" then
+        for _, resource in ipairs(definition.writes) do if type(resource) == "string" then writes[resource] = true end end
     end
     self.Modules[definition.id] = { id = definition.id, writes = writes, priority = tonumber(definition.priority) or 0 }
     return true
 end
 function ResourceManager:RecordWrite(moduleId, resource)
+    if type(moduleId) ~= "string" or type(resource) ~= "string" then return false end
     local module = self.Modules[moduleId]
-    if not module or not module.writes[resource] then return end
+    if not module or not module.writes[resource] then return false end
     local now = os.clock()
     self.TotalWrites = self.TotalWrites + 1
-    local recent = self.RecentWrites[resource] or {}
-    local kept = {}
+    local recent, kept = self.RecentWrites[resource] or {}, {}
     for _, event in ipairs(recent) do
         if now - event.time <= self.Window then
             kept[#kept + 1] = event
             if event.module ~= moduleId then
                 local firstId, secondId = event.module, moduleId
                 if firstId > secondId then firstId, secondId = secondId, firstId end
-                local conflictKey = resource .. "|" .. firstId .. "|" .. secondId
-                if now - (self.LastConflictAt[conflictKey] or 0) >= 0.5 then
-                    self.LastConflictAt[conflictKey] = now
+                local key = resource .. "|" .. firstId .. "|" .. secondId
+                if now - (self.LastConflictAt[key] or 0) >= 0.5 then
+                    self.LastConflictAt[key] = now
                     self.TotalConflicts = self.TotalConflicts + 1
-                    local conflict = {
-                        resource = resource, first = event.module, second = moduleId,
-                        time = now, priorityFirst = self.Modules[event.module] and self.Modules[event.module].priority or 0,
+                    self.Conflicts[#self.Conflicts + 1] = {
+                        resource = resource, first = event.module, second = moduleId, time = now,
+                        priorityFirst = self.Modules[event.module] and self.Modules[event.module].priority or 0,
                         prioritySecond = module.priority
                     }
-                    self.Conflicts[#self.Conflicts + 1] = conflict
                     while #self.Conflicts > self.MaxConflicts do table.remove(self.Conflicts, 1) end
                 end
             end
@@ -466,20 +467,18 @@ function ResourceManager:RecordWrite(moduleId, resource)
     end
     kept[#kept + 1] = { module = moduleId, time = now }
     self.RecentWrites[resource] = kept
+    return true
 end
 function ResourceManager:GetStatus()
-    return {
-        mode = self.Mode, modules = #((function()
-            local ids = {}; for id in pairs(self.Modules) do ids[#ids + 1] = id end; return ids
-        end)()),
-        writes = self.TotalWrites, conflicts = self.TotalConflicts,
-        latest = self.Conflicts[#self.Conflicts]
-    }
+    local moduleCount, ownerCount = 0, 0
+    for _ in pairs(self.Modules) do moduleCount = moduleCount + 1 end
+    for _ in pairs(self.Owners) do ownerCount = ownerCount + 1 end
+    return { mode = self.Mode, modules = moduleCount, owners = ownerCount,
+        writes = self.TotalWrites, conflicts = self.TotalConflicts, latest = self.Conflicts[#self.Conflicts] }
 end
 TJ.ResourceManager = ResourceManager
-_G.TAYJAY_RESOURCE_MANAGER = ResourceManager
-
--- TAYJAY CLEANUP CORE V1: ResourceManager -> Owner -> Bag.
+_tjRMEnv.TAYJAY_RESOURCE_MANAGER = ResourceManager
+-- TAYJAY CLEANUP CORE V2: ResourceManager -> Owner -> Bag.
 local function cleanupBagItem(obj)
     local objectType = typeof(obj)
     if objectType == "RBXScriptConnection" then obj:Disconnect()
@@ -493,6 +492,13 @@ local function newBag()
         if self.Cleaned then pcall(cleanupBagItem, obj); return obj end
         items[#items + 1] = obj
         return obj
+    end
+    function bag:AddTask(thread)
+        if thread == nil then return nil end
+        self:Add(function()
+            if type(task) == "table" and type(task.cancel) == "function" then pcall(task.cancel, thread) end
+        end)
+        return thread
     end
     function bag:Clean()
         if self.Cleaned then return false end
@@ -513,37 +519,52 @@ local function newBag()
     return bag
 end
 local function newCleanupOwner(ownerId, onStop)
-    local owner = { Id = ownerId, Stopped = false, Bag = newBag() }
+    local owner = { Id = ownerId, Stopped = false, Cancelled = false, Token = { Cancelled = false }, Bag = newBag() }
+    function owner:IsAlive() return not self.Stopped and not self.Cancelled end
     function owner:OwnBag(bag)
         if type(bag) ~= "table" or type(bag.Clean) ~= "function" then return false end
         self.Bag:Add(function() bag:Clean() end)
         return true
     end
-    function owner:Stop()
+    function owner:Own(obj) self.Bag:Add(obj); return obj end
+    function owner:Stop(reason)
         if self.Stopped then return false end
-        self.Stopped = true
+        self.Stopped, self.Cancelled, self.StopReason = true, true, reason
+        self.Token.Cancelled = true
         if type(onStop) == "function" then
-            local ok, err = pcall(onStop)
-            if not ok then warn("[TAYJAY Owner] " .. self.Id .. ": " .. tostring(err)) end
+            local ok, err = pcall(onStop, reason)
+            if not ok then warn("[TAYJAY Owner] " .. tostring(self.Id) .. ": " .. tostring(err)) end
         end
         self.Bag:Clean()
         return true
     end
     return owner
 end
+ResourceManager.Owners = ResourceManager.Owners or {}
 function ResourceManager:RegisterOwner(ownerId, owner)
-    if type(ownerId) ~= "string" or type(owner) ~= "table" or type(owner.Stop) ~= "function" then return false end
-    if self.Owners[ownerId] ~= nil then return false end
+    if type(ownerId) ~= "string" or ownerId == "" or type(owner) ~= "table" or type(owner.Stop) ~= "function" then return false end
+    local existing = self.Owners[ownerId]
+    if existing and existing ~= owner and existing.Stopped ~= true then return false end
     self.Owners[ownerId] = owner
     return true
 end
-function ResourceManager:StopOwner(ownerId)
+function ResourceManager:StopOwner(ownerId, reason)
     local owner = self.Owners[ownerId]
     if not owner then return false end
-    return owner:Stop()
+    local ok, result = pcall(owner.Stop, owner, reason)
+    if self.Owners[ownerId] == owner then self.Owners[ownerId] = nil end
+    if not ok then warn("[TAYJAY ResourceManager] StopOwner " .. tostring(ownerId) .. ": " .. tostring(result)); return false end
+    return result ~= false
 end
-ResourceManager.Owners = {}
-
+function ResourceManager:GetOwnerStatus()
+    local result = {}
+    for id, owner in pairs(self.Owners) do
+        result[id] = { stopped = owner.Stopped == true, cancelled = owner.Cancelled == true,
+            resources = owner.Bag and owner.Bag.Count and owner.Bag:Count() or 0 }
+    end
+    return result
+end
+-- TAYJAY APP STATE V2: canonical, persistent state shared through TJ.Main.
 local _tjStateEnv = _G
 pcall(function()
     if type(getgenv) == "function" then
@@ -553,23 +574,31 @@ pcall(function()
 end)
 local TJ = _tjStateEnv.TJ
 if type(TJ) ~= "table" then TJ = {}; _tjStateEnv.TJ = TJ end
-TJ.Main = TJ.Main or {}
-local config = { WalkSpeed = 16 }
-local originalWalkSpeed = nil
-local isBusy = false 
-local states = {
-   Speed = false, Fly = false, InfJump = false, Noclip = false, 
-   Xray = false, ESP = true, DeathNote = false, KillAura = false, NormalKillAura = false, MonsterWarp = false,
-   ServerSelector = false, MM2RoleESP = false, AutoWarp = false, DNWarp = false
+local Main = TJ.Main
+if type(Main) ~= "table" then Main = {}; TJ.Main = Main end
+local config = Main.config
+if type(config) ~= "table" then config = {}; Main.config = config end
+if config.WalkSpeed == nil then config.WalkSpeed = 16 end
+local states = Main.states
+if type(states) ~= "table" then states = {}; Main.states = states end
+local defaults = {
+    Speed = false, Fly = false, InfJump = false, Noclip = false,
+    Xray = false, ESP = true, DeathNote = false, KillAura = false,
+    NormalKillAura = false, MonsterWarp = false, ServerSelector = false,
+    MM2RoleESP = false, AutoWarp = false, DNWarp = false
 }
-
-
-
--- Canonical state registry. Existing locals remain aliases for feature compatibility.
-TJ.Main.config = config
-TJ.Main.originalWalkSpeed = originalWalkSpeed
-TJ.Main.isBusy = isBusy
-TJ.Main.states = states
+for key, value in pairs(defaults) do
+    if states[key] == nil then states[key] = value end
+end
+local State = Main.State
+if type(State) ~= "table" then State = {}; Main.State = State end
+if State.originalWalkSpeed == nil then State.originalWalkSpeed = Main.originalWalkSpeed end
+if State.isBusy == nil then State.isBusy = Main.isBusy == true end
+-- Legacy feature modules keep the same table references. Scalar runtime values
+-- are stored in State and mirrored to legacy fields only when changed.
+Main.config, Main.states = config, states
+Main.originalWalkSpeed, Main.isBusy = State.originalWalkSpeed, State.isBusy
+TJ.Main = Main
 -- Resource declarations: descriptive only in Monitor Mode.
 ResourceManager:Register({ id = "Speed", writes = { "WalkSpeed" }, priority = 10 })
 ResourceManager:Register({ id = "Fly", writes = { "Position", "HumanoidFlags", "AnimateState" }, priority = 30 })
@@ -3990,7 +4019,10 @@ trackConnection(RunService.RenderStepped:Connect(function()
    local char = LocalPlayer.Character
    local hum = char and char:FindFirstChildOfClass("Humanoid")
    if states.Speed and hum then
-       if originalWalkSpeed == nil then originalWalkSpeed = hum.WalkSpeed end
+       if TJ.Main.State.originalWalkSpeed == nil then
+           TJ.Main.State.originalWalkSpeed = hum.WalkSpeed
+           TJ.Main.originalWalkSpeed = TJ.Main.State.originalWalkSpeed
+       end
        ResourceManager:RecordWrite("Speed", "WalkSpeed")
         hum.WalkSpeed = config.WalkSpeed
    end
@@ -4027,7 +4059,8 @@ trackConnection(RunService.Stepped:Connect(function()
 end))
 trackConnection(LocalPlayer.CharacterAdded:Connect(function()
    table.clear(noclipCache)
-   originalWalkSpeed = nil
+   TJ.Main.State.originalWalkSpeed = nil
+   TJ.Main.originalWalkSpeed = nil
 end))
 
 local xrayCache = {}

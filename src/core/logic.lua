@@ -10,7 +10,10 @@ trackConnection(RunService.RenderStepped:Connect(function()
    local char = LocalPlayer.Character
    local hum = char and char:FindFirstChildOfClass("Humanoid")
    if states.Speed and hum then
-       if originalWalkSpeed == nil then originalWalkSpeed = hum.WalkSpeed end
+       if TJ.Main.State.originalWalkSpeed == nil then
+           TJ.Main.State.originalWalkSpeed = hum.WalkSpeed
+           TJ.Main.originalWalkSpeed = TJ.Main.State.originalWalkSpeed
+       end
        ResourceManager:RecordWrite("Speed", "WalkSpeed")
         hum.WalkSpeed = config.WalkSpeed
    end
@@ -47,7 +50,8 @@ trackConnection(RunService.Stepped:Connect(function()
 end))
 trackConnection(LocalPlayer.CharacterAdded:Connect(function()
    table.clear(noclipCache)
-   originalWalkSpeed = nil
+   TJ.Main.State.originalWalkSpeed = nil
+   TJ.Main.originalWalkSpeed = nil
 end))
 
 local xrayCache = {}
