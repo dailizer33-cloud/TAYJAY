@@ -268,6 +268,41 @@ local function toggleFlyState()
 
    local flyPart = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or root
 
+   -- Owner สำหรับทรัพยากรช่วงบินเท่านั้น (loop + body movers)
+   flyOwner = ResourceManager:CreateOwner("Fly", function(reason)
+      -- onStop: กันกรณีถูก Stop จาก STOP ALL โดยตรง
+      if flyNowe then
+         flyNowe = false
+         verticalInput = 0
+         flyUi.setVisual(false)
+         local c = LocalPlayer.Character
+         local h = c and c:FindFirstChildOfClass("Humanoid")
+         if h then
+            for _, stateType in ipairs(flyStateTypes) do
+               local oldEnabled = savedStateEnabled[stateType]
+               if oldEnabled ~= nil then
+                  pcall(function() h:SetStateEnabled(stateType, oldEnabled) end)
+               else
+                  pcall(function() h:SetStateEnabled(stateType, true) end)
+               end
+            end
+            h.PlatformStand = savedPlatformStand
+            h.AutoRotate = savedAutoRotate
+            pcall(function() h:ChangeState(Enum.HumanoidStateType.RunningNoPhysics) end)
+         end
+         if c then
+            local anim = c:FindFirstChild("Animate")
+            if anim then anim.Disabled = savedAnimateDisabled end
+         end
+         savedHumanoid = nil
+         savedStateEnabled = {}
+      end
+      flyOwner = nil
+      flyLoop = nil
+      bg = nil
+      bv = nil
+   end)
+
    bg = Instance.new("BodyGyro")
    bg.Name = "TayJayFlyGyro"
    bg.P = 9e4
@@ -275,6 +310,7 @@ local function toggleFlyState()
    bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
    bg.CFrame = flyPart.CFrame
    bg.Parent = flyPart
+   flyOwner:Own(bg)
 
    bv = Instance.new("BodyVelocity")
    bv.Name = "TayJayFlyVelocity"
@@ -282,42 +318,44 @@ local function toggleFlyState()
    bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
    bv.Velocity = Vector3.new(0, 0.1, 0)
    bv.Parent = flyPart
+   flyOwner:Own(bv)
 
-   flyLoop = trackConnection(RunService.Heartbeat:Connect(function(dt)
-       if not flyNowe then return end
-       if not char.Parent or not hum.Parent or hum.Health <= 0 or not root.Parent or not flyPart.Parent then
-           stopFlying()
-           return
-       end
+   flyLoop = RunService.Heartbeat:Connect(function(dt)
+      if not flyNowe then return end
+      if not char.Parent or not hum.Parent or hum.Health <= 0 or not root.Parent or not flyPart.Parent then
+         stopFlying()
+         return
+      end
 
-       local camera = workspace.CurrentCamera
-       if not camera then return end
+      local camera = workspace.CurrentCamera
+      if not camera then return end
 
-       -- MONSTER / WARP ล็อกตัวละครบนเป้าหมายอยู่: Fly ทำหน้าที่ "ท่าบิน" (ไม่ตก/ไม่ล้ม) แต่ไม่ขยับตัวละครซ้ำ
-       -- ไม่งั้นสองระบบเขียนตำแหน่งแย่งกันทุกเฟรม = กระตุก (ตัวล็อกถูกต่ออายุทุกเฟรมโดย monsterGlueStep / ลูปตาม WARP)
-       local mwLockUntil = _G.TAYJAY_POS_LOCK_UNTIL
-       local mwLocked = mwLockUntil ~= nil and os.clock() < mwLockUntil
+      local mwLockUntil = _G.TAYJAY_POS_LOCK_UNTIL
+      local mwLocked = mwLockUntil ~= nil and os.clock() < mwLockUntil
 
-       local move = hum.MoveDirection
-       if not mwLocked and move.Magnitude > 0.001 then
-           local frameScale = math.clamp(dt * 60, 0, 2)
-           ResourceManager:RecordWrite("Fly", "Position")
-            char:TranslateBy(move * flySpeeds * frameScale)
-       end
+      local move = hum.MoveDirection
+      if not mwLocked and move.Magnitude > 0.001 then
+         local frameScale = math.clamp(dt * 60, 0, 2)
+         ResourceManager:RecordWrite("Fly", "Position")
+         char:TranslateBy(move * flySpeeds * frameScale)
+      end
 
-       if not mwLocked and verticalInput ~= 0 then
-           local frameScale = math.clamp(dt * 60, 0, 2)
-           ResourceManager:RecordWrite("Fly", "Position")
-            char:TranslateBy(Vector3.new(0, verticalInput * flySpeeds * frameScale, 0))
-       end
+      if not mwLocked and verticalInput ~= 0 then
+         local frameScale = math.clamp(dt * 60, 0, 2)
+         ResourceManager:RecordWrite("Fly", "Position")
+         char:TranslateBy(Vector3.new(0, verticalInput * flySpeeds * frameScale, 0))
+      end
 
-       bv.Velocity = Vector3.new(0, 0.1, 0)
-       local look = camera.CFrame.LookVector
-       local flatLook = Vector3.new(look.X, 0, look.Z)
-       if flatLook.Magnitude > 0.001 then
-           bg.CFrame = CFrame.lookAt(flyPart.Position, flyPart.Position + flatLook.Unit)
-       end
-   end))
+      if bv then bv.Velocity = Vector3.new(0, 0.1, 0) end
+      if bg then
+         local look = camera.CFrame.LookVector
+         local flatLook = Vector3.new(look.X, 0, look.Z)
+         if flatLook.Magnitude > 0.001 then
+            bg.CFrame = CFrame.lookAt(flyPart.Position, flyPart.Position + flatLook.Unit)
+         end
+      end
+   end)
+   flyOwner:Own(flyLoop)
 end
 
 trackConnection(flyOnOf.Activated:Connect(toggleFlyState))
