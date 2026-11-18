@@ -1,3 +1,4 @@
+TJ.Main._TayJayMM2Init = function()
 -- =========================================================
 -- 🗡️ MM2 ROLE ESP + PLAYER LIST 
 -- =========================================================
@@ -247,8 +248,8 @@ do
            if character then
                local highlight = character:FindFirstChild("TayJay_PlayerHighlight")
                if highlight then
-                   highlight.FillColor = ESP_FILL
-                   highlight.OutlineColor = ESP_OUTLINE
+                   highlight.FillColor = TJ.Main.PlayerESP.FillColor
+                   highlight.OutlineColor = TJ.Main.PlayerESP.OutlineColor
                    highlight.FillTransparency = 0.78
                    highlight.OutlineTransparency = 0.08
                end
@@ -436,9 +437,13 @@ do
 end
 
 -- Capture original camera values before applying this script's camera defaults.
-local originalCameraSettings = {
+TJ.Main.OriginalCameraSettings = {
     CameraMode=LocalPlayer.CameraMode,
     CameraMaxZoomDistance=LocalPlayer.CameraMaxZoomDistance,
     CameraMinZoomDistance=LocalPlayer.CameraMinZoomDistance,
     DevCameraOcclusionMode=LocalPlayer.DevCameraOcclusionMode
 }
+
+end
+TJ.Main._TayJayMM2Init()
+TJ.Main._TayJayMM2Init = nil

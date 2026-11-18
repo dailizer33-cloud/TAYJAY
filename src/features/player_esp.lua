@@ -8,6 +8,12 @@ local ESP_SILVER = Color3.fromRGB(255, 249, 210)
 local ESP_DARK_STROKE = Color3.fromRGB(36, 142, 68)
 local ESP_FILL = Color3.fromRGB(90, 175, 55)
 local ESP_OUTLINE = Color3.fromRGB(255, 211, 58)
+TJ.Main.PlayerESP = {
+   Name = ESP_NAME,
+   Highlight = ESP_HIGHLIGHT,
+   FillColor = ESP_FILL,
+   OutlineColor = ESP_OUTLINE,
+}
 local espBoundCharacters = {}
 
 local function cleanupEspCharacter(character)

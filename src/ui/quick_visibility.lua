@@ -175,10 +175,10 @@ _G.TAYJAY_STOP_ALL = function()
         for _,player in ipairs(Players:GetPlayers()) do
             local character=player.Character
             if character then
-                local highlight=character:FindFirstChild(ESP_HIGHLIGHT)
+                local highlight=character:FindFirstChild(TJ.Main.PlayerESP.Highlight)
                 if highlight then highlight:Destroy() end
                 local head=character:FindFirstChild("Head") or character.PrimaryPart
-                local billboard=head and head:FindFirstChild(ESP_NAME)
+                local billboard=head and head:FindFirstChild(TJ.Main.PlayerESP.Name)
                 if billboard then billboard:Destroy() end
             end
         end
@@ -186,10 +186,10 @@ _G.TAYJAY_STOP_ALL = function()
     _tjNoclipCamActive = false
     _tjZoomLimitActive = false
     pcall(function()
-        LocalPlayer.CameraMode=originalCameraSettings.CameraMode
-        LocalPlayer.CameraMaxZoomDistance=originalCameraSettings.CameraMaxZoomDistance
-        LocalPlayer.CameraMinZoomDistance=originalCameraSettings.CameraMinZoomDistance
-        LocalPlayer.DevCameraOcclusionMode=originalCameraSettings.DevCameraOcclusionMode
+        LocalPlayer.CameraMode=TJ.Main.OriginalCameraSettings.CameraMode
+        LocalPlayer.CameraMaxZoomDistance=TJ.Main.OriginalCameraSettings.CameraMaxZoomDistance
+        LocalPlayer.CameraMinZoomDistance=TJ.Main.OriginalCameraSettings.CameraMinZoomDistance
+        LocalPlayer.DevCameraOcclusionMode=TJ.Main.OriginalCameraSettings.DevCameraOcclusionMode
     end)
     pcall(function() if V70Perf and V70Perf.Cleanup then V70Perf.Cleanup() end end)
     for _,connection in ipairs(activeConnections) do pcall(function() connection:Disconnect() end) end
