@@ -142,6 +142,7 @@ do
        if not (root and targetRoot) then return end
 
        isBusy = true
+       local followConnection = nil
        local ok, err = pcall(function()
            local originalCFrame = root.CFrame
            local backpack = LocalPlayer:FindFirstChild("Backpack")
@@ -155,8 +156,7 @@ do
            end
 
            local startTime = tick()
-           local followConnection
-           followConnection = trackConnection(RunService.RenderStepped:Connect(function()
+           followConnection = RunService.RenderStepped:Connect(function()
                if tick() - startTime > 2 then
                    if followConnection then followConnection:Disconnect() end
                    return
@@ -174,7 +174,7 @@ do
                        tryAttackTarget(currentTargetCharacter)
                    end
                end
-           end))
+           end)
 
            task.wait(2.1)
            local currentCharacter = LocalPlayer.Character
@@ -184,6 +184,11 @@ do
                 currentRoot.CFrame = originalCFrame
            end
        end)
+       -- Always release this short-lived RenderStepped connection, including pcall failures.
+       if followConnection then
+           pcall(function() followConnection:Disconnect() end)
+           followConnection = nil
+       end
        isBusy = false
        if not ok then warn("[TAYJAY MM2] Follow action stopped: " .. tostring(err)) end
    end
@@ -266,12 +271,25 @@ do
        clearMM2RoleESP()
    end
 
+   -- Row button connections are row-scoped, not retained in the long-lived Global owner.
+   local rowConnections = setmetatable({}, {__mode = "k"})
+   local function disconnectRowConnections(row)
+       local connections = rowConnections[row]
+       if not connections then return end
+       for _, connection in ipairs(connections) do
+           pcall(function() connection:Disconnect() end)
+       end
+       table.clear(connections)
+       rowConnections[row] = nil
+   end
+
    local function updateMM2PlayerList()
        if not mm2ListFrame.Visible then return end
        mm2ListTitle.Text = "👥 ผู้เล่นทั้งหมด (" .. math.max(0, #Players:GetPlayers() - 1) .. ")"
 
        for _, child in ipairs(mm2ScrollingFrame:GetChildren()) do
            if child:IsA("Frame") and not Players:FindFirstChild(child.Name) then
+               disconnectRowConnections(child)
                child:Destroy()
            end
        end
@@ -288,6 +306,8 @@ do
                    row.BackgroundColor3 = GREEN.panel
                    row.Parent = mm2ScrollingFrame
                    row.LayoutOrder = roleOrder
+                   local connections = {}
+                   rowConnections[row] = connections
                    local rowTap = Instance.new("TextButton")
                    rowTap.Name = "RowTap"
                    rowTap.Size = UDim2.new(1, 0, 1, 0)
@@ -296,9 +316,9 @@ do
                    rowTap.AutoButtonColor = false
                    rowTap.ZIndex = 1
                    rowTap.Parent = row
-                   trackConnection(rowTap.Activated:Connect(function()
+                   connections[#connections + 1] = rowTap.Activated:Connect(function()
                        teleportAndAttack(player)
-                   end))
+                   end)
                    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
                    local rowStroke = Instance.new("UIStroke", row)
                    rowStroke.Color = GREEN.stroke
@@ -347,9 +367,9 @@ do
                    actionButton.ZIndex = 3
                    actionButton.Parent = row
                    Instance.new("UICorner", actionButton).CornerRadius = UDim.new(0, 6)
-                   trackConnection(actionButton.Activated:Connect(function()
+                   connections[#connections + 1] = actionButton.Activated:Connect(function()
                        teleportAndAttack(player)
-                   end))
+                   end)
                else
                    local roleLabel = row:FindFirstChild("RoleLabel")
                    local actionButton = row:FindFirstChild("ActionBtn")
