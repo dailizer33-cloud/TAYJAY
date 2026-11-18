@@ -2156,6 +2156,7 @@ local function stopWarpPhysicsConnections()
    if warpHeartbeatConnection then warpHeartbeatConnection:Disconnect(); warpHeartbeatConnection = nil end
    if warpSteppedConnection then warpSteppedConnection:Disconnect(); warpSteppedConnection = nil end
    restoreWarpCollision()
+   _G.TAYJAY_FOLLOW = nil
    _G.TAYJAY_POS_LOCK_UNTIL = nil
 end
 
