@@ -9,6 +9,26 @@ local ESP_FILL = Color3.fromRGB(90, 175, 55)
 local ESP_OUTLINE = Color3.fromRGB(255, 211, 58)
 local espBoundCharacters = {}
 
+local function cleanupEspCharacter(character)
+   local entry = character and espBoundCharacters[character]
+   if not entry then return false end
+   espBoundCharacters[character] = nil
+   if entry.owner and entry.owner.Stopped ~= true then
+      pcall(function()
+         ResourceManager:StopOwner(entry.ownerId, "character_removed")
+      end)
+   end
+   return true
+end
+
+local function cleanupEspPlayer(player)
+   for character, entry in pairs(espBoundCharacters) do
+      if entry.player == player then
+         cleanupEspCharacter(character)
+      end
+   end
+end
+
 local function applyEspToCharacter(character)
    if not character or not character.Parent then return end
    local head = character:FindFirstChild("Head")
@@ -99,18 +119,36 @@ local function applyEspToCharacter(character)
    end
 
    if not espBoundCharacters[character] then
-       espBoundCharacters[character] = true
-       trackConnection(humanoid.HealthChanged:Connect(function(health)
-           if not healthLabel or not healthLabel.Parent then return end
-           local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
-           healthLabel.Text = tostring(math.max(0, math.floor(health + 0.5))) .. " / " .. tostring(maxHp) .. " HP"
-       end))
-       trackConnection(humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
-           if not healthLabel or not healthLabel.Parent then return end
-           local hp = math.max(0, math.floor(humanoid.Health + 0.5))
-           local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
-           healthLabel.Text = tostring(hp) .. " / " .. tostring(maxHp) .. " HP"
-       end))
+       local playerForCharacter = Players:GetPlayerFromCharacter(character)
+       local ownerId = "ESPCharacter:" .. tostring(playerForCharacter and playerForCharacter.UserId or "Unknown") .. ":" .. tostring(character)
+       local owner = ResourceManager:CreateOwner(ownerId, function()
+           if espBoundCharacters[character] then
+               espBoundCharacters[character] = nil
+           end
+       end)
+       if owner then
+           espBoundCharacters[character] = {
+               owner = owner,
+               ownerId = ownerId,
+               player = playerForCharacter,
+           }
+           owner:Own(humanoid.HealthChanged:Connect(function(health)
+               if not character.Parent or not healthLabel or not healthLabel.Parent then return end
+               local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
+               healthLabel.Text = tostring(math.max(0, math.floor(health + 0.5))) .. " / " .. tostring(maxHp) .. " HP"
+           end))
+           owner:Own(humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+               if not character.Parent or not healthLabel or not healthLabel.Parent then return end
+               local hp = math.max(0, math.floor(humanoid.Health + 0.5))
+               local maxHp = math.max(1, math.floor(humanoid.MaxHealth + 0.5))
+               healthLabel.Text = tostring(hp) .. " / " .. tostring(maxHp) .. " HP"
+           end))
+           owner:Own(character.AncestryChanged:Connect(function(_, parent)
+               if parent == nil then
+                   cleanupEspCharacter(character)
+               end
+           end))
+       end
    end
 end
 registerUiSync("ESP", function(isOn)
@@ -148,8 +186,13 @@ local function bindEspPlayer(player)
        task.spawn(function()
            character:WaitForChild("Head", 8)
            character:WaitForChild("Humanoid", 8)
-           applyEspToCharacter(character)
+           if character.Parent and player.Parent == Players then
+               applyEspToCharacter(character)
+           end
        end)
+   end))
+   trackConnection(player.CharacterRemoving:Connect(function(character)
+       cleanupEspCharacter(character)
    end))
 end
 
@@ -157,6 +200,9 @@ for _, player in ipairs(Players:GetPlayers()) do
    bindEspPlayer(player)
 end
 trackConnection(Players.PlayerAdded:Connect(bindEspPlayer))
+trackConnection(Players.PlayerRemoving:Connect(function(player)
+   cleanupEspPlayer(player)
+end))
 
 task.spawn(function()
    while screenGui.Parent do
@@ -164,9 +210,14 @@ task.spawn(function()
        for _, player in ipairs(Players:GetPlayers()) do
            if player ~= LocalPlayer and player.Character then
                local character = player.Character
-               if character:FindFirstChild("Head") and character:FindFirstChildOfClass("Humanoid") then
+               if character.Parent and character:FindFirstChild("Head") and character:FindFirstChildOfClass("Humanoid") then
                    applyEspToCharacter(character)
                end
+           end
+       end
+       for character in pairs(espBoundCharacters) do
+           if not character.Parent then
+               cleanupEspCharacter(character)
            end
        end
    end
