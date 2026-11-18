@@ -2029,9 +2029,11 @@ do
    end)
 end
 
+local shadowOwner = ResourceManager:CreateOwner("WarpRuntime")
 local radius = 15; local numParts = 36; local circleParts = {}
 for i = 1, numParts do
    local part = Instance.new("Part"); part.Anchored = true; part.CanCollide = false; part.Material = Enum.Material.Neon; part.Color = Color3.fromRGB(255, 211, 58); part.Size = Vector3.new(1, 0.1, (2 * math.pi * radius) / numParts); part.Transparency = 1; part.Parent = workspace
+   shadowOwner:Own(part)
    table.insert(circleParts, part)
 end
 
@@ -2117,65 +2119,79 @@ local function stopShadowHunterVisuals()
    lastShadowCharacter = nil
 end
 
--- ตามเป้าหมายทุกเฟรมฟิสิกส์ (ลื่นกว่าการอัปเดตทุก 0.12 วินาที)
-do
-   local FOLLOW_OFFSET = CFrame.new(0, 0, 3.5)
-   trackConnection(RunService.Heartbeat:Connect(function()
-       local f = _G.TAYJAY_FOLLOW
-       if not f or not f.player or f.player.Parent ~= Players then return end
-       if (_G.TAYJAY_WARP_HOLD_UNTIL or 0) > os.clock() then return end
-       local myChar = LocalPlayer.Character
-       local myRootNow = myChar and myChar:FindFirstChild("HumanoidRootPart")
-       local tChar = f.player.Character
-       local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-       local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
-       if not myRootNow or not tRoot or not tHum or tHum.Health <= 0 then return end
-       _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.3 -- บอก Fly ว่า WARP คุมตำแหน่งอยู่ (ไม่ขยับซ้ำ)
-       ResourceManager:RecordWrite("ShadowHunter", "Velocity")
-        myRootNow.AssemblyLinearVelocity = Vector3.zero
-       myRootNow.AssemblyAngularVelocity = Vector3.zero
-       ResourceManager:RecordWrite("ShadowHunter", "Position")
-        myRootNow.CFrame = tRoot.CFrame * FOLLOW_OFFSET
-   end))
+-- WARP physics connections exist only while a WARP mode is active.
+local warpHeartbeatConnection, warpSteppedConnection
+local warpNoclipParts, warpNoclipChar, warpNoclipRefreshAt = {}, nil, 0
+local warpCollisionSaved = {}
 
-   -- NOCLIP ทุกเฟรมระหว่าง WARP ล็อกเป้า (ทะลุสิ่งกีดขวาง) และคืนค่าการชนเมื่อ WARP หยุดล็อก
-   local warpNoclipParts, warpNoclipChar, warpNoclipRefreshAt = {}, nil, 0
-   local warpCollisionSaved = {}
-   trackConnection(RunService.Stepped:Connect(function()
-       local lockUntil = _G.TAYJAY_POS_LOCK_UNTIL
-       local locked = (states.KillAura or states.DNWarp) and _G.TAYJAY_FOLLOW ~= nil
-           and lockUntil ~= nil and os.clock() < lockUntil
-       if not locked then
-           if next(warpCollisionSaved) ~= nil then
-               for part in pairs(warpCollisionSaved) do
-                   if part.Parent then pcall(function() part.CanCollide = true end) end
-                   warpCollisionSaved[part] = nil
-               end
-               warpNoclipParts, warpNoclipChar = {}, nil
-           end
-           return
-       end
-       local char = LocalPlayer.Character
-       if not char then return end
-       if char ~= warpNoclipChar or os.clock() >= warpNoclipRefreshAt then
-           warpNoclipChar = char
-           warpNoclipRefreshAt = os.clock() + 0.5
-           local list = {}
-           for _, part in ipairs(char:GetDescendants()) do
-               if part:IsA("BasePart") then
-                   table.insert(list, part)
-                   if part.CanCollide then warpCollisionSaved[part] = true end
-               end
-           end
-           warpNoclipParts = list
-       end
-       for _, part in ipairs(warpNoclipParts) do
-           if part.Parent and part.CanCollide then part.CanCollide = false end
-       end
-   end))
+local function restoreWarpCollision()
+   for part in pairs(warpCollisionSaved) do
+       if part and part.Parent then pcall(function() part.CanCollide = true end) end
+       warpCollisionSaved[part] = nil
+   end
+   warpNoclipParts, warpNoclipChar, warpNoclipRefreshAt = {}, nil, 0
 end
 
-task.spawn(function()
+local function stopWarpPhysicsConnections()
+   if warpHeartbeatConnection then warpHeartbeatConnection:Disconnect(); warpHeartbeatConnection = nil end
+   if warpSteppedConnection then warpSteppedConnection:Disconnect(); warpSteppedConnection = nil end
+   restoreWarpCollision()
+   _G.TAYJAY_POS_LOCK_UNTIL = nil
+end
+
+local function startWarpPhysicsConnections()
+   if warpHeartbeatConnection and warpSteppedConnection then return end
+   local FOLLOW_OFFSET = CFrame.new(0, 0, 3.5)
+   if not warpHeartbeatConnection then
+       warpHeartbeatConnection = RunService.Heartbeat:Connect(function()
+           local f = _G.TAYJAY_FOLLOW
+           if not f or not f.player or f.player.Parent ~= Players then return end
+           if (_G.TAYJAY_WARP_HOLD_UNTIL or 0) > os.clock() then return end
+           local myChar = LocalPlayer.Character
+           local myRootNow = myChar and myChar:FindFirstChild("HumanoidRootPart")
+           local tChar = f.player.Character
+           local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+           local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
+           if not myRootNow or not tRoot or not tHum or tHum.Health <= 0 then return end
+           _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.3
+           ResourceManager:RecordWrite("ShadowHunter", "Velocity")
+           myRootNow.AssemblyLinearVelocity = Vector3.zero
+           myRootNow.AssemblyAngularVelocity = Vector3.zero
+           ResourceManager:RecordWrite("ShadowHunter", "Position")
+           myRootNow.CFrame = tRoot.CFrame * FOLLOW_OFFSET
+       end)
+   end
+   if not warpSteppedConnection then
+       warpSteppedConnection = RunService.Stepped:Connect(function()
+           local lockUntil = _G.TAYJAY_POS_LOCK_UNTIL
+           local locked = (states.KillAura or states.DNWarp) and _G.TAYJAY_FOLLOW ~= nil
+               and lockUntil ~= nil and os.clock() < lockUntil
+           if not locked then restoreWarpCollision(); return end
+           local char = LocalPlayer.Character
+           if not char then return end
+           if char ~= warpNoclipChar or os.clock() >= warpNoclipRefreshAt then
+               warpNoclipChar = char
+               warpNoclipRefreshAt = os.clock() + 0.5
+               local list = {}
+               for _, part in ipairs(char:GetDescendants()) do
+                   if part:IsA("BasePart") then
+                       table.insert(list, part)
+                       if part.CanCollide then warpCollisionSaved[part] = true end
+                   end
+               end
+               warpNoclipParts = list
+           end
+           for _, part in ipairs(warpNoclipParts) do
+               if part.Parent and part.CanCollide then part.CanCollide = false end
+           end
+       end)
+   end
+end
+
+shadowOwner:Own(stopWarpPhysicsConnections)
+
+
+local shadowThread = task.spawn(function()
    local WARP_SEARCH_RANGE = math.huge -- ค้นทั้งแมพ (ใส่ตัวเลข เช่น 200 เพื่อจำกัดระยะจากจุดยืน)
    local WARP_CHAIN_COUNT = 3 -- เมื่อเป้าหมายตาย สุ่มจากคนที่ใกล้จุดตายที่สุดกี่คน
    local WARP_REST_SECONDS = 1 -- พักที่จุดยืนกี่วินาทีก่อนหาเป้าหมายใหม่
@@ -2244,16 +2260,18 @@ task.spawn(function()
    local function placePlatformUnder(position)
        ensurePlatform().CFrame = CFrame.new(position.X, position.Y - WARP_FEET_DROP - WARP_PLATFORM_SIZE.Y / 2, position.Z)
    end
-   -- ลบพื้นกันตกหลังหน่วง 3 วินาที เพื่อให้แมพที่จุดยืนโหลดทัน ไม่ตกระหว่างรอ
+   -- ลบพื้นกันตกทันทีเมื่อ WARP ปิดหรือเปลี่ยนตัวละคร
    local function destroyPlatform()
        local part = warpPlatform
        warpPlatform = nil
-       if part then
-           task.delay(3, function()
-               if part.Parent then part:Destroy() end
-           end)
-       end
+       if part and part.Parent then pcall(function() part:Destroy() end) end
    end
+
+   shadowOwner:Own(function()
+       destroyPlatform()
+       _G.TAYJAY_FOLLOW = nil
+       stopShadowHunterVisuals()
+   end)
    -- กลับไปยืนที่จุดยืน (ใช้เฉพาะเมื่อยังเป็นตัวละครเดิม)
    local function goHome(myRoot)
        if warpHome and warpOwner and myRoot and warpOwner == LocalPlayer.Character then
@@ -2263,10 +2281,16 @@ task.spawn(function()
        end
    end
 
-   while screenGui.Parent do
-       task.wait(SHADOW_UPDATE_INTERVAL)
+   while screenGui.Parent and shadowOwner:IsAlive() do
        local shadowEnabled = states.KillAura or states.DNWarp
        local warpActive = states.KillAura or states.DNWarp
+       if warpActive and not isBusy then
+           startWarpPhysicsConnections()
+           task.wait(SHADOW_UPDATE_INTERVAL)
+       else
+           stopWarpPhysicsConnections()
+           task.wait(0.5)
+       end
        local myCharacterNow = LocalPlayer.Character
        local myRootNow = myCharacterNow and myCharacterNow:FindFirstChild("HumanoidRootPart")
 
@@ -2432,6 +2456,7 @@ task.spawn(function()
    end
    stopShadowHunterVisuals()
 end)
+shadowOwner:OwnTask(shadowThread)
 
 -- =========================================================
 -- 👾 MONSTER WARP (แยกจาก Player WARP)
