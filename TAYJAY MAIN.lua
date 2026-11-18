@@ -5083,6 +5083,9 @@ TJ.Main._TayJayThemeInit = nil
 -- and are not captured as undeclared globals by the isolated FPS task.
 -- =========================================================
 TJ.Main = TJ.Main or {}
+TJ.Main.IsWindowLocked = function()
+   return _G.TAYJAY_UI ~= nil and _G.TAYJAY_UI.locked == true
+end
 TJ.Main.ApplyFPSMainUIAdapter = function(fpsGui, fpsPanel)
    if not fpsGui then return false end
    -- Apply the shared main-menu theme/layout pass from the main script scope.
@@ -5791,7 +5794,7 @@ local launcher = ui("TextButton", {
 corner(launcher, 25); stroke(launcher, Color3.fromRGB(255, 231, 92), 2.5)
 local launcherDragging, launcherDragStart, launcherStartPos = false, nil, nil
 v70Track(V70Perf.MonitorConnections, launcher.InputBegan:Connect(function(input)
-   if not _G.TAYJAY_UI.locked and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
+   if not (TJ.Main.IsWindowLocked and TJ.Main.IsWindowLocked()) and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
        launcherDragging = true
        launcherDragStart = input.Position
        launcherStartPos = launcher.Position
