@@ -282,7 +282,24 @@ SecureParentGui(screenGui)
 -- an attempt to call a nil global and stopped the script before the menu appeared.
 local activeConnections = {}
 local function trackConnection(conn)
-   if conn then table.insert(activeConnections, conn) end
+   if conn then
+      table.insert(activeConnections, conn)
+      -- ResourceManager is declared later in the concatenated build. Resolve it
+      -- through the shared environment instead of a lexical local/global lookup.
+      pcall(function()
+         local resourceEnv = _G
+         if type(getgenv) == "function" then
+            local shared = getgenv()
+            if type(shared) == "table" then
+               resourceEnv = shared
+            end
+         end
+         local manager = resourceEnv.TAYJAY_RESOURCE_MANAGER
+         if type(manager) == "table" and type(manager.Own) == "function" then
+            manager:Own(conn)
+         end
+      end)
+   end
    return conn
 end
 
@@ -5777,7 +5794,14 @@ strengthenControlEdges(perfGui)
 _G.TAYJAY_STOPPED = false
 _G.TAYJAY_STOP_ALL = function()
     if _G.TAYJAY_STOPPED then return end
-    _G.TAYJAY_STOPPED=true
+    _G.TAYJAY_STOPPED = true
+
+    -- Stop every registered Owner first (Fly, Warp, Global, etc.).
+    pcall(function()
+        if ResourceManager and ResourceManager.StopAllOwners then
+            ResourceManager:StopAllOwners("STOP_ALL")
+        end
+    end)
 
     -- Hide and destroy UI first so a later feature-cleanup error cannot leave menus visible.
     pcall(function() if screenGui then screenGui.Enabled = false end end)
