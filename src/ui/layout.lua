@@ -11,7 +11,6 @@ local UI_LAYOUT = {
    FlyBottom    = UDim2.fromScale(0.6263, 1.0000), -- FLY CONTROL มุมขวาล่าง
    WarpCenter   = UDim2.fromScale(0.1550, 0.6000), -- ปุ่มวงกลม WARP
    WalkCenter   = UDim2.fromScale(0.2050, 0.6420), -- ปุ่มวงกลม WALK
-   Walk2Center  = UDim2.fromScale(0.2490, 0.6000), -- ปุ่มวงกลม WALK2
    RapidBiteCenter = UDim2.fromScale(0.4310, 0.8540), -- ปุ่ม RAPID ด้านล่างกึ่งกลาง
    MonsterTargetPanel = UDim2.fromScale(0.4820, 0.7300), -- ตาราง Monster/NPC ด้านล่างกึ่งกลาง
    MM2Dock      = UDim2.fromScale(0.8350, 0.4630), -- กรอบปุ่มดาบ/สมุด (MM2)
