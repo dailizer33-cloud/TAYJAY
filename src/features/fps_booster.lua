@@ -562,7 +562,7 @@ local launcher = ui("TextButton", {
 corner(launcher, 25); stroke(launcher, Color3.fromRGB(255, 231, 92), 2.5)
 local launcherDragging, launcherDragStart, launcherStartPos = false, nil, nil
 v70Track(V70Perf.MonitorConnections, launcher.InputBegan:Connect(function(input)
-   if not _G.TAYJAY_UI.locked and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
+   if not (TJ.Main.IsWindowLocked and TJ.Main.IsWindowLocked()) and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
        launcherDragging = true
        launcherDragStart = input.Position
        launcherStartPos = launcher.Position
