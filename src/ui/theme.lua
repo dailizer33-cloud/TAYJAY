@@ -121,3 +121,5 @@ end))
 end
 TJ.Main._TayJayThemeInit()
 TJ.Main._TayJayThemeInit = nil
+
+-- Build trigger: keep generated MAIN synchronized with manifest sources.
