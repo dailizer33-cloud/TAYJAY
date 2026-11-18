@@ -4269,6 +4269,7 @@ registerUiSync("Xray", function(isOn)
 end)
 
 
+end
 TJ.Main._TayJayLogicInit()
 TJ.Main._TayJayLogicInit = nil
 TJ.Main._TayJayPlayerESPInit = function()
