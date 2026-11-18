@@ -77,7 +77,6 @@ local function ensureCircleParts()
        part.Size = Vector3.new(1, 0.1, (2 * math.pi * radius) / numParts)
        part.Transparency = 1
        part.Parent = workspace
-       shadowOwner:Own(part)
        table.insert(circleParts, part)
    end
 end
