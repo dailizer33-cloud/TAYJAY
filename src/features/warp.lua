@@ -326,6 +326,9 @@ local shadowThread = task.spawn(function()
            part.BottomSurface = Enum.SurfaceType.Smooth
            part.Parent = workspace
            warpPlatform = part
+           if warpRuntimeOwner then
+               warpRuntimeOwner:Own(part)
+           end
        end
        return warpPlatform
    end
@@ -353,7 +356,10 @@ local shadowThread = task.spawn(function()
        end
    end
 
-   while screenGui.Parent and warpRuntimeOwner:IsAlive() do
+   while screenGui.Parent do
+       if warpRuntimeOwner and warpRuntimeOwner.Stopped then
+           break
+       end
        local shadowEnabled = states.KillAura or states.DNWarp
        local warpActive = states.KillAura or states.DNWarp
        if warpActive and not isBusy then
@@ -526,7 +532,12 @@ local shadowThread = task.spawn(function()
            end
        end
    end
+   -- Loop exit cleanup (also safe if STOP ALL already destroyed these resources).
    stopShadowHunterVisuals()
+   _G.TAYJAY_FOLLOW = nil
+   destroyPlatform()
 end)
-warpRuntimeOwner:OwnTask(shadowThread)
+if warpRuntimeOwner then
+   warpRuntimeOwner:OwnTask(shadowThread)
+end
 
