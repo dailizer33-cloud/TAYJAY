@@ -145,7 +145,10 @@ TJ.Main.ApplyFPSMainUIAdapter = function(fpsGui, fpsPanel)
    trackConnection(screenGui.DescendantAdded:Connect(function(uiObject)
       task.defer(function()
           if uiObject and uiObject.Parent then
-              styleDynamicObject(uiObject)
+              local dynamicStyle = TJ and TJ.Main and TJ.Main.ApplyDynamicStyle
+              if type(dynamicStyle) == "function" then
+                  pcall(dynamicStyle, uiObject)
+              end
               applyTayJayTextContrast(uiObject)
           end
       end)
