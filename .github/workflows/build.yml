@@ -74,13 +74,9 @@ jobs:
             echo "::error::TAYJAY MAIN.lua was edited directly in this push and does not match src/. Move the change into src/ (see README). Not overwriting."
             exit 1
           fi
-          if [ -n "$BASE" ] && git cat-file -e "$BASE:tools/build.py" 2>/dev/null; then
-            git worktree add -q "$RUNNER_TEMP/base" "$BASE"
-            if ! (cd "$RUNNER_TEMP/base" && python3 tools/build.py --check); then
-              echo "::error::TAYJAY MAIN.lua was already out of sync with src/ before this push (direct edit). Not overwriting."
-              exit 1
-            fi
-          fi
+          # src/ is canonical. If MAIN was already stale before this push,
+          # rebuild it from src/ rather than preserving the stale generated bundle.
+          # Direct MAIN edits in the current push are still blocked above.
           echo "build=true" >> "$GITHUB_OUTPUT"
 
       - name: Build and commit
