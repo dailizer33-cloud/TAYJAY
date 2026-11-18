@@ -5066,7 +5066,7 @@ local function applyGreenTheme(root)
        styleDynamicObject(obj)
    end
 end
--- Export callback for the FPS UI code, which runs outside this local scope.
+-- Expose the callback for UI modules initialized in a separate local scope.
 TJ.Main.ApplyDynamicStyle = styleDynamicObject
 
 applyGreenTheme(screenGui)
@@ -5231,9 +5231,7 @@ TJ.Main.ApplyFPSMainUIAdapter = function(fpsGui, fpsPanel)
               if type(dynamicStyle) == "function" then
                   pcall(dynamicStyle, uiObject)
               end
-              if type(applyTayJayTextContrast) == "function" then
-                  pcall(applyTayJayTextContrast, uiObject)
-              end
+              applyTayJayTextContrast(uiObject)
           end
       end)
    end))
@@ -5259,22 +5257,6 @@ task.spawn(function()
 -- =========================================================
 -- TAYJAY FPS BOOSTER V72
 -- =========================================================
--- Resolve every main-script dependency through the published context.
--- Roblox/executor globals remain native runtime APIs.
-local FPSContext = TJ and TJ.Main and TJ.Main.FPSContext
-assert(type(FPSContext) == "table" and FPSContext.Version == 1, "FPS context is unavailable")
-local newCleanupOwner = assert(FPSContext.newCleanupOwner, "FPS context missing newCleanupOwner")
-local newBag = assert(FPSContext.newBag, "FPS context missing newBag")
-local ResourceManager = assert(FPSContext.ResourceManager, "FPS context missing ResourceManager")
-local SecureParentGui = assert(FPSContext.SecureParentGui, "FPS context missing SecureParentGui")
-local UI_LAYOUT = assert(FPSContext.UI_LAYOUT, "FPS context missing UI_LAYOUT")
-local GREEN = assert(FPSContext.GREEN, "FPS context missing GREEN")
-local WHITE_TEXT = assert(FPSContext.WHITE_TEXT, "FPS context missing WHITE_TEXT")
-local applyTayJayTextContrast = assert(FPSContext.applyTayJayTextContrast, "FPS context missing text contrast helper")
-local Players = assert(FPSContext.Players, "FPS context missing Players")
-local RunService = assert(FPSContext.RunService, "FPS context missing RunService")
-local UserInputService = assert(FPSContext.UserInputService, "FPS context missing UserInputService")
-local Lighting = assert(FPSContext.Lighting, "FPS context missing Lighting")
 -- Resolve every main-script dependency through the published context.
 -- Roblox/executor globals remain native runtime APIs.
 local FPSContext = TJ and TJ.Main and TJ.Main.FPSContext
