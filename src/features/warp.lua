@@ -55,8 +55,23 @@ do
    end)
 end
 
-local shadowOwner = ResourceManager:CreateOwner("WarpRuntime")
-local radius = 15; local numParts = 36; local circleParts = {}
+local radius = 15
+local numParts = 36
+local circleParts = {}
+
+-- Runtime owner: owns circle cleanup + long-running Warp loops.
+-- Keep warpOwner reserved for the character reference inside the WARP loop.
+local warpRuntimeOwner = ResourceManager:CreateOwner("WarpRuntime", function(reason)
+   pcall(function()
+      for _, inst in ipairs(workspace:GetChildren()) do
+         if inst.Name == "TayJayWarpPlatform" then
+            inst:Destroy()
+         end
+      end
+   end)
+   _G.TAYJAY_FOLLOW = nil
+   _G.TAYJAY_POS_LOCK_UNTIL = nil
+end)
 
 local function destroyCircleParts()
    for i = #circleParts, 1, -1 do
@@ -70,6 +85,7 @@ local function ensureCircleParts()
    if #circleParts > 0 then return end
    for i = 1, numParts do
        local part = Instance.new("Part")
+       part.Name = "TayJayWarpCirclePart"
        part.Anchored = true
        part.CanCollide = false
        part.Material = Enum.Material.Neon
@@ -80,7 +96,7 @@ local function ensureCircleParts()
        table.insert(circleParts, part)
    end
 end
-shadowOwner:Own(destroyCircleParts)
+warpRuntimeOwner:Own(destroyCircleParts)
 
 local function getClosestPlayer_V57(maxDist)
    local closestPlayer = nil; local shortestDistance = maxDist or maxAttackDistance
@@ -235,7 +251,7 @@ local function startWarpPhysicsConnections()
    end
 end
 
-shadowOwner:Own(stopWarpPhysicsConnections)
+warpRuntimeOwner:Own(stopWarpPhysicsConnections)
 
 
 local shadowThread = task.spawn(function()
@@ -314,7 +330,7 @@ local shadowThread = task.spawn(function()
        if part and part.Parent then pcall(function() part:Destroy() end) end
    end
 
-   shadowOwner:Own(function()
+   warpRuntimeOwner:Own(function()
        destroyPlatform()
        _G.TAYJAY_FOLLOW = nil
        stopShadowHunterVisuals()
@@ -328,7 +344,7 @@ local shadowThread = task.spawn(function()
        end
    end
 
-   while screenGui.Parent and shadowOwner:IsAlive() do
+   while screenGui.Parent and warpRuntimeOwner:IsAlive() do
        local shadowEnabled = states.KillAura or states.DNWarp
        local warpActive = states.KillAura or states.DNWarp
        if warpActive and not isBusy then
@@ -503,5 +519,5 @@ local shadowThread = task.spawn(function()
    end
    stopShadowHunterVisuals()
 end)
-shadowOwner:OwnTask(shadowThread)
+warpRuntimeOwner:OwnTask(shadowThread)
 
