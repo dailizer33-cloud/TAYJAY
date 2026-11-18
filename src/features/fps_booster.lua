@@ -307,16 +307,16 @@ v70Track(V70Perf.MonitorConnections, perfGui.ChildAdded:Connect(function() task.
 V70Perf.GUI = perfGui
 -- Stable module boundary: Core/UI code talks to FPS through TJ.Main.FPS,
 -- not through locals hidden inside the isolated FPS task scope.
-local fpsModule
-fpsModule = {
-   GUI = perfGui,
-   Perf = V70Perf,
-   SetVisible = function(visible)
-      if fpsModule.GUI then fpsModule.GUI.Enabled = visible == true end
-      return fpsModule.GUI ~= nil
-   end,
-}
+-- Reuse the placeholder published before task.spawn so Core/UI can safely
+-- resolve the API even when this isolated scope has not finished initializing.
+local fpsModule = TJ.Main.FPS or {}
 TJ.Main.FPS = fpsModule
+fpsModule.GUI = perfGui
+fpsModule.Perf = V70Perf
+fpsModule.SetVisible = function(visible)
+   if fpsModule.GUI then fpsModule.GUI.Enabled = visible == true end
+   return fpsModule.GUI ~= nil
+end
  V70Owner.Bag:Add(perfGui)
 
 local function ui(className, props, parent)
