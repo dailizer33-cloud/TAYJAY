@@ -16,6 +16,17 @@ local okRun, errRun = xpcall(function()
 	local RunService = game:GetService("RunService")
 	local player     = Players.LocalPlayer or Players.PlayerAdded:Wait()
 	local RNG        = Random.new()
+	local _tjFarmEnv = _G
+	pcall(function()
+		if type(getgenv) == "function" then
+			local shared = getgenv()
+			if type(shared) == "table" then _tjFarmEnv = shared end
+		end
+	end)
+	local TJ = _tjFarmEnv.TJ
+	if type(TJ) ~= "table" then TJ = {}; _tjFarmEnv.TJ = TJ end
+	TJ.Farm = TJ.Farm or {}
+
 
 	--=========================================================
 	-- CONFIG & STATE
@@ -123,6 +134,18 @@ local okRun, errRun = xpcall(function()
 	}
 	local GL = {att=nil,lv=nil,goal=nil,kind=nil,active=false,started=0,lastPos=nil,lastProgress=0}
 	local MOVE = {}
+	-- Canonical Farm state namespace; local names remain aliases for legacy logic.
+	TJ.Farm.CFG = CFG
+	TJ.Farm.ST = ST
+	TJ.Farm.F = F
+	TJ.Farm.NC = NC
+	TJ.Farm.UI = UI
+	TJ.Farm.TAP = TAP
+	TJ.Farm.RADAR = RADAR
+	TJ.Farm.SAFE = SAFE
+	TJ.Farm.K = K
+	TJ.Farm.GL = GL
+	TJ.Farm.MOVE = MOVE
 
 	-- Shutdown previous instance if running
 	pcall(function()

@@ -3,17 +3,26 @@
 -- Observes declared writes only. It never acquires, blocks, preempts,
 -- or changes the behavior of a registered feature.
 -- =========================================================
-local ResourceManager = {
-    Mode = "MONITOR",
-    Modules = {},
-    RecentWrites = {},
-    LastConflictAt = {},
-    Conflicts = {},
-    TotalWrites = 0,
-    TotalConflicts = 0,
-    Window = 0.18,
-    MaxConflicts = 30
-}
+local _tjRMEnv = _G
+pcall(function()
+    if type(getgenv) == "function" then
+        local shared = getgenv()
+        if type(shared) == "table" then _tjRMEnv = shared end
+    end
+end)
+local TJ = _tjRMEnv.TJ
+if type(TJ) ~= "table" then TJ = {}; _tjRMEnv.TJ = TJ end
+local ResourceManager = TJ.ResourceManager or {}
+ResourceManager.Mode = "MONITOR"
+ResourceManager.Modules = {}
+ResourceManager.RecentWrites = {}
+ResourceManager.LastConflictAt = {}
+ResourceManager.Conflicts = {}
+ResourceManager.TotalWrites = 0
+ResourceManager.TotalConflicts = 0
+ResourceManager.Window = 0.18
+ResourceManager.MaxConflicts = 30
+--
 function ResourceManager:Register(definition)
     if type(definition) ~= "table" or type(definition.id) ~= "string" then return false end
     local writes = {}
@@ -63,5 +72,6 @@ function ResourceManager:GetStatus()
         latest = self.Conflicts[#self.Conflicts]
     }
 end
+TJ.ResourceManager = ResourceManager
 _G.TAYJAY_RESOURCE_MANAGER = ResourceManager
 
