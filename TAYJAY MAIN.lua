@@ -2105,38 +2105,45 @@ local function updateCirclePosition()
    end
 end
 
-trackConnection(RunService.RenderStepped:Connect(function()
-   if not (states.KillAura or states.AutoWarp or states.NormalKillAura or states.DNWarp) then
-       targetGui.Visible = false
-       destroyCircleParts()
-       return
-   end
-   targetGui.Visible = true
-   local shadowMode = states.KillAura or states.AutoWarp or states.DNWarp
-   local target
-   if shadowMode then
-       target = selectedDeathNoteTarget and selectedDeathNoteTarget.Character or nil
-   else
-       local searchDist = states.NormalKillAura and 25 or maxAttackDistance
-       target = getClosestPlayer_V57(searchDist)
-   end
+do
+   local conn = RunService.RenderStepped:Connect(function()
+      if not (states.KillAura or states.AutoWarp or states.NormalKillAura or states.DNWarp) then
+          targetGui.Visible = false
+          destroyCircleParts()
+          return
+      end
+      targetGui.Visible = true
+      local shadowMode = states.KillAura or states.AutoWarp or states.DNWarp
+      local target
+      if shadowMode then
+          target = selectedDeathNoteTarget and selectedDeathNoteTarget.Character or nil
+      else
+          local searchDist = states.NormalKillAura and 25 or maxAttackDistance
+          target = getClosestPlayer_V57(searchDist)
+      end
 
-   if shadowMode then
-       -- โหมด WARP: ลูป Shadow Hunter เป็นผู้เขียนข้อความและแถบ HP แต่เพียงผู้เดียว (กันข้อความกระพริบ)
-   elseif target then
-       local humanoid = target:FindFirstChildOfClass("Humanoid")
-       if humanoid then
-           local health = math.floor(humanoid.Health); local maxHealth = math.floor(humanoid.MaxHealth)
-           targetTitle.Text = (shadowMode and "🕶 Target: " or "⚔️ เป้าหมาย: ") .. target.Name
-           targetHpLabel.Text = health .. " / " .. maxHealth .. " HP"
-           targetBarFill.Size = UDim2.new(math.clamp(health / math.max(maxHealth, 1), 0, 1), 0, 1, 0)
-       end
+      if shadowMode then
+          -- โหมด WARP: ลูป Shadow Hunter เป็นผู้เขียนข้อความและแถบ HP แต่เพียงผู้เดียว (กันข้อความกระพริบ)
+      elseif target then
+          local humanoid = target:FindFirstChildOfClass("Humanoid")
+          if humanoid then
+              local health = math.floor(humanoid.Health); local maxHealth = math.floor(humanoid.MaxHealth)
+              targetTitle.Text = (shadowMode and "🕶 Target: " or "⚔️ เป้าหมาย: ") .. target.Name
+              targetHpLabel.Text = health .. " / " .. maxHealth .. " HP"
+              targetBarFill.Size = UDim2.new(math.clamp(health / math.max(maxHealth, 1), 0, 1), 0, 1, 0)
+          end
+      else
+          targetTitle.Text = shadowMode and "☠ Select target in Death Note" or "⚔️ เป้าหมาย: ไม่พบเป้าหมาย"
+          targetHpLabel.Text = "0 / 0 HP"; targetBarFill.Size = UDim2.new(0, 0, 1, 0)
+      end
+      updateCirclePosition()
+   end)
+   if warpRuntimeOwner then
+      warpRuntimeOwner:Own(conn)
    else
-       targetTitle.Text = shadowMode and "☠ Select target in Death Note" or "⚔️ เป้าหมาย: ไม่พบเป้าหมาย"
-       targetHpLabel.Text = "0 / 0 HP"; targetBarFill.Size = UDim2.new(0, 0, 1, 0)
+      trackConnection(conn)
    end
-   updateCirclePosition()
-end))
+end
 
 -- DEATH NOTE SHADOW HUNTER: Death Note selects the target; WARP UI / AutoWarp starts tracking.
 -- Replaces the old head-sit warp entirely. Position updates are client-side and remain subject to server correction.
@@ -2197,6 +2204,7 @@ local function startWarpPhysicsConnections()
            ResourceManager:RecordWrite("ShadowHunter", "Position")
            myRootNow.CFrame = tRoot.CFrame * FOLLOW_OFFSET
        end)
+       if warpRuntimeOwner then warpRuntimeOwner:Own(warpHeartbeatConnection) end
    end
    if not warpSteppedConnection then
        warpSteppedConnection = RunService.Stepped:Connect(function()
@@ -2222,6 +2230,7 @@ local function startWarpPhysicsConnections()
                if part.Parent and part.CanCollide then part.CanCollide = false end
            end
        end)
+       if warpRuntimeOwner then warpRuntimeOwner:Own(warpSteppedConnection) end
    end
 end
 
