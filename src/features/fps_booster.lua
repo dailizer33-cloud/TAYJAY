@@ -307,7 +307,8 @@ v70Track(V70Perf.MonitorConnections, perfGui.ChildAdded:Connect(function() task.
 V70Perf.GUI = perfGui
 -- Stable module boundary: Core/UI code talks to FPS through TJ.Main.FPS,
 -- not through locals hidden inside the isolated FPS task scope.
-local fpsModule = {
+local fpsModule
+fpsModule = {
    GUI = perfGui,
    Perf = V70Perf,
    SetVisible = function(visible)
