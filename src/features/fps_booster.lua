@@ -505,8 +505,9 @@ local function renderTab()
            v70SetFPSUnlock(requested)
            renderTab()
            if statusLabel then
-               statusLabel.Text = V70Perf.FPSUnlockStatus == "ACTIVE" and "PROFILE: BALANCED • FPS UNLOCK ON"
-                   or (V70Perf.FPSUnlockStatus == "RESTORED" and "PROFILE: BALANCED • FPS UNLOCK OFF" or "FPS UNLOCK: NOT AVAILABLE")
+               local profile = string.upper(V70Perf.CurrentPreset or "POTATO")
+               statusLabel.Text = V70Perf.FPSUnlockStatus == "ACTIVE" and ("PROFILE: " .. profile .. " • FPS UNLOCK ON")
+                   or (V70Perf.FPSUnlockStatus == "RESTORED" and ("PROFILE: " .. profile .. " • FPS UNLOCK OFF") or "FPS UNLOCK: NOT AVAILABLE")
            end
        end)
        unlockButton.BackgroundColor3 = v70FPSUnlockApplied() and Color3.fromRGB(104, 211, 57) or Color3.fromRGB(166, 43, 38)
@@ -645,14 +646,33 @@ v70Track(V70Perf.MonitorConnections, RunService.Heartbeat:Connect(function(dt)
 end))
 
 function V70Perf.Cleanup()
-   if not V70Perf.Alive then return false end
-   local stopped = ResourceManager:StopOwner("FPS")
+   local wasAlive = V70Perf.Alive == true
+   local stopped = false
+   if wasAlive then
+       local stopOK, stopResult = pcall(function()
+           return ResourceManager:StopOwner("FPS")
+       end)
+       stopped = stopOK and stopResult == true
+       -- If the Owner was already unregistered, still restore the values it owned.
+       if not stopOK or (not stopResult and V70Perf.Alive) then
+           pcall(v70RestoreAll)
+           pcall(v70RestoreFPSCap)
+           V70Perf.Alive = false
+       end
+   end
+
+   -- STOP ALL stops Owners before calling module cleanup. Cleanup must therefore
+   -- release published references even when the Owner has already marked Alive=false.
    table.clear(V70Perf.MonitorConnections)
    table.clear(V70Perf.ContentConnections)
    table.clear(V70Perf.BoostConnections)
    V70Perf.GUI = nil
-   fpsModule.GUI = nil
    V70Perf.GraphBars = nil
+   if fpsModule.GUI == perfGui then fpsModule.GUI = nil end
+   if fpsModule.Perf == V70Perf then fpsModule.Perf = nil end
+   fpsModule.SetVisible = nil
+   fpsModule.Cleanup = nil
+   fpsModule.GetStatus = nil
    if _G.TAYJAY_V70_PERF == V70Perf then _G.TAYJAY_V70_PERF = nil end
    return stopped
 end
@@ -671,7 +691,7 @@ fpsModule.GetStatus = function()
 end
 
 renderTab()
-statusLabel.Text = "PROFILE: BALANCED  •  " .. (v70FPSUnlockApplied() and "FPS UNLOCK ON" or "FPS UNLOCK N/A") .. "  •  FLOATING UI READY"
+statusLabel.Text = "PROFILE: " .. string.upper(V70Perf.CurrentPreset or "POTATO") .. "  •  " .. (v70FPSUnlockApplied() and "FPS UNLOCK ON" or "FPS UNLOCK N/A") .. "  •  FLOATING UI READY"
 print("[TAYJAY V72 FPS BOOSTER] Dashboard ready | Collapsible + Floating Launcher")
 
 -- Main-menu styling, lock bar and dynamic UI hooks live in the main-scope adapter.
