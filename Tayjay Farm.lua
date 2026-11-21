@@ -262,9 +262,9 @@ local okRun, errRun = xpcall(function()
 		Font=FONT,TextXAlignment=Enum.TextXAlignment.Left,Active=true},W.head)
 	F.makeDraggable(W.title, W.frame)
 
-	W.fold = F.mkBtn(W.head,"−",TH.headDark,UDim.fromOffset(38,34),UDim2.new(1,-204,0,7),22)
-	W.refresh = F.mkBtn(W.head,"สแกน",TH.green,UDim.fromOffset(54,34),UDim2.new(1,-160,0,7),14)
-	W.closeBtn = F.mkBtn(W.head,"ปิดสคริป",TH.danger,UDim.fromOffset(92,34),UDim2.new(1,-102,0,7),14)
+	W.fold = F.mkBtn(W.head,"−",TH.headDark,UDim2.fromOffset(38,34),UDim2.new(1,-204,0,7),22)
+	W.refresh = F.mkBtn(W.head,"สแกน",TH.green,UDim2.fromOffset(54,34),UDim2.new(1,-160,0,7),14)
+	W.closeBtn = F.mkBtn(W.head,"ปิดสคริป",TH.danger,UDim2.fromOffset(92,34),UDim2.new(1,-102,0,7),14)
 	W.status = F.make("TextLabel",{Size=UDim2.new(1,-20,0,20),Position=UDim2.fromOffset(10,52),
 		BackgroundTransparency=1,Text="เริ่มสแกน...",TextColor3=TH.sub,TextSize=13,Font=FONT,
 		TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd},W.frame)
@@ -284,7 +284,7 @@ local okRun, errRun = xpcall(function()
 		BorderSizePixel=0,Text="",PlaceholderText="🔍 ค้นหาชื่อ...",PlaceholderColor3=TH.sub,TextColor3=TH.text,
 		TextSize=15,Font=FONT,ClearTextOnFocus=false},W.listPanel)
 	F.style(W.searchBox,TH.stroke,12)
-	W.allBtn = F.mkBtn(W.listPanel,"ALL ON",TH.btnBlue,UDim.fromOffset(92,36),UDim2.new(1,-92,0,0),14)
+	W.allBtn = F.mkBtn(W.listPanel,"ALL ON",TH.btnBlue,UDim2.fromOffset(92,36),UDim2.new(1,-92,0,0),14)
 	W.list = F.make("ScrollingFrame",{Size=UDim2.new(1,0,1,-44),Position=UDim2.fromOffset(0,44),
 		BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=0.35,BorderSizePixel=0,ScrollBarThickness=6,
 		CanvasSize=UDim2.new(0,0,0,0)},W.listPanel)
@@ -310,8 +310,8 @@ local okRun, errRun = xpcall(function()
 			local label=F.make("TextLabel",{Size=UDim2.new(1,-16,0,22),Position=UDim2.fromOffset(10,3),
 				BackgroundTransparency=1,Text=ttl,TextColor3=TH.text,TextSize=14,Font=FONT,
 				TextXAlignment=Enum.TextXAlignment.Left},box)
-			local minus=F.mkBtn(box,"−",TH.btnBlue,UDim.fromOffset(34,32),UDim2.new(0,8,0,28),22)
-			local plus=F.mkBtn(box,"+",TH.btnBlue,UDim.fromOffset(34,32),UDim2.new(1,-42,0,28),22)
+			local minus=F.mkBtn(box,"−",TH.btnBlue,UDim2.fromOffset(34,32),UDim2.new(0,8,0,28),22)
+			local plus=F.mkBtn(box,"+",TH.btnBlue,UDim2.fromOffset(34,32),UDim2.new(1,-42,0,28),22)
 			local track=F.make("Frame",{Size=UDim2.new(1,-100,0,12),Position=UDim2.new(0,50,0,38),
 				BackgroundColor3=TH.tabOff,BorderSizePixel=0},box)
 			F.style(track,nil,6)
@@ -1063,7 +1063,7 @@ local okRun, errRun = xpcall(function()
 		local subL=F.make("TextLabel",{Size=UDim2.new(1,-96,0,18),Position=UDim2.fromOffset(12,31),
 			BackgroundTransparency=1,Text="",TextColor3=TH.sub,TextSize=12,Font=FONT,
 			TextXAlignment=Enum.TextXAlignment.Left},f)
-		local b=F.mkBtn(f,"OFF",TH.off,UDim.fromOffset(74,38),UDim2.new(1,-82,.5,-19),16)
+		local b=F.mkBtn(f,"OFF",TH.off,UDim2.fromOffset(74,38),UDim2.new(1,-82,.5,-19),16)
 		r={frame=f,nameL=nameL,subL=subL,btn=b,stroke=stroke,key=key}
 		b.MouseButton1Click:Connect(function()
 			RADAR.enabled[r.key]=not RADAR.enabled[r.key]
