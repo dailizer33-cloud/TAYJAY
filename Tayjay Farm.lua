@@ -637,11 +637,21 @@ local okRun, errRun = xpcall(function()
 		local best,bestScore=nil,0
 		for _,B in ipairs(UI.buttons) do
 			local o=B.o
-			if B.shown and not B.buy and o.Parent then
+			if B.shown and not B.buy and o.Parent and B.size.X>10 and B.size.Y>10 then
+				local name=B.name
+				local label=B.text
 				local score=0
-				if B.name=="BITE" or B.text=="BITE" then score=100
-				elseif B.name:find("BITE",1,true) then score=70
-				elseif B.text:find("BITE",1,true) then score=45 end
+				-- Prefer BITE, then support common attack-button labels.
+				if name=="BITE" or label=="BITE" then score=120
+				elseif name:find("BITE",1,true) or label:find("BITE",1,true) then score=100
+				elseif name:find("ATTACK",1,true) or label:find("ATTACK",1,true) then score=82
+				elseif name:find("CHOP",1,true) or label:find("CHOP",1,true) then score=72
+				elseif name:find("CUT",1,true) or label:find("CUT",1,true) then score=62 end
+				if score>0 then
+					local combined=name.." "..label
+					if combined:find("SETTING",1,true) or combined:find("UPGRADE",1,true)
+						or combined:find("SHOP",1,true) then score=0 end
+				end
 				if score>0 then
 					score=score+math.min(20,B.area/900)
 					if score>bestScore then best,bestScore=o,score end
@@ -682,19 +692,24 @@ local okRun, errRun = xpcall(function()
 	function F.pressBite()
 		local now=os.clock()
 		local b=ST.biteBtn
-		if not (b and b.Parent and F.liveShown(b)) then
-			b=nil
-			if now-ST.biteBtnAt>=1.2 then
+		local valid=(b and b.Parent and F.liveShown(b))
+		-- Periodically refresh the cache when the game rebuilds its attack control.
+		if not valid or now-ST.biteBtnAt>=2.5 then
+			if now-ST.biteBtnAt>=0.75 then
 				ST.biteBtnAt=now
-				b=TAP.findBite(); ST.biteBtn=b
-				if b and ST.biteLogged~=b:GetFullName() then
-					ST.biteLogged=b:GetFullName()
-					print("[TAYJAY] เจอปุ่มกัด: "..ST.biteLogged)
-				end
+				local found=TAP.findBite()
+				if found then b=found; ST.biteBtn=b
+				elseif not valid then b=nil; ST.biteBtn=nil end
 			end
 		end
-		ST.biteFound=(b~=nil)
-		if b then return TAP.hard(b) end
+		ST.biteFound=(b~=nil and b.Parent~=nil and F.liveShown(b))
+		if ST.biteFound then
+			if ST.biteLogged~=b:GetFullName() then
+				ST.biteLogged=b:GetFullName()
+				print("[TAYJAY] เจอปุ่มกัด: "..ST.biteLogged)
+			end
+			return TAP.hard(b)
+		end
 		return false
 	end
 	function F.pressSkill(i)
