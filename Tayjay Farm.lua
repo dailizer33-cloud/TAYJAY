@@ -96,6 +96,8 @@ local okRun, errRun = xpcall(function()
 
 	-- Namespaces to keep Luau register count low
 	local F = {}
+	-- Use the canonical UDim2.new constructor for executor compatibility.
+	local function offset2(x, y) return UDim2.new(0, x, 0, y) end
 	local NC = {
 		on=false, char=nil, snap={}, safeCF=nil, busy=false,
 		descConn=nil, stepConn=nil,
@@ -252,40 +254,40 @@ local okRun, errRun = xpcall(function()
 	end
 
 	local W = {}
-	W.frame = F.make("Frame",{Size=UDim2.fromOffset(FW,FH),Position=UDim2.new(1,-(FW+12),0,12),
+	W.frame = F.make("Frame",{Size=offset2(FW,FH),Position=UDim2.new(1,-(FW+12),0,12),
 		BackgroundColor3=TH.bg,BorderSizePixel=0},gui)
 	F.style(W.frame,TH.stroke,18)
 	W.head = F.make("Frame",{Size=UDim2.new(1,0,0,48),BackgroundColor3=TH.head,BorderSizePixel=0},W.frame)
 	F.style(W.head,nil,18)
-	W.title = F.make("TextLabel",{Size=UDim2.new(1,-214,1,0),Position=UDim2.fromOffset(14,0),
+	W.title = F.make("TextLabel",{Size=UDim2.new(1,-214,1,0),Position=offset2(14,0),
 		BackgroundTransparency=1,Text="🐜 ANT FARM V26.2",TextColor3=Color3.new(1,1,1),TextSize=19,
 		Font=FONT,TextXAlignment=Enum.TextXAlignment.Left,Active=true},W.head)
 	F.makeDraggable(W.title, W.frame)
 
-	W.fold = F.mkBtn(W.head,"−",TH.headDark,UDim2.fromOffset(38,34),UDim2.new(1,-204,0,7),22)
-	W.refresh = F.mkBtn(W.head,"สแกน",TH.green,UDim2.fromOffset(54,34),UDim2.new(1,-160,0,7),14)
-	W.closeBtn = F.mkBtn(W.head,"ปิดสคริป",TH.danger,UDim2.fromOffset(92,34),UDim2.new(1,-102,0,7),14)
-	W.status = F.make("TextLabel",{Size=UDim2.new(1,-20,0,20),Position=UDim2.fromOffset(10,52),
+	W.fold = F.mkBtn(W.head,"−",TH.headDark,offset2(38,34),UDim2.new(1,-204,0,7),22)
+	W.refresh = F.mkBtn(W.head,"สแกน",TH.green,offset2(54,34),UDim2.new(1,-160,0,7),14)
+	W.closeBtn = F.mkBtn(W.head,"ปิดสคริป",TH.danger,offset2(92,34),UDim2.new(1,-102,0,7),14)
+	W.status = F.make("TextLabel",{Size=UDim2.new(1,-20,0,20),Position=offset2(10,52),
 		BackgroundTransparency=1,Text="เริ่มสแกน...",TextColor3=TH.sub,TextSize=13,Font=FONT,
 		TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd},W.frame)
-	W.questLine = F.make("TextLabel",{Size=UDim2.new(1,-20,0,18),Position=UDim2.fromOffset(10,72),
+	W.questLine = F.make("TextLabel",{Size=UDim2.new(1,-20,0,18),Position=offset2(10,72),
 		BackgroundTransparency=1,Text="",TextColor3=Color3.fromRGB(30,150,120),TextSize=12,Font=FONT,
 		TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd},W.frame)
-	W.quick = F.make("Frame",{Size=UDim2.new(1,-20,0,42),Position=UDim2.fromOffset(10,94),BackgroundTransparency=1},W.frame)
+	W.quick = F.make("Frame",{Size=UDim2.new(1,-20,0,42),Position=offset2(10,94),BackgroundTransparency=1},W.frame)
 	W.combat = F.mkBtn(W.quick,"MONSTER WARP: OFF",TH.off,UDim2.new(.5,-4,1,0),UDim2.new(0,0,0,0),14)
 	W.abilityToggle = F.mkBtn(W.quick,"BITE AUTO: OFF",TH.off,UDim2.new(.5,-4,1,0),UDim2.new(.5,4,0,0),14)
-	W.tabs = F.make("Frame",{Size=UDim2.new(1,-20,0,40),Position=UDim2.fromOffset(10,142),BackgroundTransparency=1},W.frame)
+	W.tabs = F.make("Frame",{Size=UDim2.new(1,-20,0,40),Position=offset2(10,142),BackgroundTransparency=1},W.frame)
 	W.itemTab = F.mkBtn(W.tabs,"ITEM",TH.tabItem,UDim2.new(1/3,-4,1,0),UDim2.new(0,0,0,0),15)
 	W.monsterTab = F.mkBtn(W.tabs,"MONSTER",TH.tabOff,UDim2.new(1/3,-4,1,0),UDim2.new(1/3,2,0,0),15)
 	W.settingsTab = F.mkBtn(W.tabs,"SETTINGS",TH.tabOff,UDim2.new(1/3,-4,1,0),UDim2.new(2/3,4,0,0),15)
-	W.content = F.make("Frame",{Size=UDim2.new(1,-20,1,-198),Position=UDim2.fromOffset(10,188),BackgroundTransparency=1},W.frame)
+	W.content = F.make("Frame",{Size=UDim2.new(1,-20,1,-198),Position=offset2(10,188),BackgroundTransparency=1},W.frame)
 	W.listPanel = F.make("Frame",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1},W.content)
 	W.searchBox = F.make("TextBox",{Size=UDim2.new(1,-100,0,36),BackgroundColor3=Color3.new(1,1,1),
 		BorderSizePixel=0,Text="",PlaceholderText="🔍 ค้นหาชื่อ...",PlaceholderColor3=TH.sub,TextColor3=TH.text,
 		TextSize=15,Font=FONT,ClearTextOnFocus=false},W.listPanel)
 	F.style(W.searchBox,TH.stroke,12)
-	W.allBtn = F.mkBtn(W.listPanel,"ALL ON",TH.btnBlue,UDim2.fromOffset(92,36),UDim2.new(1,-92,0,0),14)
-	W.list = F.make("ScrollingFrame",{Size=UDim2.new(1,0,1,-44),Position=UDim2.fromOffset(0,44),
+	W.allBtn = F.mkBtn(W.listPanel,"ALL ON",TH.btnBlue,offset2(92,36),UDim2.new(1,-92,0,0),14)
+	W.list = F.make("ScrollingFrame",{Size=UDim2.new(1,0,1,-44),Position=offset2(0,44),
 		BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=0.35,BorderSizePixel=0,ScrollBarThickness=6,
 		CanvasSize=UDim2.new(0,0,0,0)},W.listPanel)
 	F.style(W.list,nil,12)
@@ -307,17 +309,17 @@ local okRun, errRun = xpcall(function()
 			local S={min=minV,max=maxV,step=step,value=minV}
 			local box=F.make("Frame",{Size=UDim2.new(1,0,0,64),BackgroundColor3=TH.row,BorderSizePixel=0,LayoutOrder=order},sliderBox)
 			F.style(box,TH.plain,12)
-			local label=F.make("TextLabel",{Size=UDim2.new(1,-16,0,22),Position=UDim2.fromOffset(10,3),
+			local label=F.make("TextLabel",{Size=UDim2.new(1,-16,0,22),Position=offset2(10,3),
 				BackgroundTransparency=1,Text=ttl,TextColor3=TH.text,TextSize=14,Font=FONT,
 				TextXAlignment=Enum.TextXAlignment.Left},box)
-			local minus=F.mkBtn(box,"−",TH.btnBlue,UDim2.fromOffset(34,32),UDim2.new(0,8,0,28),22)
-			local plus=F.mkBtn(box,"+",TH.btnBlue,UDim2.fromOffset(34,32),UDim2.new(1,-42,0,28),22)
+			local minus=F.mkBtn(box,"−",TH.btnBlue,offset2(34,32),UDim2.new(0,8,0,28),22)
+			local plus=F.mkBtn(box,"+",TH.btnBlue,offset2(34,32),UDim2.new(1,-42,0,28),22)
 			local track=F.make("Frame",{Size=UDim2.new(1,-100,0,12),Position=UDim2.new(0,50,0,38),
 				BackgroundColor3=TH.tabOff,BorderSizePixel=0},box)
 			F.style(track,nil,6)
 			local fill=F.make("Frame",{Size=UDim2.new(0,0,1,0),BackgroundColor3=TH.on,BorderSizePixel=0},track)
 			F.style(fill,nil,6)
-			local knob=F.make("Frame",{Size=UDim2.fromOffset(26,26),AnchorPoint=Vector2.new(.5,.5),
+			local knob=F.make("Frame",{Size=offset2(26,26),AnchorPoint=Vector2.new(.5,.5),
 				Position=UDim2.new(0,0,.5,0),BackgroundColor3=Color3.new(1,1,1),BorderSizePixel=0},track)
 			F.style(knob,TH.stroke,13)
 			local hit=F.make("TextButton",{Size=UDim2.new(1,-100,0,36),Position=UDim2.new(0,50,0,26),
@@ -371,7 +373,7 @@ local okRun, errRun = xpcall(function()
 			TextColor3=TH.sub,TextSize=12,Font=FONT,TextWrapped=true,LayoutOrder=5},sliderBox)
 
 		local gridFrame=F.make("Frame",{Size=UDim2.new(1,-8,0,400),BackgroundTransparency=1,LayoutOrder=2},W.settingsPanel)
-		W.sGrid=F.make("UIGridLayout",{CellSize=UDim2.new(.5,-4,0,50),CellPadding=UDim2.fromOffset(8,8),
+		W.sGrid=F.make("UIGridLayout",{CellSize=UDim2.new(.5,-4,0,50),CellPadding=offset2(8,8),
 			SortOrder=Enum.SortOrder.LayoutOrder},gridFrame)
 		SET.grid=gridFrame
 	end
@@ -395,7 +397,7 @@ local okRun, errRun = xpcall(function()
 	SET.bag     = mkSetting(14,"BAG MANAGER: ON",TH.on)
 	SET.sell    = mkSetting(15,"📍 ตั้งจุดขาย",TH.btnBlue)
 
-	W.miniAtk = F.make("TextButton",{Name="TayJayMiniAttack",Size=UDim2.fromOffset(66,66),
+	W.miniAtk = F.make("TextButton",{Name="TayJayMiniAttack",Size=offset2(66,66),
 		Position=UDim2.new(1,-84,0.55,0),BackgroundColor3=TH.off,Text="⚔\nBITE",TextColor3=Color3.new(1,1,1),
 		TextSize=14,Font=FONT,BorderSizePixel=0,Active=true},gui)
 	F.make("UICorner",{CornerRadius=UDim.new(1,0)},W.miniAtk)
@@ -1057,13 +1059,13 @@ local okRun, errRun = xpcall(function()
 		local f=F.make("Frame",{Size=UDim2.new(1,-6,0,54),BackgroundColor3=TH.row,BorderSizePixel=0},W.list)
 		F.make("UICorner",{CornerRadius=UDim.new(0,12)},f)
 		local stroke=F.make("UIStroke",{Color=TH.plain,Thickness=2},f)
-		local nameL=F.make("TextLabel",{Size=UDim2.new(1,-96,0,26),Position=UDim2.fromOffset(12,5),
+		local nameL=F.make("TextLabel",{Size=UDim2.new(1,-96,0,26),Position=offset2(12,5),
 			BackgroundTransparency=1,Text="",TextColor3=TH.text,TextSize=17,Font=FONT,
 			TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd},f)
-		local subL=F.make("TextLabel",{Size=UDim2.new(1,-96,0,18),Position=UDim2.fromOffset(12,31),
+		local subL=F.make("TextLabel",{Size=UDim2.new(1,-96,0,18),Position=offset2(12,31),
 			BackgroundTransparency=1,Text="",TextColor3=TH.sub,TextSize=12,Font=FONT,
 			TextXAlignment=Enum.TextXAlignment.Left},f)
-		local b=F.mkBtn(f,"OFF",TH.off,UDim2.fromOffset(74,38),UDim2.new(1,-82,.5,-19),16)
+		local b=F.mkBtn(f,"OFF",TH.off,offset2(74,38),UDim2.new(1,-82,.5,-19),16)
 		r={frame=f,nameL=nameL,subL=subL,btn=b,stroke=stroke,key=key}
 		b.MouseButton1Click:Connect(function()
 			RADAR.enabled[r.key]=not RADAR.enabled[r.key]
@@ -1157,7 +1159,7 @@ local okRun, errRun = xpcall(function()
 		for _,o in ipairs({W.status,W.questLine,W.quick,W.tabs,W.content}) do o.Visible=not ST.collapsed end
 		W.listPanel.Visible=(ST.selected~="SET")
 		W.settingsPanel.Visible=(ST.selected=="SET")
-		W.frame.Size=ST.collapsed and UDim2.fromOffset(FW,56) or UDim2.fromOffset(FW,FH)
+		W.frame.Size=ST.collapsed and offset2(FW,56) or offset2(FW,FH)
 		W.fold.Text=ST.collapsed and "+" or "−"
 	end
 	function F.setTab(cat)
