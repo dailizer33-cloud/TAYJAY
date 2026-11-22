@@ -924,6 +924,27 @@ local function distanceTo(player)
     return (myRoot.Position - root.Position).Magnitude, char, hum
 end
 
+function TargetService:FindNearestFromPosition(origin, maxDist, skipBlacklist)
+    if typeof(origin) ~= "Vector3" then return nil end
+    local bestPlayer, bestChar, bestDist = nil, nil, tonumber(maxDist) or math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local skipped = skipBlacklist == true and _G.TAYJAY_BL
+                and type(_G.TAYJAY_BL.has) == "function" and _G.TAYJAY_BL.has(player.Name)
+            if not skipped then
+                local char = player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if root and hum and hum.Health > 0 then
+                    local dist = (root.Position - origin).Magnitude
+                    if dist <= bestDist then bestPlayer, bestChar, bestDist = player, char, dist end
+                end
+            end
+        end
+    end
+    return bestPlayer, bestChar, bestDist
+end
+
 function TargetService:FindNearest(maxDist, skipBlacklist)
     local myChar = LocalPlayer.Character
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -1860,6 +1881,15 @@ local function walk2AttackTarget(targetCharacter)
    return tryAttackTarget(targetCharacter)
 end
 
+-- TargetService is the single attack scheduler for WALK and locked Death Note targets.
+if type(TargetService) == "table" then
+   TargetService:SetRange(25)
+   TargetService:BindAttack(function(targetCharacter)
+      return walk2AttackTarget(targetCharacter)
+   end)
+   TargetService:EnsureCombatOwner()
+end
+
 local deathNoteGroup = Instance.new("Frame", screenGui)
 deathNoteGroup.Name = "DeathNoteGroup"; deathNoteGroup.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH); deathNoteGroup.Position = UI_LAYOUT.PlayerList
 deathNoteGroup.BackgroundTransparency = 1; deathNoteGroup.Visible = false; deathNoteGroup.Active = true
@@ -1925,25 +1955,7 @@ local lockedDeathNoteTarget = nil
 local isDeathNoteTargetLocked = false
 local shadowTargetReleased = false
 
--- Death Note attack lock: reuse the same target attack routine as WALK2.
--- The shared 0.25s cooldown in tryAttackTarget remains the rate limiter.
-trackConnection(RunService.Heartbeat:Connect(function()
-    if not states.DNWarp or not isDeathNoteTargetLocked then return end
-    local lockedPlayer = lockedDeathNoteTarget
-    if not lockedPlayer or lockedPlayer.Parent ~= Players then return end
-
-    local targetCharacter = lockedPlayer.Character
-    local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
-    local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
-    local localCharacter = LocalPlayer.Character
-    local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
-
-    -- Match WALK2's 25-stud range, without switching to another player.
-    if targetRoot and targetHumanoid and targetHumanoid.Health > 0 and localRoot
-        and (localRoot.Position - targetRoot.Position).Magnitude <= 25 then
-        walk2AttackTarget(targetCharacter)
-    end
-end))
+-- TargetService owns the shared Death Note/WALK attack heartbeat.
 
 -- Client-side visual hide only; this does not make the character server-invisible.
 local function setInvisibility(char, invisible)
@@ -2077,6 +2089,9 @@ local function createPlayerCard(playerObj, parentScroll, isKiller)
            if lockedDeathNoteTarget == playerObj then lockedDeathNoteTarget = nil end
            isDeathNoteTargetLocked = false
            shadowTargetReleased = true
+           if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+               TargetService:Unlock("deathnote_toggle")
+           end
            syncButtonState("DNWarp", false)
            targetTitle.Text = "🎯 Target: none"
            targetHpLabel.Text = "Target unlocked • Attack stopped"
@@ -2087,6 +2102,15 @@ local function createPlayerCard(playerObj, parentScroll, isKiller)
        lockedDeathNoteTarget = playerObj
        isDeathNoteTargetLocked = true
        shadowTargetReleased = false
+       if type(TargetService) == "table" then
+           local locked = TargetService:Lock(playerObj, "deathnote")
+           if not locked then
+               selectedDeathNoteTarget = nil
+               lockedDeathNoteTarget = nil
+               isDeathNoteTargetLocked = false
+               return
+           end
+       end
        syncButtonState("DNWarp", true)
        -- เริ่มโจมตีทันทีหนึ่งครั้ง; Heartbeat จะใช้ WALK2 ซ้ำกับเป้าหมายเดิมในระยะ 25 studs
        if playerObj.Character then walk2AttackTarget(playerObj.Character) end
@@ -2131,6 +2155,9 @@ end
 trackConnection(Players.PlayerAdded:Connect(updatePlayerList))
 trackConnection(Players.PlayerRemoving:Connect(function(player)
    if lockedDeathNoteTarget == player then
+       if type(TargetService) == "table" and TargetService.Player == player then
+           TargetService:Unlock("deathnote_player_removing")
+       end
        lockedDeathNoteTarget = nil
        isDeathNoteTargetLocked = false
        shadowTargetReleased = true
@@ -2251,6 +2278,9 @@ targetUnlockButton.Activated:Connect(function()
     lockedDeathNoteTarget = nil
     isDeathNoteTargetLocked = false
     shadowTargetReleased = true
+    if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+        TargetService:Unlock("deathnote_unlock_button")
+    end
     updateTargetLockVisual()
     if states.AutoWarp then syncButtonState("AutoWarp", false) end
     targetTitle.Text = "🔓 Target unlocked"
@@ -2300,6 +2330,9 @@ do
        states.KillAura = not states.KillAura
        if states.KillAura then
            states.NormalKillAura = false
+            if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+                TargetService:Unlock("warp_mode")
+            end
             selectedDeathNoteTarget = nil
             syncButtonState("DNWarp", false)
             -- อนุญาตคู่ Fly + WARP: ไม่ปิด Fly แล้ว (ตัวล็อกตำแหน่งกลางกันแย่งกันขยับ ดู TAYJAY_POS_LOCK_UNTIL)
@@ -2310,7 +2343,12 @@ do
    -- WALK: โจมตีระยะใกล้ (ไม่เปลี่ยน)
    trackConnection(kaNormalBtn.Activated:Connect(function()
        states.NormalKillAura = not states.NormalKillAura
-       if states.NormalKillAura then states.KillAura = false end
+       if states.NormalKillAura then
+           states.KillAura = false
+           if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+               TargetService:Unlock("walk_mode")
+           end
+       end
        updateKaBtnDisplay()
    end))
 
@@ -2589,19 +2627,8 @@ local shadowThread = task.spawn(function()
        return pool[math.random(1, #pool)]
    end
    local function findNearestFromHome(maxDistance, origin)
-       local best, bestDistance = nil, maxDistance
-       for _, player in ipairs(Players:GetPlayers()) do
-           local char = player ~= LocalPlayer and player.Character
-           local root = char and char:FindFirstChild("HumanoidRootPart")
-           local hum = char and char:FindFirstChildOfClass("Humanoid")
-           if root and hum and hum.Health > 0 and not isSkipped(player) then
-               local distance = (root.Position - origin).Magnitude
-               if distance <= bestDistance then
-                   best, bestDistance = player, distance
-               end
-           end
-       end
-       return best
+       if type(TargetService) ~= "table" then return nil end
+       return TargetService:FindNearestFromPosition(origin, maxDistance, true)
    end
 
    -- พื้นกันตก: แพตโปร่งใสที่ชนได้ อยู่ใต้เท้าตัวละครเสมอ (กันตกเมื่อแมพยังไม่โหลด)
@@ -2708,7 +2735,12 @@ local shadowThread = task.spawn(function()
            end
            _G.TAYJAY_FOLLOW = nil; targetTitle.Text = "⏸ Shadow Hunter: paused"
        else
-           if not states.KillAura then randomWarpTarget = nil end
+           if not states.KillAura then
+               randomWarpTarget = nil
+               if type(TargetService) == "table" and TargetService.Source == "warp" then
+                   TargetService:SetTransient(nil, "warp")
+               end
+           end
            local targetPlayer
            if states.KillAura then
                -- WARP: เป้าหมาย = คนที่ใกล้ "จุดยืน" ที่สุดทั้งแมพ
@@ -2726,6 +2758,10 @@ local shadowThread = task.spawn(function()
                    randomWarpTarget = findNearestFromHome(WARP_SEARCH_RANGE, warpHome.Position)
                end
                targetPlayer = randomWarpTarget
+               if type(TargetService) == "table" and TargetService.Source ~= "deathnote"
+                   and (TargetService.Player ~= randomWarpTarget or TargetService.Source ~= "warp") then
+                   TargetService:SetTransient(randomWarpTarget, "warp")
+               end
                if not targetPlayer then goHome(myRootNow) end
            elseif states.DNWarp then
                -- ปุ่ม "⇢ WARP ไป": ย้ายไปหาเป้าหมายครั้งเดียว แล้วอยู่ตรงนั้น (ไม่กลับจุดยืน)
@@ -2739,6 +2775,9 @@ local shadowThread = task.spawn(function()
                        myRootNow.CFrame = dest
                        _G.TAYJAY_WARP_STAY = true; _G.TAYJAY_FOLLOW = nil
                        selectedDeathNoteTarget = nil
+                       if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+                           TargetService:Unlock("deathnote_warp_stay")
+                       end
                        syncButtonState("DNWarp", false)
                    end
                end
@@ -2758,6 +2797,9 @@ local shadowThread = task.spawn(function()
                     lockedDeathNoteTarget = nil
                     isDeathNoteTargetLocked = false
                     shadowTargetReleased = true
+                    if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+                        TargetService:Unlock("deathnote_target_gone")
+                    end
                     syncButtonState("DNWarp", false)
                else
                    targetPlayer = selectedDeathNoteTarget
@@ -4188,44 +4230,11 @@ end
 
 
 -- =========================================================
--- WALK Dynamic Target: เลือกผู้เล่นที่มีชีวิตและใกล้ที่สุดใหม่ทุกครั้งที่ค้นหา
-local function getDynamicWalkTarget()
-   local myCharacter = LocalPlayer.Character
-   local myRoot = myCharacter and myCharacter:FindFirstChild("HumanoidRootPart")
-   local myHumanoid = myCharacter and myCharacter:FindFirstChildOfClass("Humanoid")
-   if not myRoot or not myHumanoid or myHumanoid.Health <= 0 then return nil end
-
-   local nearestCharacter = nil
-   local nearestDistance = math.huge
-   for _, player in ipairs(Players:GetPlayers()) do
-       if player ~= LocalPlayer then
-           local character = player.Character
-           local root = character and character:FindFirstChild("HumanoidRootPart")
-           local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-           if root and humanoid and humanoid.Health > 0 then
-               local distance = (root.Position - myRoot.Position).Magnitude
-               if distance < nearestDistance then
-                   nearestDistance = distance
-                   nearestCharacter = character
-               end
-           end
-       end
-   end
-   return nearestCharacter
+-- WALK Dynamic Target: TargetService owns nearest-target selection
+-- and the shared attack scheduler; legacy attack timing remains in Death Note.
+if type(TargetService) == "table" then
+   TargetService:EnsureCombatOwner()
 end
-
-task.spawn(function()
-   while screenGui.Parent do
-       task.wait(0.05)
-       if states.NormalKillAura and AttackRemote and not isBusy then
-           local targetChar = getDynamicWalkTarget()
-           if targetChar then
-               tryAttackTarget(targetChar)
-           end
-       end
-   end
-end)
-
 -- =========================================================
 -- 🌐 SERVER SELECTOR
 -- =========================================================
