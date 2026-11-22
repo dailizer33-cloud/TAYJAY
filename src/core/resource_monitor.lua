@@ -12,7 +12,8 @@ ResourceManager:Register({ id = "Attack", writes = {}, priority = 0 })
 local resourceMonitorGui = Instance.new("Frame")
 resourceMonitorGui.Name = "TayJayResourceMonitor"
 resourceMonitorGui.Size = UDim2.fromOffset(204, 48)
-resourceMonitorGui.Position = UDim2.new(0, 10, 0, 10)
+resourceMonitorGui.AnchorPoint = Vector2.new(0.5, 0)
+resourceMonitorGui.Position = UDim2.new(0.5, 0, 0, 10)
 resourceMonitorGui.BackgroundColor3 = Color3.fromRGB(24, 34, 48)
 resourceMonitorGui.BackgroundTransparency = 0.12
 resourceMonitorGui.BorderSizePixel = 0

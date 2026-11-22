@@ -101,6 +101,9 @@ local function styleDynamicObject(obj)
    end
 end
 
+-- Export the dynamic style callback for modules initialized outside this theme scope.
+TJ.Main.ApplyDynamicStyle = styleDynamicObject
+
 local function applyGreenTheme(root)
    if not root then return end
    for _, obj in ipairs(root:GetDescendants()) do
