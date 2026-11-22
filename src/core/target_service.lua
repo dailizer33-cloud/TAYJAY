@@ -45,6 +45,7 @@ TargetService._attackFn = TargetService._attackFn
 TargetService._listeners = type(TargetService._listeners) == "table" and TargetService._listeners or {}
 TargetService._combatOwner = TargetService._combatOwner
 
+do -- [TAYJAY LOCAL-LIMIT FIX 1/8]
 -- Legacy mirror table (death_note / warp can read these during migration).
 local Legacy = TargetService.Legacy
 if type(Legacy) ~= "table" then
@@ -370,3 +371,5 @@ end
 _tjTargetEnv.TAYJAY_TARGET = TargetService
 TJ.TargetService = TargetService
 Main.TargetService = TargetService
+
+end -- [/TAYJAY LOCAL-LIMIT FIX 1/8]
