@@ -66,6 +66,7 @@ do
    end)
 end
 
+do -- [TAYJAY LOCAL-LIMIT FIX 5/8]
 local radius = 15
 local numParts = 36
 local circleParts = {}
@@ -181,6 +182,8 @@ do
       trackConnection(conn)
    end
 end
+
+end -- [/TAYJAY LOCAL-LIMIT FIX 5/8]
 
 -- DEATH NOTE SHADOW HUNTER: Death Note selects the target; WARP UI / AutoWarp starts tracking.
 -- Replaces the old head-sit warp entirely. Position updates are client-side and remain subject to server correction.
