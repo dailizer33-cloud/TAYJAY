@@ -1,6 +1,7 @@
 -- =========================================================
 -- 👤 MY HP FRAME
 -- =========================================================
+do -- [TAYJAY LOCAL-LIMIT FIX 2/8]
 local myHpFrame = Instance.new("Frame", screenGui)
 myHpFrame.Size = UDim2.fromOffset(180, 44); myHpFrame.Position = UDim2.new(0, 10, 0, 52)
 myHpFrame.BackgroundColor3 = GREEN.dark; myHpFrame.BackgroundTransparency = 0.05
@@ -88,3 +89,4 @@ trackConnection(LocalPlayer.CharacterRemoving:Connect(function(character)
    end
 end))
 
+end -- [/TAYJAY LOCAL-LIMIT FIX 2/8]
