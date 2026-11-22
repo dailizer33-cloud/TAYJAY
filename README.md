@@ -12,11 +12,7 @@
 
 ## วิธีโหลดบน Delta Android
 
-แนะนำให้ใช้ไฟล์ `TAYJAY DELTA LOADER.lua` ผ่าน Delta Auto Execute หรือวางใน executor แล้วรันหนึ่งครั้ง:
-
-```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/dailizer33-cloud/TAYJAY/fix/delta-loader-runtime-guard/TAYJAY%20DELTA%20LOADER.lua"))()
-```
+แนะนำให้เปิดไฟล์ `TAYJAY DELTA LOADER.lua` จากลิงก์ Raw แล้วคัดลอกเนื้อหาทั้งไฟล์ไปวางใน Delta Auto Execute โดยตรง (ไม่ต้องครอบด้วย `loadstring(game:HttpGet(...))()` อีกชั้น)
 
 Loader จะตรวจ HTTP, response body และ `loadstring` ก่อนเรียก MAIN หากขาดความสามารถใดจะแสดงสาเหตุใน Console แทนการเรียก nil โดยไม่ตรวจสอบ
 
