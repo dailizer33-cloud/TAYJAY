@@ -1097,7 +1097,6 @@ _tjTargetEnv.TAYJAY_TARGET = TargetService
 TJ.TargetService = TargetService
 Main.TargetService = TargetService
 
-end -- [/TAYJAY LOCAL-LIMIT FIX 1/8]
 -- Resource declarations: descriptive only in Monitor Mode.
 ResourceManager:Register({ id = "Speed", writes = { "WalkSpeed" }, priority = 10 })
 ResourceManager:Register({ id = "Fly", writes = { "Position", "HumanoidFlags", "AnimateState" }, priority = 30 })
@@ -1149,7 +1148,7 @@ task.spawn(function()
         task.wait(0.5)
     end
 end)
-
+end -- [/TAYJAY LOCAL-LIMIT FIX 1/8]
 local uiSyncRegistry = {}
 local function registerUiSync(key, updateFunc)
    local previous = uiSyncRegistry[key]
@@ -1407,7 +1406,6 @@ trackConnection(LocalPlayer.CharacterRemoving:Connect(function(character)
    end
 end))
 
-end -- [/TAYJAY LOCAL-LIMIT FIX 2/8]
 -- =========================================================
 -- ⚡ SPEED WIDGET
 -- =========================================================
@@ -1421,6 +1419,7 @@ function UI_LAYOUT.glyph(button, isPlus, color, length, thickness)
       local bar2 = bar:Clone(); bar2.Size = UDim2.fromOffset(thickness, length); bar2.Parent = button
    end
 end
+end -- [/TAYJAY LOCAL-LIMIT FIX 2/8]
 
 local speedWidget = Instance.new("Frame", screenGui)
 speedWidget.Name = "TayJaySpeedWidget"
@@ -1495,8 +1494,6 @@ do
    trackConnection(noclipCircle.Activated:Connect(function() syncButtonState("Noclip", not states.Noclip) end))
    registerUiSync("Noclip", refresh)
 end
-
-end -- [/TAYJAY LOCAL-LIMIT FIX 3/8]
 
 end -- [/TAYJAY LOCAL-LIMIT FIX 3/8]
 -- =========================================================
