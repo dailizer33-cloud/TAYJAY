@@ -8,6 +8,7 @@ core/utils_state.lua | Core utils & state management, text contrast
 core/resource_manager.lua | Resource Manager V1 (monitor mode)
 core/cleanup.lua | Cleanup Core V1: ResourceManager -> Owner -> Bag
 core/app_state.lua | Shared config + feature states
+core/target_service.lua | TargetService V2: unified lock/walk/warp targeting
 core/resource_monitor.lua | Resource declarations + monitor widget
 ui/ui_sync_draggable.lua | UI sync registry + makeDraggable
 ui/ui_control.lua | UI control: lock position / visual effects
@@ -28,6 +29,7 @@ core/logic.lua | Logic systems (noclip, inf jump, etc.)
 features/player_esp.lua | Auto player ESP
 features/mm2.lua | MM2 role ESP + player list
 ui/theme.lua | Midnight neon theme + camera QoL
+ui/fps_main_ui_adapter.lua | Main-scope adapter for FPS lock bar and cross-menu styling
 boot/fps_scope_open.lua | Opens isolated FPS scope: task.spawn(function()
 features/fps_booster.lua | FPS Booster V72
 ui/quick_visibility.lua | Quick visibility controls + global STOP ALL + ready

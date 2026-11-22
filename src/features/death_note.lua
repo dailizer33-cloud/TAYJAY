@@ -38,6 +38,15 @@ local function walk2AttackTarget(targetCharacter)
    return tryAttackTarget(targetCharacter)
 end
 
+-- TargetService is the single attack scheduler for WALK and locked Death Note targets.
+if type(TargetService) == "table" then
+   TargetService:SetRange(25)
+   TargetService:BindAttack(function(targetCharacter)
+      return walk2AttackTarget(targetCharacter)
+   end)
+   TargetService:EnsureCombatOwner()
+end
+
 local deathNoteGroup = Instance.new("Frame", screenGui)
 deathNoteGroup.Name = "DeathNoteGroup"; deathNoteGroup.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH); deathNoteGroup.Position = UI_LAYOUT.PlayerList
 deathNoteGroup.BackgroundTransparency = 1; deathNoteGroup.Visible = false; deathNoteGroup.Active = true
@@ -103,25 +112,7 @@ local lockedDeathNoteTarget = nil
 local isDeathNoteTargetLocked = false
 local shadowTargetReleased = false
 
--- Death Note attack lock: reuse the same target attack routine as WALK2.
--- The shared 0.25s cooldown in tryAttackTarget remains the rate limiter.
-trackConnection(RunService.Heartbeat:Connect(function()
-    if not states.DNWarp or not isDeathNoteTargetLocked then return end
-    local lockedPlayer = lockedDeathNoteTarget
-    if not lockedPlayer or lockedPlayer.Parent ~= Players then return end
-
-    local targetCharacter = lockedPlayer.Character
-    local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
-    local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
-    local localCharacter = LocalPlayer.Character
-    local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
-
-    -- Match WALK2's 25-stud range, without switching to another player.
-    if targetRoot and targetHumanoid and targetHumanoid.Health > 0 and localRoot
-        and (localRoot.Position - targetRoot.Position).Magnitude <= 25 then
-        walk2AttackTarget(targetCharacter)
-    end
-end))
+-- TargetService owns the shared Death Note/WALK attack heartbeat.
 
 -- Client-side visual hide only; this does not make the character server-invisible.
 local function setInvisibility(char, invisible)
@@ -255,6 +246,9 @@ local function createPlayerCard(playerObj, parentScroll, isKiller)
            if lockedDeathNoteTarget == playerObj then lockedDeathNoteTarget = nil end
            isDeathNoteTargetLocked = false
            shadowTargetReleased = true
+           if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+               TargetService:Unlock("deathnote_toggle")
+           end
            syncButtonState("DNWarp", false)
            targetTitle.Text = "🎯 Target: none"
            targetHpLabel.Text = "Target unlocked • Attack stopped"
@@ -265,6 +259,15 @@ local function createPlayerCard(playerObj, parentScroll, isKiller)
        lockedDeathNoteTarget = playerObj
        isDeathNoteTargetLocked = true
        shadowTargetReleased = false
+       if type(TargetService) == "table" then
+           local locked = TargetService:Lock(playerObj, "deathnote")
+           if not locked then
+               selectedDeathNoteTarget = nil
+               lockedDeathNoteTarget = nil
+               isDeathNoteTargetLocked = false
+               return
+           end
+       end
        syncButtonState("DNWarp", true)
        -- เริ่มโจมตีทันทีหนึ่งครั้ง; Heartbeat จะใช้ WALK2 ซ้ำกับเป้าหมายเดิมในระยะ 25 studs
        if playerObj.Character then walk2AttackTarget(playerObj.Character) end
@@ -309,6 +312,9 @@ end
 trackConnection(Players.PlayerAdded:Connect(updatePlayerList))
 trackConnection(Players.PlayerRemoving:Connect(function(player)
    if lockedDeathNoteTarget == player then
+       if type(TargetService) == "table" and TargetService.Player == player then
+           TargetService:Unlock("deathnote_player_removing")
+       end
        lockedDeathNoteTarget = nil
        isDeathNoteTargetLocked = false
        shadowTargetReleased = true
@@ -429,6 +435,9 @@ targetUnlockButton.Activated:Connect(function()
     lockedDeathNoteTarget = nil
     isDeathNoteTargetLocked = false
     shadowTargetReleased = true
+    if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+        TargetService:Unlock("deathnote_unlock_button")
+    end
     updateTargetLockVisual()
     if states.AutoWarp then syncButtonState("AutoWarp", false) end
     targetTitle.Text = "🔓 Target unlocked"

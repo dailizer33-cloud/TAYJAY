@@ -723,6 +723,378 @@ if State.isBusy == nil then State.isBusy = Main.isBusy == true end
 Main.config, Main.states = config, states
 Main.originalWalkSpeed, Main.isBusy = State.originalWalkSpeed, State.isBusy
 TJ.Main = Main
+-- =========================================================
+-- TAYJAY TARGET SERVICE V2
+-- Single source of truth for combat / warp targeting.
+-- Sources: "none" | "walk" | "deathnote" | "warp"
+-- Loaded in the shared main-script scope after app_state.lua and cleanup.lua.
+-- =========================================================
+local _tjTargetEnv = _G
+pcall(function()
+    if type(getgenv) == "function" then
+        local shared = getgenv()
+        if type(shared) == "table" then _tjTargetEnv = shared end
+    end
+end)
+
+local TJ = _tjTargetEnv.TJ
+if type(TJ) ~= "table" then
+    TJ = {}
+    _tjTargetEnv.TJ = TJ
+end
+
+local Main = TJ.Main
+if type(Main) ~= "table" then
+    Main = {}
+    TJ.Main = Main
+end
+
+local statesRef = Main.states
+if type(statesRef) ~= "table" then
+    statesRef = {}
+    Main.states = statesRef
+end
+
+local TargetService = TJ.TargetService
+if type(TargetService) ~= "table" then
+    TargetService = {}
+    TJ.TargetService = TargetService
+end
+
+TargetService.Player = TargetService.Player
+TargetService.Source = TargetService.Source or "none"
+TargetService.Locked = TargetService.Locked == true
+TargetService.Released = TargetService.Released == true
+TargetService.Range = tonumber(TargetService.Range) or 25
+TargetService._attackFn = TargetService._attackFn
+TargetService._listeners = type(TargetService._listeners) == "table" and TargetService._listeners or {}
+TargetService._combatOwner = TargetService._combatOwner
+
+-- Legacy mirror table (death_note / warp can read these during migration).
+local Legacy = TargetService.Legacy
+if type(Legacy) ~= "table" then
+    Legacy = {
+        selected = nil,
+        locked = nil,
+        isLocked = false,
+        released = false,
+    }
+    TargetService.Legacy = Legacy
+end
+_tjTargetEnv.TAYJAY_TARGET_LEGACY = Legacy
+
+local function notify(eventName, payload)
+    for _, fn in ipairs(TargetService._listeners) do
+        pcall(fn, eventName, payload)
+    end
+end
+
+local function isPlayerValid(player)
+    return player ~= nil and player.Parent == Players
+end
+
+local function mirrorLegacy()
+    Legacy.selected = TargetService.Player
+    Legacy.locked = TargetService.Locked and TargetService.Player or nil
+    Legacy.isLocked = TargetService.Locked == true
+    Legacy.released = TargetService.Released == true
+end
+
+function TargetService:Get()
+    return {
+        player = self.Player,
+        source = self.Source,
+        locked = self.Locked == true,
+        released = self.Released == true,
+        range = self.Range,
+    }
+end
+
+function TargetService:GetPlayer()
+    if isPlayerValid(self.Player) then
+        return self.Player
+    end
+    return nil
+end
+
+function TargetService:IsLocked()
+    return self.Locked == true and isPlayerValid(self.Player)
+end
+
+function TargetService:OnChange(fn)
+    if type(fn) ~= "function" then
+        return function() end
+    end
+    self._listeners[#self._listeners + 1] = fn
+    local connected = true
+    return function()
+        if not connected then return end
+        connected = false
+        for i, listener in ipairs(self._listeners) do
+            if listener == fn then
+                table.remove(self._listeners, i)
+                break
+            end
+        end
+    end
+end
+
+function TargetService:BindAttack(fn)
+    if type(fn) == "function" then
+        self._attackFn = fn
+    else
+        self._attackFn = nil
+    end
+end
+
+function TargetService:SetRange(range)
+    local value = tonumber(range)
+    if value and value == value and value > 0 then
+        self.Range = value
+    end
+    return self.Range
+end
+
+function TargetService:Lock(player, source)
+    if not isPlayerValid(player) then
+        return false, "invalid_player"
+    end
+    if player == LocalPlayer then
+        return false, "local_player"
+    end
+    if _G.TAYJAY_BL and _G.TAYJAY_BL.has and _G.TAYJAY_BL.has(player.Name) then
+        return false, "blacklist"
+    end
+
+    self.Player = player
+    self.Source = source or "deathnote"
+    self.Locked = true
+    self.Released = false
+    mirrorLegacy()
+
+    if self.Source == "deathnote" then
+        statesRef.DNWarp = true
+    end
+
+    notify("lock", self:Get())
+    self:EnsureCombatOwner()
+    return true
+end
+
+function TargetService:Unlock(reason)
+    local previous = self:Get()
+    self.Player = nil
+    self.Source = "none"
+    self.Locked = false
+    self.Released = true
+    mirrorLegacy()
+
+    statesRef.DNWarp = false
+    if statesRef.NormalKillAura == true then
+        self:EnsureCombatOwner()
+    else
+        self:StopCombatOwner(reason or "unlock")
+    end
+    notify("unlock", previous)
+    return true
+end
+
+function TargetService:SetTransient(player, source)
+    if player ~= nil and not isPlayerValid(player) then
+        return false, "invalid_player"
+    end
+    self.Player = player
+    self.Source = source or "warp"
+    self.Locked = false
+    self.Released = false
+    mirrorLegacy()
+    notify("transient", self:Get())
+    return true
+end
+
+function TargetService:Clear(reason)
+    return self:Unlock(reason or "clear")
+end
+
+local function distanceTo(player)
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local char = player and player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not myRoot or not root or not hum or hum.Health <= 0 then
+        return nil
+    end
+    return (myRoot.Position - root.Position).Magnitude, char, hum
+end
+
+function TargetService:FindNearestFromPosition(origin, maxDist, skipBlacklist)
+    if typeof(origin) ~= "Vector3" then return nil end
+    local bestPlayer, bestChar, bestDist = nil, nil, tonumber(maxDist) or math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local skipped = skipBlacklist == true and _G.TAYJAY_BL
+                and type(_G.TAYJAY_BL.has) == "function" and _G.TAYJAY_BL.has(player.Name)
+            if not skipped then
+                local char = player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if root and hum and hum.Health > 0 then
+                    local dist = (root.Position - origin).Magnitude
+                    if dist <= bestDist then bestPlayer, bestChar, bestDist = player, char, dist end
+                end
+            end
+        end
+    end
+    return bestPlayer, bestChar, bestDist
+end
+
+function TargetService:FindNearestPoolFromPosition(origin, count, skipBlacklist)
+    if typeof(origin) ~= "Vector3" then return {} end
+    local candidates = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local skipped = skipBlacklist == true and _G.TAYJAY_BL
+                and type(_G.TAYJAY_BL.has) == "function" and _G.TAYJAY_BL.has(player.Name)
+            if not skipped then
+                local char = player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if root and hum and hum.Health > 0 then
+                    table.insert(candidates, {
+                        player = player,
+                        distance = (root.Position - origin).Magnitude,
+                    })
+                end
+            end
+        end
+    end
+    table.sort(candidates, function(a, b) return a.distance < b.distance end)
+    local result = {}
+    local limit = math.max(0, math.floor(tonumber(count) or #candidates))
+    for i = 1, math.min(limit, #candidates) do
+        result[i] = candidates[i].player
+    end
+    return result
+end
+
+function TargetService:FindNearest(maxDist, skipBlacklist)
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+    if not myRoot or not myHum or myHum.Health <= 0 then
+        return nil
+    end
+
+    local bestPlayer, bestChar, bestDist = nil, nil, tonumber(maxDist) or math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local skipped = skipBlacklist == true
+                and _G.TAYJAY_BL
+                and type(_G.TAYJAY_BL.has) == "function"
+                and _G.TAYJAY_BL.has(player.Name)
+            if not skipped then
+                local dist, char = distanceTo(player)
+                if dist and dist < bestDist then
+                    bestDist = dist
+                    bestPlayer = player
+                    bestChar = char
+                end
+            end
+        end
+    end
+    return bestPlayer, bestChar, bestDist
+end
+
+function TargetService:TryAttackPlayer(player)
+    if type(self._attackFn) ~= "function" or not isPlayerValid(player) then
+        return false
+    end
+    local char = player.Character
+    if not char then
+        return false
+    end
+    local ok, result = pcall(self._attackFn, char)
+    return ok and result == true
+end
+
+function TargetService:StopCombatOwner(reason)
+    local owner = self._combatOwner
+    self._combatOwner = nil
+    if owner and owner.Stopped ~= true and ResourceManager then
+        pcall(function()
+            ResourceManager:StopOwner("TargetCombat", reason or "stop")
+        end)
+    end
+end
+
+function TargetService:EnsureCombatOwner()
+    if not ResourceManager or type(ResourceManager.CreateOwner) ~= "function" then
+        return nil
+    end
+    if self._combatOwner and self._combatOwner.Stopped ~= true then
+        return self._combatOwner
+    end
+
+    local owner = ResourceManager:CreateOwner("TargetCombat", function()
+        TargetService._combatOwner = nil
+    end)
+    if not owner then
+        return nil
+    end
+    self._combatOwner = owner
+
+    local conn = RunService.Heartbeat:Connect(function()
+        if owner.Stopped then
+            return
+        end
+        local attackFn = TargetService._attackFn
+        if type(attackFn) ~= "function" then
+            return
+        end
+
+        -- Busy state is read only from the canonical app-state table.
+        -- Do not depend on an undeclared/global isBusy variable.
+        local state = Main.State
+        local busy = (state and state.isBusy == true) or Main.isBusy == true
+        if busy then
+            return
+        end
+
+        if TargetService.Locked and TargetService.Source == "deathnote" then
+            local player = TargetService:GetPlayer()
+            if not player then
+                TargetService:Unlock("invalid_player")
+                return
+            end
+            local dist, char = distanceTo(player)
+            if dist and dist <= (TargetService.Range or 25) and char then
+                pcall(attackFn, char)
+            end
+            return
+        end
+
+        if statesRef.NormalKillAura then
+            local _, char = TargetService:FindNearest(math.huge, false)
+            if char then
+                pcall(attackFn, char)
+            end
+        end
+    end)
+    owner:Own(conn)
+
+    owner:Own(Players.PlayerRemoving:Connect(function(player)
+        if TargetService.Player == player then
+            TargetService:Unlock("player_removing")
+        end
+    end))
+
+    return owner
+end
+
+_tjTargetEnv.TAYJAY_TARGET = TargetService
+TJ.TargetService = TargetService
+Main.TargetService = TargetService
 -- Resource declarations: descriptive only in Monitor Mode.
 ResourceManager:Register({ id = "Speed", writes = { "WalkSpeed" }, priority = 10 })
 ResourceManager:Register({ id = "Fly", writes = { "Position", "HumanoidFlags", "AnimateState" }, priority = 30 })
@@ -1542,6 +1914,15 @@ local function walk2AttackTarget(targetCharacter)
    return tryAttackTarget(targetCharacter)
 end
 
+-- TargetService is the single attack scheduler for WALK and locked Death Note targets.
+if type(TargetService) == "table" then
+   TargetService:SetRange(25)
+   TargetService:BindAttack(function(targetCharacter)
+      return walk2AttackTarget(targetCharacter)
+   end)
+   TargetService:EnsureCombatOwner()
+end
+
 local deathNoteGroup = Instance.new("Frame", screenGui)
 deathNoteGroup.Name = "DeathNoteGroup"; deathNoteGroup.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH); deathNoteGroup.Position = UI_LAYOUT.PlayerList
 deathNoteGroup.BackgroundTransparency = 1; deathNoteGroup.Visible = false; deathNoteGroup.Active = true
@@ -1607,25 +1988,7 @@ local lockedDeathNoteTarget = nil
 local isDeathNoteTargetLocked = false
 local shadowTargetReleased = false
 
--- Death Note attack lock: reuse the same target attack routine as WALK2.
--- The shared 0.25s cooldown in tryAttackTarget remains the rate limiter.
-trackConnection(RunService.Heartbeat:Connect(function()
-    if not states.DNWarp or not isDeathNoteTargetLocked then return end
-    local lockedPlayer = lockedDeathNoteTarget
-    if not lockedPlayer or lockedPlayer.Parent ~= Players then return end
-
-    local targetCharacter = lockedPlayer.Character
-    local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
-    local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
-    local localCharacter = LocalPlayer.Character
-    local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
-
-    -- Match WALK2's 25-stud range, without switching to another player.
-    if targetRoot and targetHumanoid and targetHumanoid.Health > 0 and localRoot
-        and (localRoot.Position - targetRoot.Position).Magnitude <= 25 then
-        walk2AttackTarget(targetCharacter)
-    end
-end))
+-- TargetService owns the shared Death Note/WALK attack heartbeat.
 
 -- Client-side visual hide only; this does not make the character server-invisible.
 local function setInvisibility(char, invisible)
@@ -1759,6 +2122,9 @@ local function createPlayerCard(playerObj, parentScroll, isKiller)
            if lockedDeathNoteTarget == playerObj then lockedDeathNoteTarget = nil end
            isDeathNoteTargetLocked = false
            shadowTargetReleased = true
+           if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+               TargetService:Unlock("deathnote_toggle")
+           end
            syncButtonState("DNWarp", false)
            targetTitle.Text = "🎯 Target: none"
            targetHpLabel.Text = "Target unlocked • Attack stopped"
@@ -1769,6 +2135,15 @@ local function createPlayerCard(playerObj, parentScroll, isKiller)
        lockedDeathNoteTarget = playerObj
        isDeathNoteTargetLocked = true
        shadowTargetReleased = false
+       if type(TargetService) == "table" then
+           local locked = TargetService:Lock(playerObj, "deathnote")
+           if not locked then
+               selectedDeathNoteTarget = nil
+               lockedDeathNoteTarget = nil
+               isDeathNoteTargetLocked = false
+               return
+           end
+       end
        syncButtonState("DNWarp", true)
        -- เริ่มโจมตีทันทีหนึ่งครั้ง; Heartbeat จะใช้ WALK2 ซ้ำกับเป้าหมายเดิมในระยะ 25 studs
        if playerObj.Character then walk2AttackTarget(playerObj.Character) end
@@ -1813,6 +2188,9 @@ end
 trackConnection(Players.PlayerAdded:Connect(updatePlayerList))
 trackConnection(Players.PlayerRemoving:Connect(function(player)
    if lockedDeathNoteTarget == player then
+       if type(TargetService) == "table" and TargetService.Player == player then
+           TargetService:Unlock("deathnote_player_removing")
+       end
        lockedDeathNoteTarget = nil
        isDeathNoteTargetLocked = false
        shadowTargetReleased = true
@@ -1933,6 +2311,9 @@ targetUnlockButton.Activated:Connect(function()
     lockedDeathNoteTarget = nil
     isDeathNoteTargetLocked = false
     shadowTargetReleased = true
+    if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+        TargetService:Unlock("deathnote_unlock_button")
+    end
     updateTargetLockVisual()
     if states.AutoWarp then syncButtonState("AutoWarp", false) end
     targetTitle.Text = "🔓 Target unlocked"
@@ -1982,6 +2363,9 @@ do
        states.KillAura = not states.KillAura
        if states.KillAura then
            states.NormalKillAura = false
+            if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+                TargetService:Unlock("warp_mode")
+            end
             selectedDeathNoteTarget = nil
             syncButtonState("DNWarp", false)
             -- อนุญาตคู่ Fly + WARP: ไม่ปิด Fly แล้ว (ตัวล็อกตำแหน่งกลางกันแย่งกันขยับ ดู TAYJAY_POS_LOCK_UNTIL)
@@ -1992,7 +2376,15 @@ do
    -- WALK: โจมตีระยะใกล้ (ไม่เปลี่ยน)
    trackConnection(kaNormalBtn.Activated:Connect(function()
        states.NormalKillAura = not states.NormalKillAura
-       if states.NormalKillAura then states.KillAura = false end
+       if states.NormalKillAura then
+           states.KillAura = false
+           if type(TargetService) == "table" then
+               if TargetService.Source == "deathnote" then
+                   TargetService:Unlock("walk_mode")
+               end
+               TargetService:EnsureCombatOwner()
+           end
+       end
        updateKaBtnDisplay()
    end))
 
@@ -2255,35 +2647,14 @@ local shadowThread = task.spawn(function()
 
    -- หาคนที่ใกล้จุดยืนที่สุดในระยะ maxDistance (ข้าม blacklist และคนที่ตายแล้ว)
    local function pickNearChain(origin, count)
-       local list = {}
-       for _, player in ipairs(Players:GetPlayers()) do
-           local char = player ~= LocalPlayer and player.Character
-           local root = char and char:FindFirstChild("HumanoidRootPart")
-           local hum = char and char:FindFirstChildOfClass("Humanoid")
-           if root and hum and hum.Health > 0 and not isSkipped(player) then
-               table.insert(list, {p = player, d = (root.Position - origin).Magnitude})
-           end
-       end
-       if #list == 0 then return nil end
-       table.sort(list, function(a, b) return a.d < b.d end)
-       local pool = {}
-       for n = 1, math.min(count, #list) do pool[n] = list[n].p end
+       if type(TargetService) ~= "table" then return nil end
+       local pool = TargetService:FindNearestPoolFromPosition(origin, count, true)
+       if #pool == 0 then return nil end
        return pool[math.random(1, #pool)]
    end
    local function findNearestFromHome(maxDistance, origin)
-       local best, bestDistance = nil, maxDistance
-       for _, player in ipairs(Players:GetPlayers()) do
-           local char = player ~= LocalPlayer and player.Character
-           local root = char and char:FindFirstChild("HumanoidRootPart")
-           local hum = char and char:FindFirstChildOfClass("Humanoid")
-           if root and hum and hum.Health > 0 and not isSkipped(player) then
-               local distance = (root.Position - origin).Magnitude
-               if distance <= bestDistance then
-                   best, bestDistance = player, distance
-               end
-           end
-       end
-       return best
+       if type(TargetService) ~= "table" then return nil end
+       return TargetService:FindNearestFromPosition(origin, maxDistance, true)
    end
 
    -- พื้นกันตก: แพตโปร่งใสที่ชนได้ อยู่ใต้เท้าตัวละครเสมอ (กันตกเมื่อแมพยังไม่โหลด)
@@ -2390,7 +2761,12 @@ local shadowThread = task.spawn(function()
            end
            _G.TAYJAY_FOLLOW = nil; targetTitle.Text = "⏸ Shadow Hunter: paused"
        else
-           if not states.KillAura then randomWarpTarget = nil end
+           if not states.KillAura then
+               randomWarpTarget = nil
+               if type(TargetService) == "table" and TargetService.Source == "warp" then
+                   TargetService:Unlock("warp_off")
+               end
+           end
            local targetPlayer
            if states.KillAura then
                -- WARP: เป้าหมาย = คนที่ใกล้ "จุดยืน" ที่สุดทั้งแมพ
@@ -2408,6 +2784,10 @@ local shadowThread = task.spawn(function()
                    randomWarpTarget = findNearestFromHome(WARP_SEARCH_RANGE, warpHome.Position)
                end
                targetPlayer = randomWarpTarget
+               if type(TargetService) == "table" and TargetService.Source ~= "deathnote"
+                   and (TargetService.Player ~= randomWarpTarget or TargetService.Source ~= "warp") then
+                   TargetService:SetTransient(randomWarpTarget, "warp")
+               end
                if not targetPlayer then goHome(myRootNow) end
            elseif states.DNWarp then
                -- ปุ่ม "⇢ WARP ไป": ย้ายไปหาเป้าหมายครั้งเดียว แล้วอยู่ตรงนั้น (ไม่กลับจุดยืน)
@@ -2421,6 +2801,9 @@ local shadowThread = task.spawn(function()
                        myRootNow.CFrame = dest
                        _G.TAYJAY_WARP_STAY = true; _G.TAYJAY_FOLLOW = nil
                        selectedDeathNoteTarget = nil
+                       if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+                           TargetService:Unlock("deathnote_warp_stay")
+                       end
                        syncButtonState("DNWarp", false)
                    end
                end
@@ -2440,6 +2823,9 @@ local shadowThread = task.spawn(function()
                     lockedDeathNoteTarget = nil
                     isDeathNoteTargetLocked = false
                     shadowTargetReleased = true
+                    if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+                        TargetService:Unlock("deathnote_target_gone")
+                    end
                     syncButtonState("DNWarp", false)
                else
                    targetPlayer = selectedDeathNoteTarget
@@ -3870,44 +4256,11 @@ end
 
 
 -- =========================================================
--- WALK Dynamic Target: เลือกผู้เล่นที่มีชีวิตและใกล้ที่สุดใหม่ทุกครั้งที่ค้นหา
-local function getDynamicWalkTarget()
-   local myCharacter = LocalPlayer.Character
-   local myRoot = myCharacter and myCharacter:FindFirstChild("HumanoidRootPart")
-   local myHumanoid = myCharacter and myCharacter:FindFirstChildOfClass("Humanoid")
-   if not myRoot or not myHumanoid or myHumanoid.Health <= 0 then return nil end
-
-   local nearestCharacter = nil
-   local nearestDistance = math.huge
-   for _, player in ipairs(Players:GetPlayers()) do
-       if player ~= LocalPlayer then
-           local character = player.Character
-           local root = character and character:FindFirstChild("HumanoidRootPart")
-           local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-           if root and humanoid and humanoid.Health > 0 then
-               local distance = (root.Position - myRoot.Position).Magnitude
-               if distance < nearestDistance then
-                   nearestDistance = distance
-                   nearestCharacter = character
-               end
-           end
-       end
-   end
-   return nearestCharacter
+-- WALK Dynamic Target: TargetService owns nearest-target selection
+-- and the shared attack scheduler; legacy attack timing remains in Death Note.
+if type(TargetService) == "table" then
+   TargetService:EnsureCombatOwner()
 end
-
-task.spawn(function()
-   while screenGui.Parent do
-       task.wait(0.05)
-       if states.NormalKillAura and AttackRemote and not isBusy then
-           local targetChar = getDynamicWalkTarget()
-           if targetChar then
-               tryAttackTarget(targetChar)
-           end
-       end
-   end
-end)
-
 -- =========================================================
 -- 🌐 SERVER SELECTOR
 -- =========================================================
@@ -5084,6 +5437,9 @@ local function applyGreenTheme(root)
        styleDynamicObject(obj)
    end
 end
+-- Expose the callback for UI modules initialized in a separate local scope.
+TJ.Main.ApplyDynamicStyle = styleDynamicObject
+
 applyGreenTheme(screenGui)
 trackConnection(screenGui.DescendantAdded:Connect(function(obj)
    task.defer(function()
@@ -5095,10 +5451,201 @@ end))
 end
 TJ.Main._TayJayThemeInit()
 TJ.Main._TayJayThemeInit = nil
+
+-- Build trigger: keep generated MAIN synchronized with manifest sources.
+-- =========================================================
+-- FPS MAIN-UI INTEGRATION ADAPTER
+-- Runs in the main script scope so main-menu locals stay explicit
+-- and are not captured as undeclared globals by the isolated FPS task.
+-- =========================================================
+TJ.Main = TJ.Main or {}
+
+-- Explicit dependency boundary for the isolated FPS task scope.
+-- Keep this table limited to main-scope locals required by FPS.
+TJ.Main.FPSContext = {
+   Version = 1,
+   newCleanupOwner = newCleanupOwner,
+   newBag = newBag,
+   ResourceManager = ResourceManager,
+   SecureParentGui = SecureParentGui,
+   UI_LAYOUT = UI_LAYOUT,
+   GREEN = GREEN,
+   WHITE_TEXT = WHITE_TEXT,
+   applyTayJayTextContrast = applyTayJayTextContrast,
+   Players = Players,
+   RunService = RunService,
+   UserInputService = UserInputService,
+   Lighting = Lighting,
+}
+TJ.Main.IsWindowLocked = function()
+   return _G.TAYJAY_UI ~= nil and _G.TAYJAY_UI.locked == true
+end
+TJ.Main.ApplyFPSMainUIAdapter = function(fpsGui, fpsPanel)
+   if not fpsGui then return false end
+   -- Apply the shared main-menu theme/layout pass from the main script scope.
+   local function finishThemePass(guiRoot)
+      for _, object in ipairs(guiRoot:GetDescendants()) do
+         if not isProtectedMainBrandPart(object) then
+            applyTayJayTextContrast(object)
+            if object:IsA("TextButton") then
+               object.TextWrapped = true
+               object.AutoButtonColor = true
+               if object.Name == "WindowLockButton" then
+                  object.BackgroundColor3 = Color3.fromRGB(34, 92, 86)
+               end
+            elseif object:IsA("TextLabel") then
+               object.TextWrapped = object.TextWrapped or false
+            end
+         end
+      end
+      local panelNames = {
+         TayJayFlyControl=true, TayJaySpeedWidget=true, DeathNoteGroup=true, DeathNoteMain=true, TayJayMainMenu=true,
+         TayJayMM2Dock=true, TayJayMM2PlayerList=true, FPSBoosterPanel=true,
+         TayJayTargetPanel=true, TayJayServerSelector=true, TayJayMonsterTargetPanel=true,
+      }
+      for _, object in ipairs(guiRoot:GetDescendants()) do
+         if object:IsA("Frame") and (panelNames[object.Name] or object == mainFrame) then
+            local edge = object:FindFirstChildOfClass("UIStroke")
+            if not edge then edge = Instance.new("UIStroke"); edge.Parent = object end
+            edge.Color = GREEN.stroke
+            edge.Thickness = 1.6
+            local gradient = object:FindFirstChildOfClass("UIGradient")
+            object.BackgroundColor3 = GREEN.dark
+            if not gradient then gradient = Instance.new("UIGradient"); gradient.Parent = object end
+            gradient.Color = ColorSequence.new({
+               ColorSequenceKeypoint.new(0, GREEN.panel),
+               ColorSequenceKeypoint.new(1, GREEN.dark),
+            })
+            gradient.Rotation = 90
+         end
+      end
+   end
+   finishThemePass(screenGui)
+   finishThemePass(fpsGui)
+   updateScreenScale()
+   if makeDraggable and fpsPanel then pcall(function() makeDraggable(fpsPanel, false) end) end
+
+   local function applyTayJayTextPass(guiRoot)
+      if not guiRoot then return end
+      for _, uiObject in ipairs(guiRoot:GetDescendants()) do
+          applyTayJayTextContrast(uiObject)
+      end
+   end
+   -- ย่อตัวหนังสือในหน้าต่าง FPS ให้พอดีกรอบ (TextScaled) โดยไม่ให้หลุดขอบ
+   local function fitFpsText(obj)
+      if not (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then return end
+      if obj:FindFirstChildOfClass("UITextSizeConstraint") then return end
+      local maxSize = math.max(tonumber(obj.TextSize) or 14, 10)
+      obj.TextScaled = true
+      obj.TextWrapped = false
+      obj.TextTruncate = Enum.TextTruncate.AtEnd
+      local c = Instance.new("UITextSizeConstraint")
+      c.MaxTextSize = maxSize
+      c.MinTextSize = 9
+      c.Parent = obj
+   end
+   local function fitFpsPanelText()
+      for _, obj in ipairs(fpsGui:GetDescendants()) do fitFpsText(obj) end
+   end
+   
+   -- 🔒 แถบล็อก: ล็อกหน้าต่างอยู่กับที่ (ปลดเพื่อลากด้วยการสัมผัส)
+   do
+       local lockGui = Instance.new("ScreenGui")
+       lockGui.Name = "TayJayLockGui"; lockGui.ResetOnSpawn = false; lockGui.DisplayOrder = 1000
+       lockGui.IgnoreGuiInset = true
+       SecureParentGui(lockGui)
+       local bar = Instance.new("Frame", lockGui)
+       bar.Name = "TayJayLockBar"; bar.Size = UDim2.fromOffset(72, 44); bar.Position = UDim2.new(0, 12, 0.6, 0)
+       bar.BackgroundColor3 = GREEN.deep; bar.BorderSizePixel = 0
+       Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 10)
+       local barEdge = Instance.new("UIStroke", bar); barEdge.Color = UI_LAYOUT.Accent.Main; barEdge.Thickness = 1.5
+       local lockBtn = Instance.new("TextButton", bar)
+       lockBtn.Size = UDim2.fromOffset(60, 34); lockBtn.Position = UDim2.fromOffset(6, 5)
+       lockBtn.BorderSizePixel = 0; lockBtn.Font = Enum.Font.GothamBold; lockBtn.TextSize = 13
+       lockBtn.TextColor3 = WHITE_TEXT
+       Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 8)
+       local function refreshLock()
+           local locked = _G.TAYJAY_UI.locked
+           isWindowLocked = locked
+           lockBtn.Text = locked and "🔒 ล็อก" or "🔓 ลาก"
+           lockBtn.BackgroundColor3 = locked and Color3.fromRGB(255, 132, 24) or Color3.fromRGB(76, 158, 48)
+       end
+       lockBtn.Activated:Connect(function() _G.TAYJAY_UI.locked = not _G.TAYJAY_UI.locked; refreshLock() end)
+       trackConnection(screenGui.DescendantAdded:Connect(function(o)
+           if o:IsA("UIGradient") then o.Enabled = _G.TAYJAY_UI.effects == true end
+       end))
+       _G.TAYJAY_CLEAN_LOOK(screenGui)
+       refreshLock()
+   end
+   
+   applyTayJayTextPass(screenGui)
+   -- ย่อตัวหนังสือทุกป้ายในหน้าต่างให้พอดีกรอบ (กันทับกัน) ยกเว้นโลโก้และปุ่มวงกลม
+   do
+       local SKIP = { KillAuraCircleBtn = true, KillAuraNormalBtn = true, TayJayMainToggle = true, TayJayBrandTitle = true, TayJayNoclipCircle = true }
+       for _, obj in ipairs(screenGui:GetDescendants()) do
+           if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and not SKIP[obj.Name] and not obj:FindFirstAncestor("FPSBoosterPanel") and not obj:FindFirstAncestor("TayJayFlyControl") and not obj:FindFirstAncestor("TayJaySpeedWidget") and not obj:FindFirstChildOfClass("UITextSizeConstraint") then
+               local maxSize = math.max(tonumber(obj.TextSize) or 13, 10)
+               obj.TextScaled = true
+               obj.TextWrapped = false
+               obj.TextTruncate = Enum.TextTruncate.AtEnd
+               local c = Instance.new("UITextSizeConstraint", obj)
+               c.MaxTextSize = maxSize; c.MinTextSize = 9
+           end
+       end
+   end
+   applyTayJayTextPass(fpsGui)
+   fitFpsPanelText()
+   if _G.TAYJAY_CLEAN_LOOK then _G.TAYJAY_CLEAN_LOOK(fpsGui) end
+   
+   trackConnection(screenGui.DescendantAdded:Connect(function(uiObject)
+      task.defer(function()
+          if uiObject and uiObject.Parent then
+              local dynamicStyle = TJ and TJ.Main and TJ.Main.ApplyDynamicStyle
+              if type(dynamicStyle) == "function" then
+                  pcall(dynamicStyle, uiObject)
+              end
+              applyTayJayTextContrast(uiObject)
+          end
+      end)
+   end))
+   trackConnection(fpsGui.DescendantAdded:Connect(function(uiObject)
+      task.defer(function()
+          if uiObject and uiObject.Parent then
+              applyTayJayTextContrast(uiObject)
+              fitFpsText(uiObject)
+          end
+      end)
+   end))
+   
+   
+   
+   return true
+end
+-- Publish the shared API table before yielding to the isolated FPS task.
+-- This prevents Quick Visibility / STOP ALL from capturing a nil module during startup.
+TJ = TJ or {}
+TJ.Main = TJ.Main or {}
+TJ.Main.FPS = TJ.Main.FPS or {}
 task.spawn(function()
 -- =========================================================
 -- TAYJAY FPS BOOSTER V72
 -- =========================================================
+-- Resolve every main-script dependency through the published context.
+-- Roblox/executor globals remain native runtime APIs.
+local FPSContext = TJ and TJ.Main and TJ.Main.FPSContext
+assert(type(FPSContext) == "table" and FPSContext.Version == 1, "FPS context is unavailable")
+local newCleanupOwner = assert(FPSContext.newCleanupOwner, "FPS context missing newCleanupOwner")
+local newBag = assert(FPSContext.newBag, "FPS context missing newBag")
+local ResourceManager = assert(FPSContext.ResourceManager, "FPS context missing ResourceManager")
+local SecureParentGui = assert(FPSContext.SecureParentGui, "FPS context missing SecureParentGui")
+local UI_LAYOUT = assert(FPSContext.UI_LAYOUT, "FPS context missing UI_LAYOUT")
+local GREEN = assert(FPSContext.GREEN, "FPS context missing GREEN")
+local WHITE_TEXT = assert(FPSContext.WHITE_TEXT, "FPS context missing WHITE_TEXT")
+local applyTayJayTextContrast = assert(FPSContext.applyTayJayTextContrast, "FPS context missing text contrast helper")
+local Players = assert(FPSContext.Players, "FPS context missing Players")
+local RunService = assert(FPSContext.RunService, "FPS context missing RunService")
+local UserInputService = assert(FPSContext.UserInputService, "FPS context missing UserInputService")
+local Lighting = assert(FPSContext.Lighting, "FPS context missing Lighting")
 pcall(function()
    local previous = _G.TAYJAY_V70_PERF or _G.TAYJAY_V69_PERF
    if previous and previous.Cleanup then previous.Cleanup() end
@@ -5403,6 +5950,18 @@ updatePerfScale()
 if workspace.CurrentCamera then v70Track(V70Perf.MonitorConnections, workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updatePerfScale)) end
 v70Track(V70Perf.MonitorConnections, perfGui.ChildAdded:Connect(function() task.defer(updatePerfScale) end))
 V70Perf.GUI = perfGui
+-- Stable module boundary: Core/UI code talks to FPS through TJ.Main.FPS,
+-- not through locals hidden inside the isolated FPS task scope.
+-- Reuse the placeholder published before task.spawn so Core/UI can safely
+-- resolve the API even when this isolated scope has not finished initializing.
+local fpsModule = TJ.Main.FPS or {}
+TJ.Main.FPS = fpsModule
+fpsModule.GUI = perfGui
+fpsModule.Perf = V70Perf
+fpsModule.SetVisible = function(visible)
+   if fpsModule.GUI then fpsModule.GUI.Enabled = visible == true end
+   return fpsModule.GUI ~= nil
+end
  V70Owner.Bag:Add(perfGui)
 
 local function ui(className, props, parent)
@@ -5575,8 +6134,9 @@ local function renderTab()
            v70SetFPSUnlock(requested)
            renderTab()
            if statusLabel then
-               statusLabel.Text = V70Perf.FPSUnlockStatus == "ACTIVE" and "PROFILE: BALANCED • FPS UNLOCK ON"
-                   or (V70Perf.FPSUnlockStatus == "RESTORED" and "PROFILE: BALANCED • FPS UNLOCK OFF" or "FPS UNLOCK: NOT AVAILABLE")
+               local profile = string.upper(V70Perf.CurrentPreset or "POTATO")
+               statusLabel.Text = V70Perf.FPSUnlockStatus == "ACTIVE" and ("PROFILE: " .. profile .. " • FPS UNLOCK ON")
+                   or (V70Perf.FPSUnlockStatus == "RESTORED" and ("PROFILE: " .. profile .. " • FPS UNLOCK OFF") or "FPS UNLOCK: NOT AVAILABLE")
            end
        end)
        unlockButton.BackgroundColor3 = v70FPSUnlockApplied() and Color3.fromRGB(104, 211, 57) or Color3.fromRGB(166, 43, 38)
@@ -5648,7 +6208,7 @@ local launcher = ui("TextButton", {
 corner(launcher, 25); stroke(launcher, Color3.fromRGB(255, 231, 92), 2.5)
 local launcherDragging, launcherDragStart, launcherStartPos = false, nil, nil
 v70Track(V70Perf.MonitorConnections, launcher.InputBegan:Connect(function(input)
-   if not _G.TAYJAY_UI.locked and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
+   if not (TJ.Main.IsWindowLocked and TJ.Main.IsWindowLocked()) and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
        launcherDragging = true
        launcherDragStart = input.Position
        launcherStartPos = launcher.Position
@@ -5670,49 +6230,6 @@ v70Track(V70Perf.MonitorConnections, launcher.Activated:Connect(function()
    panel.Visible = not panel.Visible
    if panel.Visible then setCollapsed(false) end
 end))
-
-local function finishThemePass(guiRoot)
-   for _, object in ipairs(guiRoot:GetDescendants()) do
-       if not isProtectedMainBrandPart(object) then
-           applyTayJayTextContrast(object)
-           if object:IsA("TextButton") then
-               object.TextWrapped = true
-               object.AutoButtonColor = true
-               if object.Name == "WindowLockButton" then
-                   object.BackgroundColor3 = Color3.fromRGB(34, 92, 86)
-               end
-           elseif object:IsA("TextLabel") then
-               object.TextWrapped = object.TextWrapped or false
-           end
-       end
-   end
-   local panelNames = {
-       TayJayFlyControl=true, TayJaySpeedWidget=true, DeathNoteGroup=true, DeathNoteMain=true, TayJayMainMenu=true,
-       TayJayMM2Dock=true, TayJayMM2PlayerList=true, FPSBoosterPanel=true,
-       TayJayTargetPanel=true, TayJayServerSelector=true, TayJayMonsterTargetPanel=true,
-   }
-   for _, object in ipairs(guiRoot:GetDescendants()) do
-       if object:IsA("Frame") and (panelNames[object.Name] or object == mainFrame) then
-           local edge = object:FindFirstChildOfClass("UIStroke")
-           if not edge then edge = Instance.new("UIStroke"); edge.Parent = object end
-           edge.Color = GREEN.stroke
-           edge.Thickness = 1.6
-           local gradient = object:FindFirstChildOfClass("UIGradient")
-           object.BackgroundColor3 = GREEN.dark
-           if not gradient then gradient = Instance.new("UIGradient"); gradient.Parent = object end
-           gradient.Color = ColorSequence.new({
-               ColorSequenceKeypoint.new(0, GREEN.panel),
-               ColorSequenceKeypoint.new(1, GREEN.dark),
-           })
-           gradient.Rotation = 90
-       end
-   end
-end
-finishThemePass(screenGui)
-finishThemePass(perfGui)
-updateScreenScale()
-
-if makeDraggable then pcall(function() makeDraggable(panel, false) end) end
 
 v70Track(V70Perf.MonitorConnections, RunService.Heartbeat:Connect(function(dt)
    if not V70Perf.Alive then return end
@@ -5758,116 +6275,73 @@ v70Track(V70Perf.MonitorConnections, RunService.Heartbeat:Connect(function(dt)
 end))
 
 function V70Perf.Cleanup()
-   if not V70Perf.Alive then return false end
-   local stopped = ResourceManager:StopOwner("FPS")
+   local wasAlive = V70Perf.Alive == true
+   local stopped = false
+   if wasAlive then
+       local stopOK, stopResult = pcall(function()
+           return ResourceManager:StopOwner("FPS")
+       end)
+       stopped = stopOK and stopResult == true
+       -- If the Owner was already unregistered, still restore the values it owned.
+       if not stopOK or (not stopResult and V70Perf.Alive) then
+           pcall(v70RestoreAll)
+           pcall(v70RestoreFPSCap)
+           V70Perf.Alive = false
+       end
+   end
+
+   -- STOP ALL stops Owners before calling module cleanup. Cleanup must therefore
+   -- release published references even when the Owner has already marked Alive=false.
    table.clear(V70Perf.MonitorConnections)
    table.clear(V70Perf.ContentConnections)
    table.clear(V70Perf.BoostConnections)
    V70Perf.GUI = nil
    V70Perf.GraphBars = nil
+   if fpsModule.GUI == perfGui then fpsModule.GUI = nil end
+   if fpsModule.Perf == V70Perf then fpsModule.Perf = nil end
+   fpsModule.SetVisible = nil
+   fpsModule.Cleanup = nil
+   fpsModule.GetStatus = nil
    if _G.TAYJAY_V70_PERF == V70Perf then _G.TAYJAY_V70_PERF = nil end
    return stopped
 end
 
+fpsModule.Cleanup = function()
+   return V70Perf.Cleanup()
+end
+fpsModule.GetStatus = function()
+   return {
+      Alive = V70Perf.Alive == true,
+      Enabled = V70Perf.Enabled == true,
+      Preset = V70Perf.CurrentPreset,
+      FPS = V70Perf.FPS,
+      Ping = V70Perf.Ping,
+   }
+end
+
 renderTab()
-statusLabel.Text = "PROFILE: BALANCED  •  " .. (v70FPSUnlockApplied() and "FPS UNLOCK ON" or "FPS UNLOCK N/A") .. "  •  FLOATING UI READY"
+statusLabel.Text = "PROFILE: " .. string.upper(V70Perf.CurrentPreset or "POTATO") .. "  •  " .. (v70FPSUnlockApplied() and "FPS UNLOCK ON" or "FPS UNLOCK N/A") .. "  •  FLOATING UI READY"
 print("[TAYJAY V72 FPS BOOSTER] Dashboard ready | Collapsible + Floating Launcher")
 
-local function applyTayJayTextPass(guiRoot)
-   if not guiRoot then return end
-   for _, uiObject in ipairs(guiRoot:GetDescendants()) do
-       applyTayJayTextContrast(uiObject)
+-- Main-menu styling, lock bar and dynamic UI hooks live in the main-scope adapter.
+-- FPS runtime only requests the adapter; it no longer owns Core UI behavior.
+if TJ and TJ.Main and type(TJ.Main.ApplyFPSMainUIAdapter) == "function" then
+   local adapterOK, adapterErr = pcall(TJ.Main.ApplyFPSMainUIAdapter, perfGui, panel)
+   if not adapterOK then
+      warn("[TAYJAY FPS] Main UI adapter failed: " .. tostring(adapterErr))
    end
 end
--- ย่อตัวหนังสือในหน้าต่าง FPS ให้พอดีกรอบ (TextScaled) โดยไม่ให้หลุดขอบ
-local function fitFpsText(obj)
-   if not (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then return end
-   if obj:FindFirstChildOfClass("UITextSizeConstraint") then return end
-   local maxSize = math.max(tonumber(obj.TextSize) or 14, 10)
-   obj.TextScaled = true
-   obj.TextWrapped = false
-   obj.TextTruncate = Enum.TextTruncate.AtEnd
-   local c = Instance.new("UITextSizeConstraint")
-   c.MaxTextSize = maxSize
-   c.MinTextSize = 9
-   c.Parent = obj
-end
-local function fitFpsPanelText()
-   for _, obj in ipairs(perfGui:GetDescendants()) do fitFpsText(obj) end
-end
-
--- 🔒 แถบล็อก: ล็อกหน้าต่างอยู่กับที่ (ปลดเพื่อลากด้วยการสัมผัส)
-do
-    local lockGui = Instance.new("ScreenGui")
-    lockGui.Name = "TayJayLockGui"; lockGui.ResetOnSpawn = false; lockGui.DisplayOrder = 1000
-    lockGui.IgnoreGuiInset = true
-    SecureParentGui(lockGui)
-    local bar = Instance.new("Frame", lockGui)
-    bar.Name = "TayJayLockBar"; bar.Size = UDim2.fromOffset(72, 44); bar.Position = UDim2.new(0, 12, 0.6, 0)
-    bar.BackgroundColor3 = GREEN.deep; bar.BorderSizePixel = 0
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 10)
-    local barEdge = Instance.new("UIStroke", bar); barEdge.Color = UI_LAYOUT.Accent.Main; barEdge.Thickness = 1.5
-    local lockBtn = Instance.new("TextButton", bar)
-    lockBtn.Size = UDim2.fromOffset(60, 34); lockBtn.Position = UDim2.fromOffset(6, 5)
-    lockBtn.BorderSizePixel = 0; lockBtn.Font = Enum.Font.GothamBold; lockBtn.TextSize = 13
-    lockBtn.TextColor3 = WHITE_TEXT
-    Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 8)
-    local function refreshLock()
-        local locked = _G.TAYJAY_UI.locked
-        isWindowLocked = locked
-        lockBtn.Text = locked and "🔒 ล็อก" or "🔓 ลาก"
-        lockBtn.BackgroundColor3 = locked and Color3.fromRGB(255, 132, 24) or Color3.fromRGB(76, 158, 48)
-    end
-    lockBtn.Activated:Connect(function() _G.TAYJAY_UI.locked = not _G.TAYJAY_UI.locked; refreshLock() end)
-    trackConnection(screenGui.DescendantAdded:Connect(function(o)
-        if o:IsA("UIGradient") then o.Enabled = _G.TAYJAY_UI.effects == true end
-    end))
-    _G.TAYJAY_CLEAN_LOOK(screenGui)
-    refreshLock()
-end
-
-applyTayJayTextPass(screenGui)
--- ย่อตัวหนังสือทุกป้ายในหน้าต่างให้พอดีกรอบ (กันทับกัน) ยกเว้นโลโก้และปุ่มวงกลม
-do
-    local SKIP = { KillAuraCircleBtn = true, KillAuraNormalBtn = true, TayJayMainToggle = true, TayJayBrandTitle = true, TayJayNoclipCircle = true }
-    for _, obj in ipairs(screenGui:GetDescendants()) do
-        if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and not SKIP[obj.Name] and not obj:FindFirstAncestor("FPSBoosterPanel") and not obj:FindFirstAncestor("TayJayFlyControl") and not obj:FindFirstAncestor("TayJaySpeedWidget") and not obj:FindFirstChildOfClass("UITextSizeConstraint") then
-            local maxSize = math.max(tonumber(obj.TextSize) or 13, 10)
-            obj.TextScaled = true
-            obj.TextWrapped = false
-            obj.TextTruncate = Enum.TextTruncate.AtEnd
-            local c = Instance.new("UITextSizeConstraint", obj)
-            c.MaxTextSize = maxSize; c.MinTextSize = 9
-        end
-    end
-end
-applyTayJayTextPass(perfGui)
-fitFpsPanelText()
-if _G.TAYJAY_CLEAN_LOOK then _G.TAYJAY_CLEAN_LOOK(perfGui) end
-
-trackConnection(screenGui.DescendantAdded:Connect(function(uiObject)
-   task.defer(function()
-       if uiObject and uiObject.Parent then
-           -- styleDynamicObject is local to the theme init scope; use the exported callback.
-           local applyStyle = TJ.Main.ApplyDynamicStyle
-           if type(applyStyle) == "function" then applyStyle(uiObject) end
-           applyTayJayTextContrast(uiObject)
-       end
-   end)
-end))
-trackConnection(perfGui.DescendantAdded:Connect(function(uiObject)
-   task.defer(function()
-       if uiObject and uiObject.Parent then
-           applyTayJayTextContrast(uiObject)
-           fitFpsText(uiObject)
-       end
-   end)
-end))
-
-
 -- =========================================================
 -- QUICK VISIBILITY CONTROLS + GLOBAL STOP ALL
 -- =========================================================
+-- FPS is initialized in its own task scope; access it only through the shared module API.
+local function getFPSModule()
+    return TJ and TJ.Main and TJ.Main.FPS
+end
+local function getFPSGui()
+    local module = getFPSModule()
+    return module and module.GUI
+end
 local quickGui = Instance.new("ScreenGui")
 quickGui.Name = "TayJayQuickVisibility"
 quickGui.ResetOnSpawn = false
@@ -5922,7 +6396,10 @@ local function setVisibility(key, value)
     visibility[key] = value == true
     if key == "TAYJAY" then setRootGroup(tayjayRoots,visibility[key],tayjayVisibilityCache)
     elseif key == "MM2" then setRootGroup(mm2Roots,visibility[key],mm2VisibilityCache)
-    elseif key == "FPS" then perfGui.Enabled = visibility[key] end
+    elseif key == "FPS" then
+        local module = getFPSModule()
+        if module and module.SetVisible then module.SetVisible(visibility[key]) end
+    end
     refreshQuickButton(key)
 end
 for index,key in ipairs({"TAYJAY","MM2","FPS"}) do
@@ -5955,7 +6432,7 @@ local function applySecondaryScale(guiRoot,excluded)
     end
 end
 applySecondaryScale(screenGui,{TayJayMainMenu=true,TayJayMainToggle=true})
-applySecondaryScale(perfGui,{})
+if getFPSGui() then applySecondaryScale(getFPSGui(),{}) end
 local function strengthenControlEdges(guiRoot)
     for _,obj in ipairs(guiRoot:GetDescendants()) do
         if obj:IsA("TextButton") and obj.Name~="WindowLockButton" then
@@ -5970,7 +6447,7 @@ local function strengthenControlEdges(guiRoot)
     end
 end
 strengthenControlEdges(screenGui)
-strengthenControlEdges(perfGui)
+if getFPSGui() then strengthenControlEdges(getFPSGui()) end
 -- Reset the per-execution guard on every script launch. Delta keeps _G across re-executions,
 -- so a flag left true by the previous run would otherwise make STOP ALL a no-op on run 2.
 _G.TAYJAY_STOPPED = false
@@ -5987,7 +6464,7 @@ _G.TAYJAY_STOP_ALL = function()
 
     -- Hide and destroy UI first so a later feature-cleanup error cannot leave menus visible.
     pcall(function() if screenGui then screenGui.Enabled = false end end)
-    pcall(function() if perfGui then perfGui.Enabled = false end end)
+    pcall(function() local gui = getFPSGui(); if gui then gui.Enabled = false end end)
     pcall(function() if quickGui then quickGui.Enabled = false end end)
     local _tjGuiParents = {}
     local function _tjAddGuiParent(parent)
@@ -6023,7 +6500,7 @@ _G.TAYJAY_STOP_ALL = function()
         end)
     end
     pcall(function() if screenGui then screenGui:Destroy() end end)
-    pcall(function() if perfGui then perfGui:Destroy() end end)
+    pcall(function() local gui = getFPSGui(); if gui then gui:Destroy() end end)
     pcall(function() if quickGui then quickGui:Destroy() end end)
     for key in pairs(states) do pcall(function() syncButtonState(key,false) end) end
     pcall(function() stopFlying(false) end)
@@ -6058,7 +6535,10 @@ _G.TAYJAY_STOP_ALL = function()
         LocalPlayer.CameraMinZoomDistance=TJ.Main.OriginalCameraSettings.CameraMinZoomDistance
         LocalPlayer.DevCameraOcclusionMode=TJ.Main.OriginalCameraSettings.DevCameraOcclusionMode
     end)
-    pcall(function() if V70Perf and V70Perf.Cleanup then V70Perf.Cleanup() end end)
+    pcall(function()
+        local module = getFPSModule()
+        if module and module.Cleanup then module.Cleanup() end
+    end)
     for _,connection in ipairs(activeConnections) do pcall(function() connection:Disconnect() end) end
     table.clear(activeConnections)
     pcall(function() if _tjLogConnection then _tjLogConnection:Disconnect(); _tjLogConnection=nil end end)
@@ -6114,6 +6594,19 @@ end, function(_tjErr)
 end)
 
 if not _tjRunOK then
+    -- Startup may fail after one or more feature Owners have acquired resources.
+    -- Stop registered Owners even when the main STOP ALL UI has not been created yet.
+    pcall(function()
+        local runtimeEnv = _G
+        if type(getgenv) == "function" then
+            local ok, shared = pcall(getgenv)
+            if ok and type(shared) == "table" then runtimeEnv = shared end
+        end
+        local manager = runtimeEnv.TAYJAY_RESOURCE_MANAGER or _G.TAYJAY_RESOURCE_MANAGER
+        if type(manager) == "table" and type(manager.StopAllOwners) == "function" then
+            manager:StopAllOwners("STARTUP_ERROR")
+        end
+    end)
     pcall(function() warn("[TAYJAY STARTUP ERROR]\n" .. tostring(_tjRunError)) end)
     pcall(function()
         if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", _tjRunError) end

@@ -1,6 +1,22 @@
 -- =========================================================
 -- TAYJAY FPS BOOSTER V72
 -- =========================================================
+-- Resolve every main-script dependency through the published context.
+-- Roblox/executor globals remain native runtime APIs.
+local FPSContext = TJ and TJ.Main and TJ.Main.FPSContext
+assert(type(FPSContext) == "table" and FPSContext.Version == 1, "FPS context is unavailable")
+local newCleanupOwner = assert(FPSContext.newCleanupOwner, "FPS context missing newCleanupOwner")
+local newBag = assert(FPSContext.newBag, "FPS context missing newBag")
+local ResourceManager = assert(FPSContext.ResourceManager, "FPS context missing ResourceManager")
+local SecureParentGui = assert(FPSContext.SecureParentGui, "FPS context missing SecureParentGui")
+local UI_LAYOUT = assert(FPSContext.UI_LAYOUT, "FPS context missing UI_LAYOUT")
+local GREEN = assert(FPSContext.GREEN, "FPS context missing GREEN")
+local WHITE_TEXT = assert(FPSContext.WHITE_TEXT, "FPS context missing WHITE_TEXT")
+local applyTayJayTextContrast = assert(FPSContext.applyTayJayTextContrast, "FPS context missing text contrast helper")
+local Players = assert(FPSContext.Players, "FPS context missing Players")
+local RunService = assert(FPSContext.RunService, "FPS context missing RunService")
+local UserInputService = assert(FPSContext.UserInputService, "FPS context missing UserInputService")
+local Lighting = assert(FPSContext.Lighting, "FPS context missing Lighting")
 pcall(function()
    local previous = _G.TAYJAY_V70_PERF or _G.TAYJAY_V69_PERF
    if previous and previous.Cleanup then previous.Cleanup() end
@@ -305,6 +321,18 @@ updatePerfScale()
 if workspace.CurrentCamera then v70Track(V70Perf.MonitorConnections, workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updatePerfScale)) end
 v70Track(V70Perf.MonitorConnections, perfGui.ChildAdded:Connect(function() task.defer(updatePerfScale) end))
 V70Perf.GUI = perfGui
+-- Stable module boundary: Core/UI code talks to FPS through TJ.Main.FPS,
+-- not through locals hidden inside the isolated FPS task scope.
+-- Reuse the placeholder published before task.spawn so Core/UI can safely
+-- resolve the API even when this isolated scope has not finished initializing.
+local fpsModule = TJ.Main.FPS or {}
+TJ.Main.FPS = fpsModule
+fpsModule.GUI = perfGui
+fpsModule.Perf = V70Perf
+fpsModule.SetVisible = function(visible)
+   if fpsModule.GUI then fpsModule.GUI.Enabled = visible == true end
+   return fpsModule.GUI ~= nil
+end
  V70Owner.Bag:Add(perfGui)
 
 local function ui(className, props, parent)
@@ -477,8 +505,9 @@ local function renderTab()
            v70SetFPSUnlock(requested)
            renderTab()
            if statusLabel then
-               statusLabel.Text = V70Perf.FPSUnlockStatus == "ACTIVE" and "PROFILE: BALANCED • FPS UNLOCK ON"
-                   or (V70Perf.FPSUnlockStatus == "RESTORED" and "PROFILE: BALANCED • FPS UNLOCK OFF" or "FPS UNLOCK: NOT AVAILABLE")
+               local profile = string.upper(V70Perf.CurrentPreset or "POTATO")
+               statusLabel.Text = V70Perf.FPSUnlockStatus == "ACTIVE" and ("PROFILE: " .. profile .. " • FPS UNLOCK ON")
+                   or (V70Perf.FPSUnlockStatus == "RESTORED" and ("PROFILE: " .. profile .. " • FPS UNLOCK OFF") or "FPS UNLOCK: NOT AVAILABLE")
            end
        end)
        unlockButton.BackgroundColor3 = v70FPSUnlockApplied() and Color3.fromRGB(104, 211, 57) or Color3.fromRGB(166, 43, 38)
@@ -550,7 +579,7 @@ local launcher = ui("TextButton", {
 corner(launcher, 25); stroke(launcher, Color3.fromRGB(255, 231, 92), 2.5)
 local launcherDragging, launcherDragStart, launcherStartPos = false, nil, nil
 v70Track(V70Perf.MonitorConnections, launcher.InputBegan:Connect(function(input)
-   if not _G.TAYJAY_UI.locked and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
+   if not (TJ.Main.IsWindowLocked and TJ.Main.IsWindowLocked()) and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
        launcherDragging = true
        launcherDragStart = input.Position
        launcherStartPos = launcher.Position
@@ -572,49 +601,6 @@ v70Track(V70Perf.MonitorConnections, launcher.Activated:Connect(function()
    panel.Visible = not panel.Visible
    if panel.Visible then setCollapsed(false) end
 end))
-
-local function finishThemePass(guiRoot)
-   for _, object in ipairs(guiRoot:GetDescendants()) do
-       if not isProtectedMainBrandPart(object) then
-           applyTayJayTextContrast(object)
-           if object:IsA("TextButton") then
-               object.TextWrapped = true
-               object.AutoButtonColor = true
-               if object.Name == "WindowLockButton" then
-                   object.BackgroundColor3 = Color3.fromRGB(34, 92, 86)
-               end
-           elseif object:IsA("TextLabel") then
-               object.TextWrapped = object.TextWrapped or false
-           end
-       end
-   end
-   local panelNames = {
-       TayJayFlyControl=true, TayJaySpeedWidget=true, DeathNoteGroup=true, DeathNoteMain=true, TayJayMainMenu=true,
-       TayJayMM2Dock=true, TayJayMM2PlayerList=true, FPSBoosterPanel=true,
-       TayJayTargetPanel=true, TayJayServerSelector=true, TayJayMonsterTargetPanel=true,
-   }
-   for _, object in ipairs(guiRoot:GetDescendants()) do
-       if object:IsA("Frame") and (panelNames[object.Name] or object == mainFrame) then
-           local edge = object:FindFirstChildOfClass("UIStroke")
-           if not edge then edge = Instance.new("UIStroke"); edge.Parent = object end
-           edge.Color = GREEN.stroke
-           edge.Thickness = 1.6
-           local gradient = object:FindFirstChildOfClass("UIGradient")
-           object.BackgroundColor3 = GREEN.dark
-           if not gradient then gradient = Instance.new("UIGradient"); gradient.Parent = object end
-           gradient.Color = ColorSequence.new({
-               ColorSequenceKeypoint.new(0, GREEN.panel),
-               ColorSequenceKeypoint.new(1, GREEN.dark),
-           })
-           gradient.Rotation = 90
-       end
-   end
-end
-finishThemePass(screenGui)
-finishThemePass(perfGui)
-updateScreenScale()
-
-if makeDraggable then pcall(function() makeDraggable(panel, false) end) end
 
 v70Track(V70Perf.MonitorConnections, RunService.Heartbeat:Connect(function(dt)
    if not V70Perf.Alive then return end
@@ -660,110 +646,59 @@ v70Track(V70Perf.MonitorConnections, RunService.Heartbeat:Connect(function(dt)
 end))
 
 function V70Perf.Cleanup()
-   if not V70Perf.Alive then return false end
-   local stopped = ResourceManager:StopOwner("FPS")
+   local wasAlive = V70Perf.Alive == true
+   local stopped = false
+   if wasAlive then
+       local stopOK, stopResult = pcall(function()
+           return ResourceManager:StopOwner("FPS")
+       end)
+       stopped = stopOK and stopResult == true
+       -- If the Owner was already unregistered, still restore the values it owned.
+       if not stopOK or (not stopResult and V70Perf.Alive) then
+           pcall(v70RestoreAll)
+           pcall(v70RestoreFPSCap)
+           V70Perf.Alive = false
+       end
+   end
+
+   -- STOP ALL stops Owners before calling module cleanup. Cleanup must therefore
+   -- release published references even when the Owner has already marked Alive=false.
    table.clear(V70Perf.MonitorConnections)
    table.clear(V70Perf.ContentConnections)
    table.clear(V70Perf.BoostConnections)
    V70Perf.GUI = nil
    V70Perf.GraphBars = nil
+   if fpsModule.GUI == perfGui then fpsModule.GUI = nil end
+   if fpsModule.Perf == V70Perf then fpsModule.Perf = nil end
+   fpsModule.SetVisible = nil
+   fpsModule.Cleanup = nil
+   fpsModule.GetStatus = nil
    if _G.TAYJAY_V70_PERF == V70Perf then _G.TAYJAY_V70_PERF = nil end
    return stopped
 end
 
+fpsModule.Cleanup = function()
+   return V70Perf.Cleanup()
+end
+fpsModule.GetStatus = function()
+   return {
+      Alive = V70Perf.Alive == true,
+      Enabled = V70Perf.Enabled == true,
+      Preset = V70Perf.CurrentPreset,
+      FPS = V70Perf.FPS,
+      Ping = V70Perf.Ping,
+   }
+end
+
 renderTab()
-statusLabel.Text = "PROFILE: BALANCED  •  " .. (v70FPSUnlockApplied() and "FPS UNLOCK ON" or "FPS UNLOCK N/A") .. "  •  FLOATING UI READY"
+statusLabel.Text = "PROFILE: " .. string.upper(V70Perf.CurrentPreset or "POTATO") .. "  •  " .. (v70FPSUnlockApplied() and "FPS UNLOCK ON" or "FPS UNLOCK N/A") .. "  •  FLOATING UI READY"
 print("[TAYJAY V72 FPS BOOSTER] Dashboard ready | Collapsible + Floating Launcher")
 
-local function applyTayJayTextPass(guiRoot)
-   if not guiRoot then return end
-   for _, uiObject in ipairs(guiRoot:GetDescendants()) do
-       applyTayJayTextContrast(uiObject)
+-- Main-menu styling, lock bar and dynamic UI hooks live in the main-scope adapter.
+-- FPS runtime only requests the adapter; it no longer owns Core UI behavior.
+if TJ and TJ.Main and type(TJ.Main.ApplyFPSMainUIAdapter) == "function" then
+   local adapterOK, adapterErr = pcall(TJ.Main.ApplyFPSMainUIAdapter, perfGui, panel)
+   if not adapterOK then
+      warn("[TAYJAY FPS] Main UI adapter failed: " .. tostring(adapterErr))
    end
 end
--- ย่อตัวหนังสือในหน้าต่าง FPS ให้พอดีกรอบ (TextScaled) โดยไม่ให้หลุดขอบ
-local function fitFpsText(obj)
-   if not (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then return end
-   if obj:FindFirstChildOfClass("UITextSizeConstraint") then return end
-   local maxSize = math.max(tonumber(obj.TextSize) or 14, 10)
-   obj.TextScaled = true
-   obj.TextWrapped = false
-   obj.TextTruncate = Enum.TextTruncate.AtEnd
-   local c = Instance.new("UITextSizeConstraint")
-   c.MaxTextSize = maxSize
-   c.MinTextSize = 9
-   c.Parent = obj
-end
-local function fitFpsPanelText()
-   for _, obj in ipairs(perfGui:GetDescendants()) do fitFpsText(obj) end
-end
-
--- 🔒 แถบล็อก: ล็อกหน้าต่างอยู่กับที่ (ปลดเพื่อลากด้วยการสัมผัส)
-do
-    local lockGui = Instance.new("ScreenGui")
-    lockGui.Name = "TayJayLockGui"; lockGui.ResetOnSpawn = false; lockGui.DisplayOrder = 1000
-    lockGui.IgnoreGuiInset = true
-    SecureParentGui(lockGui)
-    local bar = Instance.new("Frame", lockGui)
-    bar.Name = "TayJayLockBar"; bar.Size = UDim2.fromOffset(72, 44); bar.Position = UDim2.new(0, 12, 0.6, 0)
-    bar.BackgroundColor3 = GREEN.deep; bar.BorderSizePixel = 0
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 10)
-    local barEdge = Instance.new("UIStroke", bar); barEdge.Color = UI_LAYOUT.Accent.Main; barEdge.Thickness = 1.5
-    local lockBtn = Instance.new("TextButton", bar)
-    lockBtn.Size = UDim2.fromOffset(60, 34); lockBtn.Position = UDim2.fromOffset(6, 5)
-    lockBtn.BorderSizePixel = 0; lockBtn.Font = Enum.Font.GothamBold; lockBtn.TextSize = 13
-    lockBtn.TextColor3 = WHITE_TEXT
-    Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 8)
-    local function refreshLock()
-        local locked = _G.TAYJAY_UI.locked
-        isWindowLocked = locked
-        lockBtn.Text = locked and "🔒 ล็อก" or "🔓 ลาก"
-        lockBtn.BackgroundColor3 = locked and Color3.fromRGB(255, 132, 24) or Color3.fromRGB(76, 158, 48)
-    end
-    lockBtn.Activated:Connect(function() _G.TAYJAY_UI.locked = not _G.TAYJAY_UI.locked; refreshLock() end)
-    trackConnection(screenGui.DescendantAdded:Connect(function(o)
-        if o:IsA("UIGradient") then o.Enabled = _G.TAYJAY_UI.effects == true end
-    end))
-    _G.TAYJAY_CLEAN_LOOK(screenGui)
-    refreshLock()
-end
-
-applyTayJayTextPass(screenGui)
--- ย่อตัวหนังสือทุกป้ายในหน้าต่างให้พอดีกรอบ (กันทับกัน) ยกเว้นโลโก้และปุ่มวงกลม
-do
-    local SKIP = { KillAuraCircleBtn = true, KillAuraNormalBtn = true, TayJayMainToggle = true, TayJayBrandTitle = true, TayJayNoclipCircle = true }
-    for _, obj in ipairs(screenGui:GetDescendants()) do
-        if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and not SKIP[obj.Name] and not obj:FindFirstAncestor("FPSBoosterPanel") and not obj:FindFirstAncestor("TayJayFlyControl") and not obj:FindFirstAncestor("TayJaySpeedWidget") and not obj:FindFirstChildOfClass("UITextSizeConstraint") then
-            local maxSize = math.max(tonumber(obj.TextSize) or 13, 10)
-            obj.TextScaled = true
-            obj.TextWrapped = false
-            obj.TextTruncate = Enum.TextTruncate.AtEnd
-            local c = Instance.new("UITextSizeConstraint", obj)
-            c.MaxTextSize = maxSize; c.MinTextSize = 9
-        end
-    end
-end
-applyTayJayTextPass(perfGui)
-fitFpsPanelText()
-if _G.TAYJAY_CLEAN_LOOK then _G.TAYJAY_CLEAN_LOOK(perfGui) end
-
-trackConnection(screenGui.DescendantAdded:Connect(function(uiObject)
-   task.defer(function()
-       if uiObject and uiObject.Parent then
-           -- styleDynamicObject is local to the theme init scope; use the exported callback.
-           local applyStyle = TJ.Main.ApplyDynamicStyle
-           if type(applyStyle) == "function" then applyStyle(uiObject) end
-           applyTayJayTextContrast(uiObject)
-       end
-   end)
-end))
-trackConnection(perfGui.DescendantAdded:Connect(function(uiObject)
-   task.defer(function()
-       if uiObject and uiObject.Parent then
-           applyTayJayTextContrast(uiObject)
-           fitFpsText(uiObject)
-       end
-   end)
-end))
-
-
