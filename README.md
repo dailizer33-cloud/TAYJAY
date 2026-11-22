@@ -10,11 +10,23 @@
 | `Tayjay Farm.lua` | หลัก | Ant Evolution Radar **V26.2** (Delta Tablet Fixed) |
 | `archive/Tayjay Farm V25.lua` | เก็บถาวร | Ant Evolution Radar V25 (Tablet Pure) ไม่พัฒนาต่อ |
 
-## วิธีโหลด
+## วิธีโหลดบน Delta Android
+
+แนะนำให้ใช้ไฟล์ `TAYJAY DELTA LOADER.lua` ผ่าน Delta Auto Execute หรือวางใน executor แล้วรันหนึ่งครั้ง:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/dailizer33-cloud/TAYJAY/main/TAYJAY%20MAIN.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/dailizer33-cloud/TAYJAY/fix/delta-loader-runtime-guard/TAYJAY%20DELTA%20LOADER.lua"))()
 ```
+
+Loader จะตรวจ HTTP, response body และ `loadstring` ก่อนเรียก MAIN หากขาดความสามารถใดจะแสดงสาเหตุใน Console แทนการเรียก nil โดยไม่ตรวจสอบ
+
+ลิงก์ MAIN โดยตรง (สำหรับ executor ที่รองรับ HTTP + loadstring):
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/dailizer33-cloud/TAYJAY/fix/delta-loader-runtime-guard/TAYJAY%20MAIN.lua"))()
+```
+
+ลิงก์ Farm เดิม:
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/dailizer33-cloud/TAYJAY/main/Tayjay%20Farm.lua"))()
