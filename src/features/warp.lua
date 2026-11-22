@@ -392,11 +392,19 @@ local shadowThread = task.spawn(function()
            placePlatformUnder(myRootNow.Position)
            warpWasOn = true
        end
-       -- ปิด WARP: กลับจุดยืนและลบพื้นกันตก
+       -- ปิด WARP: กลับจุดยืน แต่คงฐานล่องหนไว้รองรับการกด WARP รอบถัดไป
        if warpWasOn and not warpActive then
-           if _G.TAYJAY_WARP_STAY then _G.TAYJAY_WARP_STAY = false else goHome(myRootNow) end
-           destroyPlatform()
-           warpHome, warpOwner, randomWarpTarget = nil, nil, nil
+           if _G.TAYJAY_WARP_STAY then
+               _G.TAYJAY_WARP_STAY = false
+           else
+               goHome(myRootNow)
+           end
+           -- วางฐานใต้ตำแหน่งสุดท้ายหลังกลับบ้าน/เลือกให้อยู่ที่เป้าหมาย
+           if myRootNow then
+               placePlatformUnder(myRootNow.Position)
+           end
+           -- เก็บ warpOwner ไว้ตรวจจับการเกิดใหม่ แล้วค่อยลบฐานเมื่อเปลี่ยนตัวละคร
+           warpHome, randomWarpTarget = nil, nil
            warpWasOn = false
        end
 
