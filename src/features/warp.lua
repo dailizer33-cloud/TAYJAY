@@ -24,8 +24,11 @@ do
        states.NormalKillAura = not states.NormalKillAura
        if states.NormalKillAura then
            states.KillAura = false
-           if type(TargetService) == "table" and TargetService.Source == "deathnote" then
-               TargetService:Unlock("walk_mode")
+           if type(TargetService) == "table" then
+               if TargetService.Source == "deathnote" then
+                   TargetService:Unlock("walk_mode")
+               end
+               TargetService:EnsureCombatOwner()
            end
        end
        updateKaBtnDisplay()
