@@ -165,7 +165,11 @@ function TargetService:Unlock(reason)
     mirrorLegacy()
 
     statesRef.DNWarp = false
-    self:StopCombatOwner(reason or "unlock")
+    if statesRef.NormalKillAura == true then
+        self:EnsureCombatOwner()
+    else
+        self:StopCombatOwner(reason or "unlock")
+    end
     notify("unlock", previous)
     return true
 end
