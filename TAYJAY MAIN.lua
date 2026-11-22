@@ -1705,6 +1705,7 @@ trackConnection(flyEmergencyStop.Activated:Connect(function()
    end
 end))
 
+do -- [TAYJAY LOCAL-LIMIT FIX 4/8]
 local function beginVerticalHold(button, direction)
    local began = button.InputBegan:Connect(function(input)
        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -1883,6 +1884,7 @@ trackConnection(LocalPlayer.CharacterAdded:Connect(function()
    if flyNowe then stopFlying() end
 end))
 
+end -- [/TAYJAY LOCAL-LIMIT FIX 4/8]
 -- =========================================================
 -- 📖 DEATH NOTE ( Player List )
 -- =========================================================
@@ -2429,6 +2431,7 @@ do
    end)
 end
 
+do -- [TAYJAY LOCAL-LIMIT FIX 5/8]
 local radius = 15
 local numParts = 36
 local circleParts = {}
@@ -2544,6 +2547,8 @@ do
       trackConnection(conn)
    end
 end
+
+end -- [/TAYJAY LOCAL-LIMIT FIX 5/8]
 
 -- DEATH NOTE SHADOW HUNTER: Death Note selects the target; WARP UI / AutoWarp starts tracking.
 -- Replaces the old head-sit warp entirely. Position updates are client-side and remain subject to server correction.
@@ -4398,6 +4403,7 @@ toggleBtn.Name = "TayJayMainToggle"
 toggleBtn.Size = UDim2.fromOffset(UI_LAYOUT.ToggleSize, UI_LAYOUT.ToggleSize); toggleBtn.Position = UDim2.new(0, 12, 0.18, 0)
 toggleBtn.BackgroundColor3 = GREEN.mid; toggleBtn.Text = ""; toggleBtn.AutoButtonColor = true
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
+do -- [TAYJAY LOCAL-LIMIT FIX 6/8]
 local toggleRing = Instance.new("UIStroke", toggleBtn)
 toggleRing.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; toggleRing.Color = Color3.fromRGB(255, 255, 255); toggleRing.Thickness = 3.5
 
@@ -4414,6 +4420,8 @@ toggleLogo.Name = "TayJayToggleLogo"
 toggleLogo.Size = UDim2.fromScale(1, 1); toggleLogo.BackgroundTransparency = 1
 toggleLogo.Text = "⚡"; toggleLogo.Font = Enum.Font.GothamBlack; toggleLogo.TextSize = 40; toggleLogo.TextColor3 = Color3.fromRGB(255, 224, 70)
 
+end -- [/TAYJAY LOCAL-LIMIT FIX 6/8]
+
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Name = "TayJayMainMenu"
 mainFrame.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, UI_LAYOUT.PanelH); mainFrame.Position = UI_LAYOUT.MainMenu; mainFrame.BackgroundColor3 = GREEN.dark; mainFrame.Visible = true; mainFrame.Active = true
@@ -4421,6 +4429,7 @@ Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 18); local mainMe
 makeDraggable(mainFrame)
 trackConnection(toggleBtn.Activated:Connect(function() mainFrame.Visible = not mainFrame.Visible end))
 -- Compact tablet layout: the TAYJAY menu uses one column; Death Note remains beside it.
+do -- [TAYJAY LOCAL-LIMIT FIX 7/8]
 local function applyCompactTabletLayout()
    local camera = workspace.CurrentCamera
    if not camera then return end
@@ -4470,6 +4479,8 @@ local function addCandyRainbow(target, duration, rotation)
 end
 if _G.TAYJAY_UI.effects then addCandyRainbow(title, 3.2, 0) end
 
+end -- [/TAYJAY LOCAL-LIMIT FIX 7/8]
+
 local scroll = Instance.new("ScrollingFrame", mainFrame)
 scroll.Size = UDim2.new(1, -14, 1, -62); scroll.Position = UDim2.new(0, 7, 0, 56); scroll.BackgroundTransparency = 1; scroll.ScrollBarThickness = 6; scroll.ScrollBarImageColor3 = GREEN.neon
 local list = Instance.new("UIGridLayout", scroll)
@@ -4478,6 +4489,7 @@ list.CellSize = UDim2.new(1, -4, 0, 34)
 list.CellPadding = UDim2.fromOffset(0, 5)
 list.FillDirectionMaxCells = 1
 
+do -- [TAYJAY LOCAL-LIMIT FIX 8/8]
 local function createBtn(order, text, key)
    local btn = Instance.new("TextButton", scroll)
    btn.Size = UDim2.new(1, -4, 0, 34); btn.BackgroundColor3 = GREEN.off; btn.Text = text .. " : OFF"; btn.TextColor3 = WHITE_TEXT; btn.Font = Enum.Font.GothamBold; btn.LayoutOrder = order
@@ -4553,6 +4565,7 @@ trackConnection(monsterMenuButton.Activated:Connect(function()
     refreshMonsterMenuButton()
 end))
 refreshMonsterMenuButton()
+end -- [/TAYJAY LOCAL-LIMIT FIX 8/8]
 local stopAllButton = Instance.new("TextButton", scroll)
 stopAllButton.Name = "TayJayStopAllButton"
 stopAllButton.LayoutOrder = 9
