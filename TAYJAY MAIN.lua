@@ -949,6 +949,35 @@ function TargetService:FindNearestFromPosition(origin, maxDist, skipBlacklist)
     return bestPlayer, bestChar, bestDist
 end
 
+function TargetService:FindNearestPoolFromPosition(origin, count, skipBlacklist)
+    if typeof(origin) ~= "Vector3" then return {} end
+    local candidates = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local skipped = skipBlacklist == true and _G.TAYJAY_BL
+                and type(_G.TAYJAY_BL.has) == "function" and _G.TAYJAY_BL.has(player.Name)
+            if not skipped then
+                local char = player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if root and hum and hum.Health > 0 then
+                    table.insert(candidates, {
+                        player = player,
+                        distance = (root.Position - origin).Magnitude,
+                    })
+                end
+            end
+        end
+    end
+    table.sort(candidates, function(a, b) return a.distance < b.distance end)
+    local result = {}
+    local limit = math.max(0, math.floor(tonumber(count) or #candidates))
+    for i = 1, math.min(limit, #candidates) do
+        result[i] = candidates[i].player
+    end
+    return result
+end
+
 function TargetService:FindNearest(maxDist, skipBlacklist)
     local myChar = LocalPlayer.Character
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -2618,19 +2647,9 @@ local shadowThread = task.spawn(function()
 
    -- หาคนที่ใกล้จุดยืนที่สุดในระยะ maxDistance (ข้าม blacklist และคนที่ตายแล้ว)
    local function pickNearChain(origin, count)
-       local list = {}
-       for _, player in ipairs(Players:GetPlayers()) do
-           local char = player ~= LocalPlayer and player.Character
-           local root = char and char:FindFirstChild("HumanoidRootPart")
-           local hum = char and char:FindFirstChildOfClass("Humanoid")
-           if root and hum and hum.Health > 0 and not isSkipped(player) then
-               table.insert(list, {p = player, d = (root.Position - origin).Magnitude})
-           end
-       end
-       if #list == 0 then return nil end
-       table.sort(list, function(a, b) return a.d < b.d end)
-       local pool = {}
-       for n = 1, math.min(count, #list) do pool[n] = list[n].p end
+       if type(TargetService) ~= "table" then return nil end
+       local pool = TargetService:FindNearestPoolFromPosition(origin, count, true)
+       if #pool == 0 then return nil end
        return pool[math.random(1, #pool)]
    end
    local function findNearestFromHome(maxDistance, origin)
