@@ -2345,6 +2345,12 @@ local shadowThread = task.spawn(function()
        local myCharacterNow = LocalPlayer.Character
        local myRootNow = myCharacterNow and myCharacterNow:FindFirstChild("HumanoidRootPart")
 
+       -- ฐานล่องหนกันตก: ติดตามตำแหน่งผู้เล่นตลอดช่วง WARP
+       -- ทำงานแม้ Shadow Hunter กำลังพัก/ติด busy เพื่อไม่ให้ฐานค้างอยู่ตำแหน่งเก่า
+       if warpActive and myRootNow then
+           placePlatformUnder(myRootNow.Position)
+       end
+
        -- ตัวละครเกิดใหม่: ลืมจุดยืนเดิมและพื้นเก่า
        if warpOwner and warpOwner ~= myCharacterNow then
            warpHome, warpOwner, randomWarpTarget = nil, nil, nil
