@@ -89,4 +89,3 @@ trackConnection(LocalPlayer.CharacterRemoving:Connect(function(character)
    end
 end))
 
-end -- [/TAYJAY LOCAL-LIMIT FIX 2/8]
