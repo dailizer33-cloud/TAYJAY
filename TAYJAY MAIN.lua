@@ -770,8 +770,8 @@ TargetService._attackFn = TargetService._attackFn
 TargetService._listeners = type(TargetService._listeners) == "table" and TargetService._listeners or {}
 TargetService._combatOwner = TargetService._combatOwner
 
--- Legacy mirror table (death_note / warp can read these during migration).
 do -- [TAYJAY LOCAL-LIMIT FIX 1/8]
+-- Legacy mirror table (death_note / warp can read these during migration).
 local Legacy = TargetService.Legacy
 if type(Legacy) ~= "table" then
     Legacy = {
@@ -1096,6 +1096,8 @@ end
 _tjTargetEnv.TAYJAY_TARGET = TargetService
 TJ.TargetService = TargetService
 Main.TargetService = TargetService
+
+end -- [/TAYJAY LOCAL-LIMIT FIX 1/8]
 -- Resource declarations: descriptive only in Monitor Mode.
 ResourceManager:Register({ id = "Speed", writes = { "WalkSpeed" }, priority = 10 })
 ResourceManager:Register({ id = "Fly", writes = { "Position", "HumanoidFlags", "AnimateState" }, priority = 30 })
@@ -1147,7 +1149,6 @@ task.spawn(function()
         task.wait(0.5)
     end
 end)
-end -- [/TAYJAY LOCAL-LIMIT FIX 1/8]
 
 local uiSyncRegistry = {}
 local function registerUiSync(key, updateFunc)
@@ -1406,6 +1407,7 @@ trackConnection(LocalPlayer.CharacterRemoving:Connect(function(character)
    end
 end))
 
+end -- [/TAYJAY LOCAL-LIMIT FIX 2/8]
 -- =========================================================
 -- ⚡ SPEED WIDGET
 -- =========================================================
@@ -1419,7 +1421,6 @@ function UI_LAYOUT.glyph(button, isPlus, color, length, thickness)
       local bar2 = bar:Clone(); bar2.Size = UDim2.fromOffset(thickness, length); bar2.Parent = button
    end
 end
-end -- [/TAYJAY LOCAL-LIMIT FIX 2/8]
 
 local speedWidget = Instance.new("Frame", screenGui)
 speedWidget.Name = "TayJaySpeedWidget"
@@ -1494,8 +1495,10 @@ do
    trackConnection(noclipCircle.Activated:Connect(function() syncButtonState("Noclip", not states.Noclip) end))
    registerUiSync("Noclip", refresh)
 end
+
 end -- [/TAYJAY LOCAL-LIMIT FIX 3/8]
 
+end -- [/TAYJAY LOCAL-LIMIT FIX 3/8]
 -- =========================================================
 -- 🕊️ FLY WIDGET
 -- =========================================================
@@ -1702,7 +1705,6 @@ trackConnection(flyEmergencyStop.Activated:Connect(function()
    end
 end))
 
-do -- [TAYJAY LOCAL-LIMIT FIX 4/8]
 local function beginVerticalHold(button, direction)
    local began = button.InputBegan:Connect(function(input)
        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -1880,7 +1882,6 @@ end))
 trackConnection(LocalPlayer.CharacterAdded:Connect(function()
    if flyNowe then stopFlying() end
 end))
-end -- [/TAYJAY LOCAL-LIMIT FIX 4/8]
 
 -- =========================================================
 -- 📖 DEATH NOTE ( Player List )
@@ -2428,7 +2429,6 @@ do
    end)
 end
 
-do -- [TAYJAY LOCAL-LIMIT FIX 5/8]
 local radius = 15
 local numParts = 36
 local circleParts = {}
@@ -2544,7 +2544,6 @@ do
       trackConnection(conn)
    end
 end
-end -- [/TAYJAY LOCAL-LIMIT FIX 5/8]
 
 -- DEATH NOTE SHADOW HUNTER: Death Note selects the target; WARP UI / AutoWarp starts tracking.
 -- Replaces the old head-sit warp entirely. Position updates are client-side and remain subject to server correction.
@@ -4399,7 +4398,6 @@ toggleBtn.Name = "TayJayMainToggle"
 toggleBtn.Size = UDim2.fromOffset(UI_LAYOUT.ToggleSize, UI_LAYOUT.ToggleSize); toggleBtn.Position = UDim2.new(0, 12, 0.18, 0)
 toggleBtn.BackgroundColor3 = GREEN.mid; toggleBtn.Text = ""; toggleBtn.AutoButtonColor = true
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
-do -- [TAYJAY LOCAL-LIMIT FIX 6/8]
 local toggleRing = Instance.new("UIStroke", toggleBtn)
 toggleRing.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; toggleRing.Color = Color3.fromRGB(255, 255, 255); toggleRing.Thickness = 3.5
 
@@ -4415,7 +4413,6 @@ local toggleLogo = Instance.new("TextLabel", toggleDisc)
 toggleLogo.Name = "TayJayToggleLogo"
 toggleLogo.Size = UDim2.fromScale(1, 1); toggleLogo.BackgroundTransparency = 1
 toggleLogo.Text = "⚡"; toggleLogo.Font = Enum.Font.GothamBlack; toggleLogo.TextSize = 40; toggleLogo.TextColor3 = Color3.fromRGB(255, 224, 70)
-end -- [/TAYJAY LOCAL-LIMIT FIX 6/8]
 
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Name = "TayJayMainMenu"
@@ -4424,7 +4421,6 @@ Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 18); local mainMe
 makeDraggable(mainFrame)
 trackConnection(toggleBtn.Activated:Connect(function() mainFrame.Visible = not mainFrame.Visible end))
 -- Compact tablet layout: the TAYJAY menu uses one column; Death Note remains beside it.
-do -- [TAYJAY LOCAL-LIMIT FIX 7/8]
 local function applyCompactTabletLayout()
    local camera = workspace.CurrentCamera
    if not camera then return end
@@ -4473,7 +4469,6 @@ local function addCandyRainbow(target, duration, rotation)
    return gradient, tween
 end
 if _G.TAYJAY_UI.effects then addCandyRainbow(title, 3.2, 0) end
-end -- [/TAYJAY LOCAL-LIMIT FIX 7/8]
 
 local scroll = Instance.new("ScrollingFrame", mainFrame)
 scroll.Size = UDim2.new(1, -14, 1, -62); scroll.Position = UDim2.new(0, 7, 0, 56); scroll.BackgroundTransparency = 1; scroll.ScrollBarThickness = 6; scroll.ScrollBarImageColor3 = GREEN.neon
@@ -4483,7 +4478,6 @@ list.CellSize = UDim2.new(1, -4, 0, 34)
 list.CellPadding = UDim2.fromOffset(0, 5)
 list.FillDirectionMaxCells = 1
 
-do -- [TAYJAY LOCAL-LIMIT FIX 8/8]
 local function createBtn(order, text, key)
    local btn = Instance.new("TextButton", scroll)
    btn.Size = UDim2.new(1, -4, 0, 34); btn.BackgroundColor3 = GREEN.off; btn.Text = text .. " : OFF"; btn.TextColor3 = WHITE_TEXT; btn.Font = Enum.Font.GothamBold; btn.LayoutOrder = order
@@ -4559,7 +4553,6 @@ trackConnection(monsterMenuButton.Activated:Connect(function()
     refreshMonsterMenuButton()
 end))
 refreshMonsterMenuButton()
-end -- [/TAYJAY LOCAL-LIMIT FIX 8/8]
 local stopAllButton = Instance.new("TextButton", scroll)
 stopAllButton.Name = "TayJayStopAllButton"
 stopAllButton.LayoutOrder = 9
