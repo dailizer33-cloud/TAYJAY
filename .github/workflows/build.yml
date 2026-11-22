@@ -3,6 +3,7 @@ name: Build
 # push: rebuild "TAYJAY MAIN.lua" from src/ and commit it back to the same branch.
 # pull_request: read-only check that "TAYJAY MAIN.lua" matches src/.
 #
+# Sync validation: a workflow-file commit on main retriggers Build after API-based branch synchronization.
 # Safety guard: if "TAYJAY MAIN.lua" was edited directly (uploaded) and no longer
 # matches src/, the job fails instead of overwriting those edits.
 
