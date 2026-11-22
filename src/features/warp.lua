@@ -66,6 +66,7 @@ do
    end)
 end
 
+local warpRuntimeOwner -- shared with the WARP runtime section below
 do -- [TAYJAY LOCAL-LIMIT FIX 5/8]
 local radius = 15
 local numParts = 36
@@ -73,7 +74,7 @@ local circleParts = {}
 
 -- Runtime owner: owns circle cleanup + long-running Warp loops.
 -- Keep warpOwner reserved for the character reference inside the WARP loop.
-local warpRuntimeOwner = ResourceManager:CreateOwner("WarpRuntime", function(reason)
+warpRuntimeOwner = ResourceManager:CreateOwner("WarpRuntime", function(reason)
    pcall(function()
       for _, inst in ipairs(workspace:GetChildren()) do
          if inst.Name == "TayJayWarpPlatform" then
