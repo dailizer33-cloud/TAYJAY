@@ -11,6 +11,7 @@ function UI_LAYOUT.glyph(button, isPlus, color, length, thickness)
       local bar2 = bar:Clone(); bar2.Size = UDim2.fromOffset(thickness, length); bar2.Parent = button
    end
 end
+end -- [/TAYJAY LOCAL-LIMIT FIX 2/8]
 
 local speedWidget = Instance.new("Frame", screenGui)
 speedWidget.Name = "TayJaySpeedWidget"
