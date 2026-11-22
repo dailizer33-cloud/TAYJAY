@@ -21,6 +21,7 @@ speedWidget.BackgroundColor3 = GREEN.dark
 speedWidget.BackgroundTransparency = 0.02
 speedWidget.Visible = false
 Instance.new("UICorner", speedWidget).CornerRadius = UDim.new(0, 16)
+do -- [TAYJAY LOCAL-LIMIT FIX 3/8]
 local speedWidgetStroke = Instance.new("UIStroke", speedWidget); speedWidgetStroke.Name = "TayJayWindowAccent"
 speedWidgetStroke.Color = UI_LAYOUT.Accent.Speed
 speedWidgetStroke.Thickness = 2.5
