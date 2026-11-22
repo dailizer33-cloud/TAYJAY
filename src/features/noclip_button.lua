@@ -23,5 +23,3 @@ do
 end
 
 end -- [/TAYJAY LOCAL-LIMIT FIX 3/8]
-
-end -- [/TAYJAY LOCAL-LIMIT FIX 3/8]
