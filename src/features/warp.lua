@@ -9,6 +9,9 @@ do
        states.KillAura = not states.KillAura
        if states.KillAura then
            states.NormalKillAura = false
+            if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+                TargetService:Unlock("warp_mode")
+            end
             selectedDeathNoteTarget = nil
             syncButtonState("DNWarp", false)
             -- อนุญาตคู่ Fly + WARP: ไม่ปิด Fly แล้ว (ตัวล็อกตำแหน่งกลางกันแย่งกันขยับ ดู TAYJAY_POS_LOCK_UNTIL)
@@ -19,7 +22,12 @@ do
    -- WALK: โจมตีระยะใกล้ (ไม่เปลี่ยน)
    trackConnection(kaNormalBtn.Activated:Connect(function()
        states.NormalKillAura = not states.NormalKillAura
-       if states.NormalKillAura then states.KillAura = false end
+       if states.NormalKillAura then
+           states.KillAura = false
+           if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+               TargetService:Unlock("walk_mode")
+           end
+       end
        updateKaBtnDisplay()
    end))
 
@@ -298,19 +306,8 @@ local shadowThread = task.spawn(function()
        return pool[math.random(1, #pool)]
    end
    local function findNearestFromHome(maxDistance, origin)
-       local best, bestDistance = nil, maxDistance
-       for _, player in ipairs(Players:GetPlayers()) do
-           local char = player ~= LocalPlayer and player.Character
-           local root = char and char:FindFirstChild("HumanoidRootPart")
-           local hum = char and char:FindFirstChildOfClass("Humanoid")
-           if root and hum and hum.Health > 0 and not isSkipped(player) then
-               local distance = (root.Position - origin).Magnitude
-               if distance <= bestDistance then
-                   best, bestDistance = player, distance
-               end
-           end
-       end
-       return best
+       if type(TargetService) ~= "table" then return nil end
+       return TargetService:FindNearestFromPosition(origin, maxDistance, true)
    end
 
    -- พื้นกันตก: แพตโปร่งใสที่ชนได้ อยู่ใต้เท้าตัวละครเสมอ (กันตกเมื่อแมพยังไม่โหลด)
@@ -417,7 +414,12 @@ local shadowThread = task.spawn(function()
            end
            _G.TAYJAY_FOLLOW = nil; targetTitle.Text = "⏸ Shadow Hunter: paused"
        else
-           if not states.KillAura then randomWarpTarget = nil end
+           if not states.KillAura then
+               randomWarpTarget = nil
+               if type(TargetService) == "table" and TargetService.Source == "warp" then
+                   TargetService:SetTransient(nil, "warp")
+               end
+           end
            local targetPlayer
            if states.KillAura then
                -- WARP: เป้าหมาย = คนที่ใกล้ "จุดยืน" ที่สุดทั้งแมพ
@@ -435,6 +437,10 @@ local shadowThread = task.spawn(function()
                    randomWarpTarget = findNearestFromHome(WARP_SEARCH_RANGE, warpHome.Position)
                end
                targetPlayer = randomWarpTarget
+               if type(TargetService) == "table" and TargetService.Source ~= "deathnote"
+                   and (TargetService.Player ~= randomWarpTarget or TargetService.Source ~= "warp") then
+                   TargetService:SetTransient(randomWarpTarget, "warp")
+               end
                if not targetPlayer then goHome(myRootNow) end
            elseif states.DNWarp then
                -- ปุ่ม "⇢ WARP ไป": ย้ายไปหาเป้าหมายครั้งเดียว แล้วอยู่ตรงนั้น (ไม่กลับจุดยืน)
@@ -448,6 +454,9 @@ local shadowThread = task.spawn(function()
                        myRootNow.CFrame = dest
                        _G.TAYJAY_WARP_STAY = true; _G.TAYJAY_FOLLOW = nil
                        selectedDeathNoteTarget = nil
+                       if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+                           TargetService:Unlock("deathnote_warp_stay")
+                       end
                        syncButtonState("DNWarp", false)
                    end
                end
@@ -467,6 +476,9 @@ local shadowThread = task.spawn(function()
                     lockedDeathNoteTarget = nil
                     isDeathNoteTargetLocked = false
                     shadowTargetReleased = true
+                    if type(TargetService) == "table" and TargetService.Source == "deathnote" then
+                        TargetService:Unlock("deathnote_target_gone")
+                    end
                     syncButtonState("DNWarp", false)
                else
                    targetPlayer = selectedDeathNoteTarget
