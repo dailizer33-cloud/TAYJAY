@@ -1,10 +1,10 @@
 --=========================================================
--- TAYJAY ANT EVOLUTION | RADAR V26.2 (DELTA TABLET FIXED)
--- Fix: <40 Top-Level Locals (Fixes Luau 200-Local Compile Limit)
--- Fix: Pure Executor Signals (No VIM / No Namecall Hook)
--- Fix: Safe ViewportSize, Stepped Noclip, CFrame Anti-Fall, Touch Drag
+-- TAYJAY ANT EVOLUTION | RADAR V26.2-FIX (SMOOTH + UI)
+-- Fix: เมนูว่าง → แสดง empty hint + สแกนเร็ว + ขนาด UI ขั้นต่ำ
+-- Fix: ฟาร์มชะงัก → ลด GetDescendants ทุกเฟรมใน noclip, ลด delay humanize
+-- Fix: <40 Top-Level Locals, Pure Executor Signals, Safe ViewportSize
 --=========================================================
-print("[TAYJAY V26.2] เริ่มโหลดสคริปต์...")
+print("[TAYJAY V26.2-FIX] เริ่มโหลดสคริปต์...")
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 local okRun, errRun = xpcall(function()
@@ -33,33 +33,46 @@ local okRun, errRun = xpcall(function()
 	--=========================================================
 	local CFG = {
 		GUARD=true, HP_LOW=0.30, HP_RESUME=0.80, THREAT_RADIUS=90, THREAT_WAIT_MAX=45,
-		NO_REGEN_TIMEOUT=35, GUARD_COOLDOWN=25, SAFE_HEIGHT=350, CAUTION_HP=0.60, CAUTION_RADIUS=50,
+		NO_REGEN_TIMEOUT=30, GUARD_COOLDOWN=18, SAFE_HEIGHT=350, CAUTION_HP=0.60, CAUTION_RADIUS=50,
 		REJOIN_ON_LOW_HP=true, -- เปิดใช้ rejoin แทนการวาร์ปขึ้นแท่น
 		HP_TEXT_PATH="",
-		REBIRTH=true, REBIRTH_POLL=0.30, REBIRTH_STEP_DELAY=1.0,
-		EVOLVE=true, EVOLVE_COOLDOWN=2, EVOLVE_GUI_WORD="action",
-		CLAIM=true, CLAIM_POLL=3, CLAIM_RETRY=20,
-		WARP_SPEED=0.85, MONSTER_MODE="value", MONSTER_TIMEOUT=8, MONSTER_BLACKLIST=10,
+		REBIRTH=true, REBIRTH_POLL=0.28, REBIRTH_STEP_DELAY=0.75,
+		-- พักอัตโนมัติตอน rebirth (สมดุล: ไม่หยุดนาน / กันสแปมได้)
+		REBIRTH_FARM_PAUSE=1.6, REBIRTH_SPAM_WINDOW=40, REBIRTH_SPAM_MAX=6,
+		REBIRTH_SPAM_COOLDOWN=28, REBIRTH_FAIL_LIMIT=3, REBIRTH_FAIL_COOLDOWN=55,
+		EVOLVE=true, EVOLVE_COOLDOWN=2.2, EVOLVE_GUI_WORD="action",
+		CLAIM=true, CLAIM_POLL=3, CLAIM_RETRY=18,
+		WARP_SPEED=0.85, MONSTER_MODE="value", MONSTER_TIMEOUT=7, MONSTER_BLACKLIST=8,
 		BITE_INTERVAL=0.14, SKILLS=true, SKILL_RANGE=90, SKILL_NEED_ENEMY=false,
 		SKILL_Q_INTERVAL=7, SKILL_E_INTERVAL=9, SKILL_CLUSTER_RADIUS=210, SKILL_CLUSTER_DX=150,
-		BLOCK_ROBUX=true, PURCHASE_POLL=1.0, CLAIM_PAUSE_AFTER_PROMPT=20,
-		ROAM=true, ROAM_AFTER=1.0, ROAM_INTERVAL=1.6,
-		-- P1 PERFORMANCE
-		UI_INDEX_TTL=0.55, RAY_BUDGET=40, RENDER_TTL=1.2, SCAN_BATCH=90, SCAN_YIELD=240,
-		-- P2 HUMANIZE
-		HUMANIZE=true, TAP_JITTER=0.30, TAP_HOLD_MIN=0.035, TAP_HOLD_MAX=0.075,
-		DELAY_JITTER=0.22, WARP_OFFSET=1.1, MICRO_PAUSE=0.015,
+		BLOCK_ROBUX=true, PURCHASE_POLL=1.0, CLAIM_PAUSE_AFTER_PROMPT=15,
+		ROAM=true, ROAM_AFTER=0.8, ROAM_INTERVAL=1.4,
+		-- P1 PERFORMANCE (ลดคำสั่ง / ลดหน่วง)
+		UI_INDEX_TTL=1.0, RAY_BUDGET=36, RENDER_TTL=1.6, SCAN_BATCH=100, SCAN_YIELD=160,
+		-- P2 HUMANIZE (เบาลงเพื่อไม่ให้ฟาร์มชะงัก)
+		HUMANIZE=true, TAP_JITTER=0.18, TAP_HOLD_MIN=0.02, TAP_HOLD_MAX=0.05,
+		DELAY_JITTER=0.12, WARP_OFFSET=1.0, MICRO_PAUSE=0.0,
 		MOVE_MODE="warp", GLIDE_SPEED=110, GLIDE_TIMEOUT=6, GLIDE_ARRIVE=1.8,
 		-- P3 FEATURES
 		QUEST=true, QUEST_OVERRIDE=true, QUEST_POLL=2.0,
 		AVOID_PLAYERS=true, AVOID_RADIUS=70, AVOID_HARD_RADIUS=30, AVOID_FOLLOW_SEC=12,
 		BAG=true, BAG_FULL_RATIO=0.96, BAG_POLL=2.0, SELL_TIMEOUT=25,
-		-- SAFETY
-		AUTO_COLLECT_BUFFS=true, EXTRA_BUFF_WORDS={},
-		MAP_LIMIT=0, VOID_LEVEL=-250, VOID_DROP=260, SAFE_MAX_DROP=220,
-		SAFE_TTL_OK=25, SAFE_TTL_BAD=45, SAFE_CHECKS_PER_SEC=45,
-		ORB_BLACKLIST_TIME=90, EXP_CHECK=false, EXP_FAIL_LIMIT=5,
-		AUTO_NOCLIP=true, STATUS_POLL=0.25, RECALL_COOLDOWN=2.5,
+		-- SAFETY + ขอบเขตเก็บ orb กว้างขึ้น
+		AUTO_COLLECT_BUFFS=true, AUTO_COLLECT_ITEMS=true, EXTRA_BUFF_WORDS={},
+		MAP_LIMIT=0, VOID_LEVEL=-320, VOID_DROP=320, SAFE_MAX_DROP=360,
+		SAFE_TTL_OK=14, SAFE_TTL_BAD=18, SAFE_CHECKS_PER_SEC=70,
+		-- ลำดับเป้า: Event/Boss → Buff/Quest → สลับ Orb↔มอน ไม่รอคิว
+		BOSS_FIRST=true, EVENT_FIRST=true,
+		ITEM_PRIORITY=true, ITEM_STREAK_SOFT=8, ITEM_STREAK_HARD=14,
+		MONSTER_INTERLEAVE=true, -- เปิด MONSTER WARP แล้วสลับตีมอนบ่อยขึ้น
+		-- Blacklist Orb: แยกตามสาเหตุ ไม่พักยาวเกินจำเป็น
+		ORB_BLACKLIST_TIME=32,      -- ค่าเริ่มต้นทั่วไป
+		ORB_BLACKLIST_UNSAFE=40,    -- นอกแมพ / ในน้ำ / void
+		ORB_BLACKLIST_NOEXP=28,     -- เก็บแล้วไม่ได้ EXP
+		ORB_BLACKLIST_EMERGENCY=22, -- เป้าใกล้จุดวาร์ปฉุกเฉิน
+		EXP_CHECK=false, EXP_FAIL_LIMIT=3,
+		AUTO_NOCLIP=true, STATUS_POLL=0.25, RECALL_COOLDOWN=2.0,
+		EMERGENCY_WARP_PAUSE=7, -- พักเมื่อวาร์ปฉุกเฉินถี่
 		SAVE_FILE="TayJay_AntFarm_V26.json",
 		SAVE_FLAGS={"REBIRTH","GUARD","CLAIM","EVOLVE","SKILLS","ROAM","BLOCK_ROBUX",
 			"HUMANIZE","QUEST","AVOID_PLAYERS","BAG"},
@@ -131,9 +144,9 @@ local okRun, errRun = xpcall(function()
 	SAFE.params.FilterType = Enum.RaycastFilterType.Exclude
 
 	local K = {
-		ITEM_DWELL=0, MONSTER_DWELL=0.1, IDLE_DELAY=0.08, TOUCH_TRIES=2, TOUCH_COOLDOWN=0.12,
-		WARP_TRIES=4, WARP_COOLDOWN=0.15/CFG.WARP_SPEED, ITEM_SKIP_SECONDS=2, ITEM_STREAK_LIMIT=120,
-		MOVE_COOLDOWN=0.04/CFG.WARP_SPEED, ITEM_NEAR_DISTANCE=2.5, MONSTER_NEAR_DISTANCE=5,
+		ITEM_DWELL=0, MONSTER_DWELL=0.04, IDLE_DELAY=0.03, TOUCH_TRIES=3, TOUCH_COOLDOWN=0.06,
+		WARP_TRIES=3, WARP_COOLDOWN=0.09/CFG.WARP_SPEED, ITEM_SKIP_SECONDS=0.9, ITEM_STREAK_LIMIT=14,
+		MOVE_COOLDOWN=0.03/CFG.WARP_SPEED, ITEM_NEAR_DISTANCE=3.2, MONSTER_NEAR_DISTANCE=6,
 	}
 	local GL = {att=nil,lv=nil,goal=nil,kind=nil,active=false,started=0,lastPos=nil,lastProgress=0}
 	local MOVE = {}
@@ -244,8 +257,9 @@ local okRun, errRun = xpcall(function()
 		local vp = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize
 		local vx = (vp and vp.X and vp.X > 100) and vp.X or 1000
 		local vy = (vp and vp.Y and vp.Y > 100) and vp.Y or 700
-		FW = math.min(400, vx - 24)
-		FH = math.min(560, vy - 24)
+		FW = math.clamp(math.min(400, vx - 24), 280, 420)
+		-- ต้องสูงพอให้ content (tabs+list) ไม่หายบนแท็บเล็ต
+		FH = math.clamp(math.min(560, vy - 24), 360, 620)
 	end
 	function F.mkBtn(parent,text,color,size,pos,textSize)
 		local b = F.make("TextButton",{Size=size,Position=pos or UDim2.new(0,0,0,0),BackgroundColor3=color,
@@ -293,6 +307,13 @@ local okRun, errRun = xpcall(function()
 	F.style(W.list,nil,12)
 	W.layout = F.make("UIListLayout",{Padding=UDim.new(0,6),SortOrder=Enum.SortOrder.LayoutOrder},W.list)
 	F.make("UIPadding",{PaddingTop=UDim.new(0,5),PaddingLeft=UDim.new(0,5),PaddingRight=UDim.new(0,5)},W.list)
+	-- ข้อความเมื่อยังไม่มีรายการ (แก้ปัญหา "มีแค่หน้าต่าง ไม่มีเมนู")
+	W.emptyHint = F.make("TextLabel",{
+		Size=UDim2.new(1,-16,0,80), Position=offset2(8,60),
+		BackgroundTransparency=1, Text="⏳ กำลังสแกนแมพ...\nกดปุ่ม「สแกน」ถ้ายังว่าง\nจากนั้นกด ALL ON เพื่อเปิดฟาร์ม",
+		TextColor3=TH.sub, TextSize=14, Font=FONT, TextWrapped=true,
+		TextXAlignment=Enum.TextXAlignment.Center, TextYAlignment=Enum.TextYAlignment.Top,
+		Visible=true, ZIndex=5}, W.listPanel)
 	W.settingsPanel = F.make("ScrollingFrame",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,
 		BorderSizePixel=0,ScrollBarThickness=6,CanvasSize=UDim2.new(0,0,0,0),Visible=false},W.content)
 
@@ -433,11 +454,15 @@ local okRun, errRun = xpcall(function()
 			NC.restore(); NC.char=ch; NC.snap={}
 			for _,o in ipairs(ch:GetDescendants()) do NC.remember(o) end
 			NC.descConn=ch.DescendantAdded:Connect(function(o) if NC.on then NC.remember(o) end end)
+			-- เบาลง: ไม่ GetDescendants ทุกเฟรม ใช้แค่ parts ที่จำไว้ใน snap
+			local tickN=0
 			NC.stepConn=RunService.Stepped:Connect(function()
 				if not NC.on or not ch.Parent then return end
-				for _,o in ipairs(ch:GetDescendants()) do
-					if o:IsA("BasePart") and not NC.ignored[o.Name] and o.CanCollide then
-						o.CanCollide=false
+				tickN=tickN+1
+				if tickN%4~=0 then return end -- ตรวจทุก 4 เฟรมพอ
+				for part,_ in pairs(NC.snap) do
+					if part and part.Parent and part.CanCollide then
+						part.CanCollide=false
 					end
 				end
 			end)
@@ -735,13 +760,19 @@ local okRun, errRun = xpcall(function()
 	-- CLASSIFY / RADAR
 	--=========================================================
 	local DICT = {
-		itemWords={"item","drop","orb","void","coin","collect","pickup","egg","gem","chest","fruit","food","loot"},
-		monsterWords={"monster","mob","enemy","creature","npc","boss","ant","beetle","caterpillar","spider"},
-		itemFolders={"items","drops","orbs","collectibles","pickups","loot"},
+		itemWords={"item","drop","orb","void","coin","collect","pickup","egg","gem","chest","fruit","food","loot",
+			"shard","crystal","essence","token","candy","xp","exp","star","pearl","nugget","scrap",
+			"reward","prize","capsule","box","crate","bag","pouch","seed","petal","honey","nectar"},
+		monsterWords={"monster","mob","enemy","creature","npc","boss","ant","beetle","caterpillar","spider",
+			"event","raid","elite","titan","overlord"},
+		itemFolders={"items","drops","orbs","collectibles","pickups","loot","rewards","spawns","worlddrops",
+			"collectable","collectables","pickupsfolder","floatingitems","orbfolder","world"},
 		partSuffixes={"_legs"," legs","_leg","_body","_head","_wings","_wing","_arm","_tail","_part"},
 		baseNameAliases={antennal="ant",antennar="ant",ant_antenna_l="ant",ant_antenna_r="ant"},
 		buffWords={"buff","shield","powerup","power_up","power-up","boost","potion","bubble","bless",
 			"aura","magnet","haste","rage","heal","invinc","regen"},
+		eventWords={"event","raid","world boss","worldboss","limited","festival","special event","boss event"},
+		bossWords={"boss","mantis","queen","king","emperor","overlord","titan","colossus","raid boss","world"},
 		monsterFamilies={
 			{"ant",{"ant","ants","antenna","antennae","antennal","antennar"}},
 			{"beetle",{"beetle","beetles"}},
@@ -758,11 +789,12 @@ local okRun, errRun = xpcall(function()
 			{10,{"orb","coin","fruit","food"}}},
 			overrides={},TOP=70,cache=setmetatable({},{__mode="k"})},
 		MON={tiers={
-			{100,{"boss","mantis","queen","king","emperor"}},
+			{120,{"event","raid","world boss","worldboss","limited"}},
+			{100,{"boss","mantis","queen","king","emperor","overlord","titan","colossus"}},
 			{80,{"elite","giant","mega","hornet","scorpion","tarantula"}},
 			{60,{"wasp","spider","beetle","centipede"}},
 			{40,{"soldier","warrior"}}},
-			overrides={},TOP=90,BIG=55,cache=setmetatable({},{__mode="k"})},
+			overrides={},TOP=100,BIG=55,cache=setmetatable({},{__mode="k"})},
 		ROW_HEAD={
 			ITEM={[0]="🎯 เป้าหมายเควสต์ — ทำก่อน",[1]="⭐ บัฟ — เก็บก่อนเสมอ",
 				[2]="💎 หายาก/ใหญ่",[3]="📦 ไอเท็มทั่วไป"},
@@ -847,7 +879,25 @@ local okRun, errRun = xpcall(function()
 			if F.hasWord(p.Name,DICT.itemFolders) then return true end
 			p=p.Parent
 		end
+		-- ขยายขอบเขต: มี TouchTransmitter / ProximityPrompt มักเป็น orb เก็บได้
+		if obj:IsA("BasePart") then
+			if obj:FindFirstChildWhichIsA("TouchTransmitter") then return true end
+			if obj:FindFirstChildWhichIsA("ProximityPrompt") then return true end
+		elseif obj:IsA("Model") then
+			for _,d in ipairs(obj:GetDescendants()) do
+				if d:IsA("TouchTransmitter") or d:IsA("ProximityPrompt") then return true end
+				if #obj:GetDescendants()>40 then break end -- กันโมเดลใหญ่
+			end
+		end
 		return false
+	end
+	function F.isBossOrEvent(obj,g)
+		local n=string.lower((g and g.name) or (obj and obj.Name) or "")
+		if F.hasWord(n,DICT.eventWords or {}) then return "EVENT" end
+		if F.hasWord(n,DICT.bossWords or {}) then return "BOSS" end
+		local sc=obj and F.monsterScore(obj,g or {name=n}) or 0
+		if sc>=(DICT.MON.TOP or 100) then return "BOSS" end
+		return nil
 	end
 	function F.category(obj)
 		if F.isMonster(obj) then return "MONSTER" end
@@ -921,6 +971,10 @@ local okRun, errRun = xpcall(function()
 	end
 	function F.monsterRankBucket(obj,g)
 		local sc=F.monsterScore(obj,g)
+		local kind=F.isBossOrEvent(obj,g)
+		-- Event มาก่อนสุด, Boss รอง, แล้วค่อยมอนทั่วไป
+		if kind=="EVENT" and CFG.EVENT_FIRST~=false then return 0, math.floor(sc/5) end
+		if kind=="BOSS" and CFG.BOSS_FIRST~=false then return 0.5, math.floor(sc/5) end
 		return F.monsterRank(sc), math.floor(sc/10)
 	end
 	function F.groupPriority(g)
@@ -979,9 +1033,18 @@ local okRun, errRun = xpcall(function()
 		local g=RADAR.groups[cat][key]
 		if not g then
 			g={key=key,name=F.groupName(obj,cat),objects={}}
-			if cat=="ITEM" and F.isBuffName(obj.Name) then
-				g.buff=true
-				if CFG.AUTO_COLLECT_BUFFS and RADAR.enabled[key]==nil then RADAR.enabled[key]=true end
+			if cat=="ITEM" then
+				if F.isBuffName(obj.Name) then
+					g.buff=true
+					if CFG.AUTO_COLLECT_BUFFS and RADAR.enabled[key]==nil then RADAR.enabled[key]=true end
+				elseif CFG.AUTO_COLLECT_ITEMS and RADAR.enabled[key]==nil then
+					-- เปิดเก็บ orb/item ใหม่โดยอัตโนมัติ (ขอบเขตกว้างขึ้น)
+					RADAR.enabled[key]=true
+				end
+			elseif cat=="MONSTER" then
+				local kind=F.isBossOrEvent(obj,g)
+				-- เปิด Event/Boss อัตโนมัติเมื่อเจอ (ยังต้องเปิด MONSTER WARP ถึงจะตี)
+				if kind and RADAR.enabled[key]==nil then RADAR.enabled[key]=true end
 			end
 			RADAR.groups[cat][key]=g
 			RADAR.noteKnown(cat,key,g)
@@ -1019,6 +1082,12 @@ local okRun, errRun = xpcall(function()
 		ST.scanRunning=true
 		local oldText=W.refresh.Text
 		W.refresh.Text="สแกน..."
+		W.status.Text="⏳ กำลังสแกนแมพ..."
+		if W.emptyHint then
+			W.emptyHint.Visible=true
+			W.emptyHint.Text="⏳ กำลังสแกนแมพ...\nรอสักครู่"
+		end
+		-- ไม่ล้าง known เดิม แค่ rebuild groups จากของที่ยังอยู่
 		RADAR.groups.ITEM={}; RADAR.groups.MONSTER={}; RADAR.objectGroup={}
 		local ok,err=pcall(function()
 			local stack={Workspace}
@@ -1031,13 +1100,20 @@ local okRun, errRun = xpcall(function()
 						stack[#stack+1]=obj
 					end
 					processed=processed+1
-					if processed%CFG.SCAN_YIELD==0 then task.wait(0.03) end
+					if processed%CFG.SCAN_YIELD==0 then
+						W.status.Text="⏳ สแกน... "..processed
+						task.wait(0.02)
+					end
 				end
 			end
 		end)
 		ST.scanRunning=false
 		W.refresh.Text=oldText
 		if F.render then F.render() end
+		local nI,nM=0,0
+		for _ in pairs(RADAR.known.ITEM) do nI=nI+1 end
+		for _ in pairs(RADAR.known.MONSTER) do nM=nM+1 end
+		W.status.Text=string.format("สแกนเสร็จ • ITEM %d • MONSTER %d • กด ALL ON", nI, nM)
 		if not ok then warn("[TAYJAY V26.2] Scan: "..tostring(err)) end
 	end
 
@@ -1145,6 +1221,14 @@ local okRun, errRun = xpcall(function()
 		local allOn=#arr>0
 		for _,e in ipairs(arr) do if not RADAR.enabled[e.key] then allOn=false break end end
 		W.allBtn.Text=allOn and "ALL OFF" or "ALL ON"
+		if W.emptyHint then
+			W.emptyHint.Visible=(#arr==0)
+			if #arr==0 then
+				W.emptyHint.Text=ST.scanRunning
+					and "⏳ กำลังสแกนแมพ...\nรอสักครู่"
+					or "ยังไม่เจอรายการในแท็บนี้\nกด「สแกน」แล้วรอ\nจากนั้นกด ALL ON เพื่อเปิดฟาร์ม"
+			end
+		end
 		task.defer(function() if W.list.Parent then W.list.CanvasPosition=keepPos end end)
 	end
 
@@ -1157,8 +1241,11 @@ local okRun, errRun = xpcall(function()
 
 	function F.applyLayout()
 		for _,o in ipairs({W.status,W.questLine,W.quick,W.tabs,W.content}) do o.Visible=not ST.collapsed end
-		W.listPanel.Visible=(ST.selected~="SET")
-		W.settingsPanel.Visible=(ST.selected=="SET")
+		W.listPanel.Visible=(ST.selected~="SET") and (not ST.collapsed)
+		W.settingsPanel.Visible=(ST.selected=="SET") and (not ST.collapsed)
+		if W.emptyHint then
+			W.emptyHint.Visible = W.listPanel.Visible and (ST.lastGroupCount or 0)==0
+		end
 		W.frame.Size=ST.collapsed and offset2(FW,56) or offset2(FW,FH)
 		W.fold.Text=ST.collapsed and "+" or "−"
 	end
@@ -1232,12 +1319,26 @@ local okRun, errRun = xpcall(function()
 		if SAFE.inVoid(pos) or SAFE.outOfBounds(pos) then return false end
 		local now=os.clock()
 		local c=SAFE.cache[obj]
-		if c and now<c.exp and (c.pos-pos).Magnitude<10 then return c.ok end
+		if c and now<c.exp and (c.pos-pos).Magnitude<12 then return c.ok end
 		if now-SAFE.budgetAt>=1 then SAFE.budgetAt=now; SAFE.budget=CFG.SAFE_CHECKS_PER_SEC end
 		if SAFE.budget<=0 then return true end
 		SAFE.budget=SAFE.budget-1
 		local ok
-		if kind=="MONSTER" then ok=not SAFE.water(pos,12,obj) else ok=SAFE.raw(pos,obj) end
+		if kind=="MONSTER" then
+			ok=not SAFE.water(pos,12,obj)
+		elseif kind=="ITEM" then
+			-- ขอบเขตกว้าง: orb ลอยสูงยังเก็บได้ ห้ามเฉพาะ void/น้ำ
+			if SAFE.water(pos,10,obj) then ok=false
+			else
+				-- ถ้ามีพื้นในระยะไกลถือว่าโอเค, ถ้า ray ไม่เจอแต่ไม่ต่ำเกิน void ก็ยังเก็บ
+				SAFE.filter(obj)
+				local hit=Workspace:Raycast(pos+Vector3.new(0,6,0),Vector3.new(0,-(CFG.SAFE_MAX_DROP+6),0),SAFE.params)
+				if hit then ok=(hit.Material~=Enum.Material.Water)
+				else ok=not SAFE.inVoid(pos-Vector3.new(0,40,0)) end
+			end
+		else
+			ok=SAFE.raw(pos,obj)
+		end
 		SAFE.cache[obj]={pos=pos,ok=ok,exp=now+(ok and CFG.SAFE_TTL_OK or CFG.SAFE_TTL_BAD)}
 		return ok
 	end
@@ -1566,7 +1667,9 @@ local okRun, errRun = xpcall(function()
 		local bad=ST.lastTarget
 		if bad and bad.Parent then
 			local bp=F.getPosition(bad)
-			if bp and (bp-root.Position).Magnitude<=60 then SAFE.blacklist(bad,60) end
+			if bp and (bp-root.Position).Magnitude<=60 then
+				SAFE.blacklist(bad, CFG.ORB_BLACKLIST_EMERGENCY or 22)
+			end
 		end
 		ST.lastTarget=nil
 		local target=ST.spawnPoint or ST.lastSafePos
@@ -1579,8 +1682,10 @@ local okRun, errRun = xpcall(function()
 		F.warpTo(root,target+Vector3.new(0,5,0))
 		ST.mt=nil; ST.inVoid=false; ST.inWater=false
 		if ST.recallCount>=5 then
-			ST.recallCount=0; ST.farmPauseUntil=now+10
-			F.setNote("🚨 วาร์ปฉุกเฉินถี่ - พัก 10 วิ",5)
+			ST.recallCount=0
+			local ep=CFG.EMERGENCY_WARP_PAUSE or 7
+			ST.farmPauseUntil=now+ep
+			F.setNote("🚨 วาร์ปฉุกเฉินถี่ - พัก "..ep.." วิ",4)
 		else
 			F.setNote("🚨 "..reason,3)
 		end
@@ -1792,15 +1897,16 @@ local okRun, errRun = xpcall(function()
 			elseif now-t.since>CFG.MONSTER_TIMEOUT then
 				ST.mBlack[o]=now+CFG.MONSTER_BLACKLIST; ST.mt=nil
 			elseif not RADAR.enabled[grpKey] and not isQBoost then ST.mt=nil
-			elseif CFG.MONSTER_MODE=="value" and now-ST.mCheckAt>=1.0 then
+			elseif CFG.MONSTER_MODE=="value" and now-ST.mCheckAt>=0.45 then
 				ST.mCheckAt=now
 				local best=F.nearestEnabled("MONSTER",rootPos)
 				if best and best~=o then
 					local g1=RADAR.groups.MONSTER[RADAR.objectGroup[best] or ""]
 					local g0=RADAR.groups.MONSTER[grpKey]
-					if g1 and g0 and F.monsterRankBucket(best,g1)<F.monsterRankBucket(o,g0) then
-						ST.mt={obj=best,since=now}
-					end
+					local r1=g1 and select(1,F.monsterRankBucket(best,g1)) or 99
+					local r0=g0 and select(1,F.monsterRankBucket(o,g0)) or 99
+					-- สลับทันทีถ้าเจอ Event/Boss หรือแรงก์ดีกว่า
+					if r1<r0 then ST.mt={obj=best,since=now} end
 				end
 			end
 		end
@@ -1910,9 +2016,10 @@ local okRun, errRun = xpcall(function()
 				if gained==true then v.failCount=0
 				elseif gained==false then
 					v.failCount=v.failCount+1
-					if v.failCount>=CFG.EXP_FAIL_LIMIT then
+					if v.failCount>=(CFG.EXP_FAIL_LIMIT or 3) then
 						v.failCount=0
-						SAFE.blacklist(obj,CFG.ORB_BLACKLIST_TIME,"⚠️ Orb ไม่ได้ EXP - พักชั่วคราว")
+						SAFE.blacklist(obj, CFG.ORB_BLACKLIST_NOEXP or CFG.ORB_BLACKLIST_TIME,
+							"⚠️ Orb ไม่ได้ EXP - พัก "..tostring(CFG.ORB_BLACKLIST_NOEXP or 28).."วิ")
 					end
 				end
 			end)
@@ -1927,12 +2034,14 @@ local okRun, errRun = xpcall(function()
 		v.warps=v.warps+1
 		if v.warps==1 and v.touches>0 then ST.touchMiss=ST.touchMiss+1 end
 		if v.warps>K.WARP_TRIES then
+			-- soft skip สั้น ๆ แล้วลองใหม่ (ไม่ blacklist ยาว)
 			v.warps=0; v.touches=0; v.skipUntil=now+K.ITEM_SKIP_SECONDS
 			return false
 		end
 		if pos and not SAFE.check(obj,pos,"ITEM") then
-			SAFE.blacklist(obj,CFG.ORB_BLACKLIST_TIME,"⚠️ Orb นอกแมพ/ในน้ำ - ข้าม")
-			v.skipUntil=now+30
+			SAFE.blacklist(obj, CFG.ORB_BLACKLIST_UNSAFE or CFG.ORB_BLACKLIST_TIME,
+				"⚠️ Orb นอกแมพ/ในน้ำ - ข้าม "..tostring(CFG.ORB_BLACKLIST_UNSAFE or 40).."วิ")
+			-- ไม่ซ้อน skipUntil ยาวซ้ำกับ blacklist
 			return false
 		end
 		local before=snap()
@@ -1945,12 +2054,45 @@ local okRun, errRun = xpcall(function()
 		return ok
 	end
 	function F.nextEnabledTarget(rootPos)
-		if ST.combatOn and ST.itemStreak>=K.ITEM_STREAK_LIMIT then
+		-- ลำดับ: Event/Boss → Quest/Buff → สลับ Orb↔มอน (ไม่รอคิวว่าง)
+		local soft=CFG.ITEM_STREAK_SOFT or 8
+		local hard=CFG.ITEM_STREAK_HARD or 14
+		local streak=ST.itemStreak or 0
+
+		-- 1) Event / Boss ก่อนเสมอ (เมื่อเปิด MONSTER WARP)
+		if ST.combatOn and (CFG.EVENT_FIRST~=false or CFG.BOSS_FIRST~=false) then
 			local m=F.monsterTarget(rootPos)
-			if m then ST.itemStreak=0; return "MONSTER",m end
+			if m then
+				local g=RADAR.groups.MONSTER[RADAR.objectGroup[m] or ""]
+				local kind=F.isBossOrEvent(m,g)
+				if kind=="EVENT" or kind=="BOSS" then
+					ST.itemStreak=0
+					return "MONSTER",m
+				end
+			end
 		end
+
+		-- 2) บังคับสลับไปมอนหลังเก็บ orb ครบ soft/hard (ไม่นั่งรอคิว)
+		if ST.combatOn and CFG.MONSTER_INTERLEAVE~=false and streak>=soft then
+			local m=F.monsterTarget(rootPos)
+			if m then
+				ST.itemStreak=0
+				return "MONSTER",m
+			end
+			-- ถ้า soft แล้วยังไม่มีมอน แต่ streak ยัง < hard ให้เก็บ orb ต่อได้
+			if streak>=hard then
+				-- hard แล้ว: ถ้ายังไม่มีมอน ค่อยกลับไป orb (ไม่ return nil)
+			end
+		end
+
+		-- 3) เก็บ orb / buff / quest item
 		local item=F.nearestEnabled("ITEM",rootPos)
-		if item then ST.itemStreak=ST.itemStreak+1; return "ITEM",item end
+		if item then
+			ST.itemStreak=streak+1
+			return "ITEM",item
+		end
+
+		-- 4) ไม่มี orb → ตีมอนทันที (ไม่รอ)
 		if ST.combatOn then
 			local m=F.monsterTarget(rootPos)
 			if m then ST.itemStreak=0; return "MONSTER",m end
@@ -2146,138 +2288,222 @@ local okRun, errRun = xpcall(function()
 		end
 	end)
 
-	-- REBIRTH / EVOLVE WORKER
+	-- REBIRTH / EVOLVE WORKER (Auto Rebirth เสถียรขึ้น)
 	do
 		local PURE_PAIR="^%s*%a*%s*[%d%.,]+%s*[KkMmBbTt]?%s*/%s*[%d%.,]+%s*[KkMmBbTt]?%s*$"
+		local RB_WORDS={"REBIRTH","REBORN","PRESTIGE","เกิดใหม่","รีเบิร์ธ","รีบิร์ธ"}
+		local CONFIRM_WORDS={"TAP AGAIN","CONFIRM","YES","ตกลง","ยืนยัน","อีกครั้ง"}
+		local NOT_READY={"NOT READY","NEED MORE","REQUIRE","ไม่พร้อม","ยังไม่พอ"}
+
+		local function upperAll(o)
+			if not (o and o.Parent) then return "" end
+			local s=string.upper(tostring(o.Text or o.Name or ""))
+			pcall(function()
+				for _,d in ipairs(o:GetDescendants()) do
+					if d:IsA("TextLabel") or d:IsA("TextButton") then
+						s=s.."  "..string.upper(tostring(d.Text or ""))
+					end
+				end
+			end)
+			return s
+		end
+		local function hasAny(s, words)
+			for _,w in ipairs(words) do
+				if string.find(s, w, 1, true) then return true end
+			end
+			return false
+		end
+
 		local function scanRebirthUI()
 			UI.index()
-			local ui={rowTexts={}}
+			local ui={rowTexts={}, buttons={}}
 			local cam=Workspace.CurrentCamera
 			local vh=cam and cam.ViewportSize.Y or 1000
+
 			for _,L in ipairs(UI.labels) do
-				if L.o.Parent then
-					local t=L.text
-					if L.rb and L.raw~="" and #ui.rowTexts<8 then ui.rowTexts[#ui.rowTexts+1]=L.raw end
-					if L.raw:find("/",1,true) then
+				if L.o and L.o.Parent then
+					local t=L.text or ""
+					if L.rb and L.raw~="" and #ui.rowTexts<10 then ui.rowTexts[#ui.rowTexts+1]=L.raw end
+					if L.raw and L.raw:find("/",1,true) then
 						local cur,req=F.parsePair(L.raw)
 						if cur and req and req>0 then
-							if L.rb and t:find("POWER",1,true) then ui.power=ui.power or L.o end
-							if not ui.top and string.find(L.raw,PURE_PAIR) and L.shown and L.y<vh*0.18 then ui.top=L.o end
+							if (L.rb or t:find("POWER",1,true) or t:find("REBIRTH",1,true)) then
+								ui.power=ui.power or L.o
+							end
+							if not ui.top and string.find(L.raw,PURE_PAIR) and L.shown and L.y<vh*0.22 then
+								ui.top=L.o
+							end
 						end
 					end
-					if not ui.readyLbl and L.rb and t:find("READY TO REBIRTH",1,true) then ui.readyLbl=L.o end
+					if not ui.readyLbl and hasAny(t, {"READY TO REBIRTH","READY","พร้อม"}) then
+						ui.readyLbl=L.o
+					end
 				end
 			end
+
 			for _,B in ipairs(UI.buttons) do
-				if B.o.Parent and not B.buy then
-					local ln=string.lower(B.o.Name)
-					if ln:find("evolve",1,true) then
-						if B.sgn:find(CFG.EVOLVE_GUI_WORD,1,true) then
-							if not ui.evo or (B.shown and not F.liveShown(ui.evo)) then ui.evo=B.o end
+				if B.o and B.o.Parent and not B.buy then
+					local ln=string.lower(B.o.Name or "")
+					local all=upperAll(B.o)
+					-- evolve / hatch
+					if ln:find("evolve",1,true) or ln:find("hatch",1,true) or all:find("EVOLVE",1,true) or all:find("HATCH",1,true) then
+						if not ui.evo or (B.shown and not F.liveShown(ui.evo)) then ui.evo=B.o end
+					end
+					-- rebirth family
+					local isConfirm=hasAny(all, CONFIRM_WORDS)
+					local isRebirth=hasAny(all, RB_WORDS) or ln:find("rebirth",1,true) or ln:find("prestige",1,true)
+					if isRebirth or isConfirm then
+						local key
+						if isConfirm then key="b"
+						elseif all:find("REBIRTH%s*X%s*%d") or all:find("X%d") then key="a"
+						elseif B.shown and F.liveShown(B.o) and isRebirth then key="a"
+						else key="opener"
 						end
-					else
-						local all=B.text
-						if all:find("REBIRTH",1,true) or all:find("TAP AGAIN",1,true) or ln:find("rebirth",1,true) then
-							local isB=all:find("TAP AGAIN",1,true)~=nil
-							local isA=(not isB) and (all:find("REBIRTH%sX%s%d")~=nil or (B.rb and all:find("REBIRTH",1,true)~=nil))
-							local key=isB and "b" or (isA and "a" or "opener")
-							local cur=ui[key]
-							if not cur or (B.shown and not F.liveShown(cur)) then ui[key]=B.o end
-						end
+						local cur=ui[key]
+						if not cur or (B.shown and not F.liveShown(cur)) then ui[key]=B.o end
+						ui.buttons[#ui.buttons+1]={o=B.o, key=key, shown=B.shown}
 					end
 				end
 			end
 			return ui
 		end
+
 		local function evoText(ui)
-			local e=ui.evo
-			if e and e.Parent and F.liveShown(e) then
-				local s=string.upper(e.Text or "")
-				for _,d in ipairs(e:GetDescendants()) do
-					if d:IsA("TextLabel") or d:IsA("TextButton") then s=s.."  "..string.upper(d.Text or "") end
-				end
-				return s
-			end
-			return ""
+			return upperAll(ui and ui.evo)
 		end
+
 		local function rebirthReady(ui)
-			if evoText(ui):find("REBIRTH",1,true) then return true end
+			if not ui then return false end
+			local et=evoText(ui)
+			if et~="" and hasAny(et, RB_WORDS) and not hasAny(et, NOT_READY) then return true end
 			if ui.power and ui.power.Parent then
 				local cur,req=F.parsePair(ui.power.Text)
 				if cur and req and req>0 then return cur>=req end
 			end
 			if ui.readyLbl and ui.readyLbl.Parent then
-				return not string.upper(ui.readyLbl.Text):find("NOT",1,true)
+				local t=string.upper(ui.readyLbl.Text or "")
+				if hasAny(t, NOT_READY) then return false end
+				if hasAny(t, {"READY","พร้อม"}) then return true end
 			end
-			if ui.top and ui.top.Parent and string.find(ui.top.Text,PURE_PAIR) then
+			if ui.top and ui.top.Parent then
 				local cur,req=F.parsePair(ui.top.Text)
 				if cur and req and req>0 then return cur>=req end
 			end
+			-- ถ้ามีปุ่ม confirm / rebirth โชว์อยู่แล้ว ถือว่าพร้อมลองกด
+			if ui.b and ui.b.Parent and F.liveShown(ui.b) then return true end
+			if ui.a and ui.a.Parent and F.liveShown(ui.a) then return true end
 			return false
 		end
+
 		local function rebirthCount()
 			local ls=player:FindFirstChild("leaderstats")
 			if ls then
 				for _,v in ipairs(ls:GetChildren()) do
-					if v:IsA("ValueBase") and string.lower(v.Name):find("rebirth",1,true) then return tonumber(v.Value) end
+					local n=string.lower(v.Name or "")
+					if v:IsA("ValueBase") and (n:find("rebirth",1,true) or n:find("prestige",1,true) or n:find("rb",1,true)) then
+						return tonumber(v.Value)
+					end
 				end
 			end
+			-- fallback attributes
+			local ok,val=pcall(function() return player:GetAttribute("Rebirths") or player:GetAttribute("Rebirth") end)
+			if ok and val~=nil then return tonumber(val) end
 			return nil
 		end
+
 		task.spawn(function()
 			local fails=0
+			local stageLog=""
 			while gui.Parent do
 				local now=os.clock()
-				if CFG.REBIRTH or CFG.EVOLVE then
-					local inSeq=now-ST.rbTryAt<6
-					if now-ST.rbScanAt>=(inSeq and 0.3 or 1.5) then
+				if (CFG.REBIRTH or CFG.EVOLVE) and not ST.closing then
+					local inSeq=now-ST.rbTryAt<8
+					if now-ST.rbScanAt>=(inSeq and 0.25 or 1.2) then
 						ST.rbScanAt=now
 						ST.rb=scanRebirthUI()
 					end
 					local ui=ST.rb
+
+					-- ===== AUTO REBIRTH =====
 					if CFG.REBIRTH and ui and now>=ST.rbBlockedUntil
-						and now-ST.rbTryAt>=F.jitter(CFG.REBIRTH_STEP_DELAY,0.15) and rebirthReady(ui) then
-						local opener=ui.opener
-						if evoText(ui):find("REBIRTH",1,true) then opener=ui.evo end
-						local pick,stage=nil,1
-						if ui.b and ui.b.Parent then pick,stage=ui.b,3
-						elseif ui.a and ui.a.Parent then
-							if F.liveShown(ui.a) then pick,stage=ui.a,2
-							elseif opener and opener.Parent and now-ST.rbOpenAt>=6 then
+						and now-ST.rbTryAt>=F.jitter(CFG.REBIRTH_STEP_DELAY,0.12) then
+						local ready=rebirthReady(ui)
+						if ready then
+							-- หยุดฟาร์มชั่วคราวตอนกด rebirth (ค่าจาก CFG)
+							local pauseSec=CFG.REBIRTH_FARM_PAUSE or 1.6
+							ST.farmPauseUntil=math.max(ST.farmPauseUntil or 0, now+pauseSec)
+							local opener=ui.opener
+							local et=evoText(ui)
+							if hasAny(et, RB_WORDS) then opener=ui.evo or opener end
+
+							local pick,stage=nil,1
+							if ui.b and ui.b.Parent and F.liveShown(ui.b) then
+								pick,stage=ui.b,3
+							elseif ui.a and ui.a.Parent then
+								if F.liveShown(ui.a) then
+									pick,stage=ui.a,2
+								elseif opener and opener.Parent and now-ST.rbOpenAt>=4.5 then
+									pick,stage=opener,1; ST.rbOpenAt=now
+								elseif now-ST.rbOpenAt>=1.8 then
+									pick,stage=ui.a,2
+								end
+							elseif opener and opener.Parent and now-ST.rbOpenAt>=4.5 then
 								pick,stage=opener,1; ST.rbOpenAt=now
-							elseif now-ST.rbOpenAt>=2.5 then pick,stage=ui.a,2 end
-						elseif opener and opener.Parent and now-ST.rbOpenAt>=6 then
-							pick,stage=opener,1; ST.rbOpenAt=now
-						end
-						if pick then
-							ST.rbTryAt=now
-							F.clickGui(pick)
-							F.setNote("REBIRTH ขั้น "..stage.."/3",3)
-							if stage==3 then
-								if now-ST.rbBStart>40 then ST.rbBStart=now; ST.rbBCount=0 end
-								ST.rbBCount=ST.rbBCount+1
-								if ST.rbBCount>4 then ST.rbBCount=0; ST.rbBlockedUntil=now+60 end
-								local before=rebirthCount()
-								if before then
-									task.delay(4,function()
-										local after=rebirthCount()
-										if after and after>before then fails=0
-										else
-											fails=fails+1
-											if fails>=3 then fails=0; ST.rbBlockedUntil=os.clock()+120 end
-										end
-									end)
+							elseif ui.evo and ui.evo.Parent and hasAny(et, RB_WORDS) then
+								pick,stage=ui.evo,2
+							end
+
+							if pick then
+								ST.rbTryAt=now
+								F.clickGui(pick)
+								local msg="🔄 REBIRTH ขั้น "..stage.."/3"
+								stageLog=msg
+								F.setNote(msg, 2.5)
+								ST.currentAction=msg
+								if stage==3 then
+									local win=CFG.REBIRTH_SPAM_WINDOW or 40
+									local maxC=CFG.REBIRTH_SPAM_MAX or 6
+									local cool=CFG.REBIRTH_SPAM_COOLDOWN or 28
+									if now-ST.rbBStart>win then ST.rbBStart=now; ST.rbBCount=0 end
+									ST.rbBCount=ST.rbBCount+1
+									if ST.rbBCount>maxC then
+										ST.rbBCount=0
+										ST.rbBlockedUntil=now+cool
+										F.setNote("Rebirth รอรอบ "..cool.."วิ (กันสแปม)", 3)
+									end
+									local before=rebirthCount()
+									if before~=nil then
+										task.delay(3.0, function()
+											local after=rebirthCount()
+											if after and after>before then
+												fails=0
+												F.setNote("✅ Rebirth สำเร็จ ×"..tostring(after), 3)
+											else
+												fails=fails+1
+												local lim=CFG.REBIRTH_FAIL_LIMIT or 3
+												local failCool=CFG.REBIRTH_FAIL_COOLDOWN or 55
+												if fails>=lim then
+													fails=0
+													ST.rbBlockedUntil=os.clock()+failCool
+													F.setNote("Rebirth ไม่สำเร็จ — พัก "..failCool.." วิ", 4)
+												end
+											end
+										end)
+									end
 								end
 							end
 						end
 					end
+
+					-- ===== AUTO EVOLVE / HATCH =====
 					if CFG.EVOLVE and ui and ui.evo and ui.evo.Parent
-						and now-ST.evoAt>=CFG.EVOLVE_COOLDOWN and now-ST.rbTryAt>=8 then
+						and now-ST.evoAt>=CFG.EVOLVE_COOLDOWN and now-ST.rbTryAt>=6 then
 						local txt=evoText(ui)
-						if txt~="" and not txt:find("REBIRTH",1,true) then
-							ST.evoAt=now; ST.evoClicks=ST.evoClicks+1
+						if txt~="" and not hasAny(txt, RB_WORDS) and not hasAny(txt, NOT_READY) then
+							ST.evoAt=now
+							ST.evoClicks=ST.evoClicks+1
 							F.clickGui(ui.evo)
-							F.setNote("EVOLVE",2)
+							F.setNote("🐣 EVOLVE/HATCH", 2)
 						end
 					end
 				end
@@ -2365,8 +2591,11 @@ local okRun, errRun = xpcall(function()
 				F.checkCharacterStatus()
 				local now=os.clock()
 				if now<ST.farmPauseUntil then
-					ST.currentAction="⏸ พักกันวาร์ปวน "..math.ceil(ST.farmPauseUntil-now).." วิ"
-					F.showAction(); task.wait(0.3)
+					local left=math.ceil(ST.farmPauseUntil-now)
+					ST.currentAction=(ST.note~="" and now<ST.noteUntil)
+						and (ST.note.." ("..left.."วิ)")
+						or ("⏸ พักฟาร์ม "..left.." วิ")
+					F.showAction(); task.wait(0.25)
 				elseif ST.guard then
 					ST.currentAction="[GUARD] HP "..F.pct(ST.hp).."% รอ "..F.pct(CFG.HP_RESUME).."%"
 					F.showAction(); task.wait(0.15)
@@ -2746,13 +2975,21 @@ local okRun, errRun = xpcall(function()
 	--=========================================================
 	F.loadState()
 	F.repaintSettings()
+	ST.collapsed=false
 	F.setTab("ITEM")
-	task.spawn(function() task.wait(1); RADAR.fullScan() end)
+	F.applyLayout()
+	W.status.Text="โหลดแล้ว • กด「สแกน」หรือรอสแกนอัตโนมัติ"
+	if W.emptyHint then W.emptyHint.Visible=true end
+	-- สแกนเร็วขึ้นหลังโหลด (ไม่รอ 1 วินาที)
+	task.spawn(function()
+		task.wait(0.35)
+		if gui.Parent then RADAR.fullScan() end
+	end)
 	pcall(function()
 		local g=getgenv and getgenv()
 		if g then g.TAYJAY_ANT_SHUTDOWN=F.shutdownAll end
 	end)
-	print("[TAYJAY ANT EVOLUTION RADAR V26.2 DELTA-PURE] Loaded | firetouchinterest="..tostring(RADAR.hasFireTouch))
+	print("[TAYJAY ANT EVOLUTION RADAR V26.2 FIXED] Loaded | firetouchinterest="..tostring(RADAR.hasFireTouch))
 end, debug.traceback)
 
 if not okRun then
