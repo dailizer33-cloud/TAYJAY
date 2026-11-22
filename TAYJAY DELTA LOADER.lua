@@ -43,7 +43,11 @@ local function fetchWithGameHttp()
 end
 
 local function fetchWithRequest()
-    local requestFn = env.request or env.http_request or env.syn and env.syn.request
+    local requestFn = env.request
+    if type(requestFn) ~= "function" then requestFn = env.http_request end
+    if type(requestFn) ~= "function" and type(env.syn) == "table" then
+        requestFn = env.syn.request
+    end
     if type(requestFn) ~= "function" then
         return nil, "No supported HTTP request function was found"
     end
