@@ -199,6 +199,27 @@ local function distanceTo(player)
     return (myRoot.Position - root.Position).Magnitude, char, hum
 end
 
+function TargetService:FindNearestFromPosition(origin, maxDist, skipBlacklist)
+    if typeof(origin) ~= "Vector3" then return nil end
+    local bestPlayer, bestChar, bestDist = nil, nil, tonumber(maxDist) or math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local skipped = skipBlacklist == true and _G.TAYJAY_BL
+                and type(_G.TAYJAY_BL.has) == "function" and _G.TAYJAY_BL.has(player.Name)
+            if not skipped then
+                local char = player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if root and hum and hum.Health > 0 then
+                    local dist = (root.Position - origin).Magnitude
+                    if dist <= bestDist then bestPlayer, bestChar, bestDist = player, char, dist end
+                end
+            end
+        end
+    end
+    return bestPlayer, bestChar, bestDist
+end
+
 function TargetService:FindNearest(maxDist, skipBlacklist)
     local myChar = LocalPlayer.Character
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
