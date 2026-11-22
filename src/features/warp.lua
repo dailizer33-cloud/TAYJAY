@@ -420,7 +420,7 @@ local shadowThread = task.spawn(function()
            if not states.KillAura then
                randomWarpTarget = nil
                if type(TargetService) == "table" and TargetService.Source == "warp" then
-                   TargetService:SetTransient(nil, "warp")
+                   TargetService:Unlock("warp_off")
                end
            end
            local targetPlayer
