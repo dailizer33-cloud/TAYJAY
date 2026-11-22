@@ -165,7 +165,11 @@ function TargetService:Unlock(reason)
     mirrorLegacy()
 
     statesRef.DNWarp = false
-    self:StopCombatOwner(reason or "unlock")
+    if statesRef.NormalKillAura == true then
+        self:EnsureCombatOwner()
+    else
+        self:StopCombatOwner(reason or "unlock")
+    end
     notify("unlock", previous)
     return true
 end
@@ -197,6 +201,56 @@ local function distanceTo(player)
         return nil
     end
     return (myRoot.Position - root.Position).Magnitude, char, hum
+end
+
+function TargetService:FindNearestFromPosition(origin, maxDist, skipBlacklist)
+    if typeof(origin) ~= "Vector3" then return nil end
+    local bestPlayer, bestChar, bestDist = nil, nil, tonumber(maxDist) or math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local skipped = skipBlacklist == true and _G.TAYJAY_BL
+                and type(_G.TAYJAY_BL.has) == "function" and _G.TAYJAY_BL.has(player.Name)
+            if not skipped then
+                local char = player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if root and hum and hum.Health > 0 then
+                    local dist = (root.Position - origin).Magnitude
+                    if dist <= bestDist then bestPlayer, bestChar, bestDist = player, char, dist end
+                end
+            end
+        end
+    end
+    return bestPlayer, bestChar, bestDist
+end
+
+function TargetService:FindNearestPoolFromPosition(origin, count, skipBlacklist)
+    if typeof(origin) ~= "Vector3" then return {} end
+    local candidates = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local skipped = skipBlacklist == true and _G.TAYJAY_BL
+                and type(_G.TAYJAY_BL.has) == "function" and _G.TAYJAY_BL.has(player.Name)
+            if not skipped then
+                local char = player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if root and hum and hum.Health > 0 then
+                    table.insert(candidates, {
+                        player = player,
+                        distance = (root.Position - origin).Magnitude,
+                    })
+                end
+            end
+        end
+    end
+    table.sort(candidates, function(a, b) return a.distance < b.distance end)
+    local result = {}
+    local limit = math.max(0, math.floor(tonumber(count) or #candidates))
+    for i = 1, math.min(limit, #candidates) do
+        result[i] = candidates[i].player
+    end
+    return result
 end
 
 function TargetService:FindNearest(maxDist, skipBlacklist)
