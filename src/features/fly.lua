@@ -204,6 +204,7 @@ trackConnection(flyEmergencyStop.Activated:Connect(function()
    end
 end))
 
+do -- [TAYJAY LOCAL-LIMIT FIX 4/8]
 local function beginVerticalHold(button, direction)
    local began = button.InputBegan:Connect(function(input)
        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -382,3 +383,4 @@ trackConnection(LocalPlayer.CharacterAdded:Connect(function()
    if flyNowe then stopFlying() end
 end))
 
+end -- [/TAYJAY LOCAL-LIMIT FIX 4/8]
