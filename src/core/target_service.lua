@@ -372,4 +372,3 @@ _tjTargetEnv.TAYJAY_TARGET = TargetService
 TJ.TargetService = TargetService
 Main.TargetService = TargetService
 
-end -- [/TAYJAY LOCAL-LIMIT FIX 1/8]
