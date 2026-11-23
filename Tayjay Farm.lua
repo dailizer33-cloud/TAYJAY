@@ -36,10 +36,6 @@ local okRun, errRun = xpcall(function()
 		NO_REGEN_TIMEOUT=30, GUARD_COOLDOWN=18, SAFE_HEIGHT=350, CAUTION_HP=0.60, CAUTION_RADIUS=50,
 		REJOIN_ON_LOW_HP=true, -- เปิดใช้ rejoin แทนการวาร์ปขึ้นแท่น
 		HP_TEXT_PATH="",
-		REBIRTH=true, REBIRTH_POLL=0.28, REBIRTH_STEP_DELAY=0.75,
-		-- พักอัตโนมัติตอน rebirth (สมดุล: ไม่หยุดนาน / กันสแปมได้)
-		REBIRTH_FARM_PAUSE=1.6, REBIRTH_SPAM_WINDOW=40, REBIRTH_SPAM_MAX=6,
-		REBIRTH_SPAM_COOLDOWN=28, REBIRTH_FAIL_LIMIT=3, REBIRTH_FAIL_COOLDOWN=55,
 		EVOLVE=true, EVOLVE_COOLDOWN=2.2, EVOLVE_GUI_WORD="action",
 		CLAIM=true, CLAIM_POLL=3, CLAIM_RETRY=18,
 		WARP_SPEED=0.85, MONSTER_MODE="value", MONSTER_TIMEOUT=7, MONSTER_BLACKLIST=8,
@@ -404,7 +400,6 @@ local okRun, errRun = xpcall(function()
 	end
 	SET.noclip  = mkSetting(1,"NOCLIP: OFF",TH.off)
 	SET.robux   = mkSetting(2,"BLOCK ROBUX: ON",TH.on)
-	SET.rebirth = mkSetting(3,"REBIRTH: ON",TH.on)
 	SET.guard   = mkSetting(4,"GUARD: ON",TH.on)
 	SET.claim   = mkSetting(5,"CLAIM: ON",TH.on)
 	SET.evolve  = mkSetting(6,"HATCH: ON",TH.on)
@@ -2372,132 +2367,22 @@ local okRun, errRun = xpcall(function()
 			return upperAll(ui and ui.evo)
 		end
 
-		local function rebirthReady(ui)
-			if not ui then return false end
-			local et=evoText(ui)
-			if et~="" and hasAny(et, RB_WORDS) and not hasAny(et, NOT_READY) then return true end
-			if ui.power and ui.power.Parent then
-				local cur,req=F.parsePair(ui.power.Text)
-				if cur and req and req>0 then return cur>=req end
-			end
-			if ui.readyLbl and ui.readyLbl.Parent then
-				local t=string.upper(ui.readyLbl.Text or "")
-				if hasAny(t, NOT_READY) then return false end
-				if hasAny(t, {"READY","พร้อม"}) then return true end
-			end
-			if ui.top and ui.top.Parent then
-				local cur,req=F.parsePair(ui.top.Text)
-				if cur and req and req>0 then return cur>=req end
-			end
-			-- ถ้ามีปุ่ม confirm / rebirth โชว์อยู่แล้ว ถือว่าพร้อมลองกด
-			if ui.b and ui.b.Parent and F.liveShown(ui.b) then return true end
-			if ui.a and ui.a.Parent and F.liveShown(ui.a) then return true end
-			return false
-		end
-
-		local function rebirthCount()
-			local ls=player:FindFirstChild("leaderstats")
-			if ls then
-				for _,v in ipairs(ls:GetChildren()) do
-					local n=string.lower(v.Name or "")
-					if v:IsA("ValueBase") and (n:find("rebirth",1,true) or n:find("prestige",1,true) or n:find("rb",1,true)) then
-						return tonumber(v.Value)
-					end
-				end
-			end
-			-- fallback attributes
-			local ok,val=pcall(function() return player:GetAttribute("Rebirths") or player:GetAttribute("Rebirth") end)
-			if ok and val~=nil then return tonumber(val) end
-			return nil
-		end
 
 		task.spawn(function()
 			local fails=0
 			local stageLog=""
 			while gui.Parent do
 				local now=os.clock()
-				if (CFG.REBIRTH or CFG.EVOLVE) and not ST.closing then
-					local inSeq=now-ST.rbTryAt<8
-					if now-ST.rbScanAt>=(inSeq and 0.25 or 1.2) then
+				if CFG.EVOLVE and not ST.closing then
+					if now-ST.rbScanAt>=1.2 then
 						ST.rbScanAt=now
 						ST.rb=scanRebirthUI()
 					end
 					local ui=ST.rb
 
-					-- ===== AUTO REBIRTH =====
-					if CFG.REBIRTH and ui and now>=ST.rbBlockedUntil
-						and now-ST.rbTryAt>=F.jitter(CFG.REBIRTH_STEP_DELAY,0.12) then
-						local ready=rebirthReady(ui)
-						if ready then
-							-- หยุดฟาร์มชั่วคราวตอนกด rebirth (ค่าจาก CFG)
-							local pauseSec=CFG.REBIRTH_FARM_PAUSE or 1.6
-							ST.farmPauseUntil=math.max(ST.farmPauseUntil or 0, now+pauseSec)
-							local opener=ui.opener
-							local et=evoText(ui)
-							if hasAny(et, RB_WORDS) then opener=ui.evo or opener end
-
-							local pick,stage=nil,1
-							if ui.b and ui.b.Parent and F.liveShown(ui.b) then
-								pick,stage=ui.b,3
-							elseif ui.a and ui.a.Parent then
-								if F.liveShown(ui.a) then
-									pick,stage=ui.a,2
-								elseif opener and opener.Parent and now-ST.rbOpenAt>=4.5 then
-									pick,stage=opener,1; ST.rbOpenAt=now
-								elseif now-ST.rbOpenAt>=1.8 then
-									pick,stage=ui.a,2
-								end
-							elseif opener and opener.Parent and now-ST.rbOpenAt>=4.5 then
-								pick,stage=opener,1; ST.rbOpenAt=now
-							elseif ui.evo and ui.evo.Parent and hasAny(et, RB_WORDS) then
-								pick,stage=ui.evo,2
-							end
-
-							if pick then
-								ST.rbTryAt=now
-								F.clickGui(pick)
-								local msg="🔄 REBIRTH ขั้น "..stage.."/3"
-								stageLog=msg
-								F.setNote(msg, 2.5)
-								ST.currentAction=msg
-								if stage==3 then
-									local win=CFG.REBIRTH_SPAM_WINDOW or 40
-									local maxC=CFG.REBIRTH_SPAM_MAX or 6
-									local cool=CFG.REBIRTH_SPAM_COOLDOWN or 28
-									if now-ST.rbBStart>win then ST.rbBStart=now; ST.rbBCount=0 end
-									ST.rbBCount=ST.rbBCount+1
-									if ST.rbBCount>maxC then
-										ST.rbBCount=0
-										ST.rbBlockedUntil=now+cool
-										F.setNote("Rebirth รอรอบ "..cool.."วิ (กันสแปม)", 3)
-									end
-									local before=rebirthCount()
-									if before~=nil then
-										task.delay(3.0, function()
-											local after=rebirthCount()
-											if after and after>before then
-												fails=0
-												F.setNote("✅ Rebirth สำเร็จ ×"..tostring(after), 3)
-											else
-												fails=fails+1
-												local lim=CFG.REBIRTH_FAIL_LIMIT or 3
-												local failCool=CFG.REBIRTH_FAIL_COOLDOWN or 55
-												if fails>=lim then
-													fails=0
-													ST.rbBlockedUntil=os.clock()+failCool
-													F.setNote("Rebirth ไม่สำเร็จ — พัก "..failCool.." วิ", 4)
-												end
-											end
-										end)
-									end
-								end
-							end
-						end
-					end
-
 					-- ===== AUTO EVOLVE / HATCH =====
 					if CFG.EVOLVE and ui and ui.evo and ui.evo.Parent
-						and now-ST.evoAt>=CFG.EVOLVE_COOLDOWN and now-ST.rbTryAt>=6 then
+						and now-ST.evoAt>=CFG.EVOLVE_COOLDOWN then
 						local txt=evoText(ui)
 						if txt~="" and not hasAny(txt, RB_WORDS) and not hasAny(txt, NOT_READY) then
 							ST.evoAt=now
@@ -2507,7 +2392,7 @@ local okRun, errRun = xpcall(function()
 						end
 					end
 				end
-				task.wait(CFG.REBIRTH_POLL)
+				task.wait(0.3)
 			end
 		end)
 	end
@@ -2814,7 +2699,6 @@ local okRun, errRun = xpcall(function()
 		SL.glide.set(CFG.GLIDE_SPEED,true)
 		SL.jit.set(CFG.TAP_JITTER*100,true)
 		F.paintToggle(SET.robux,CFG.BLOCK_ROBUX,"BLOCK ROBUX: ON","BLOCK ROBUX: OFF")
-		F.paintToggle(SET.rebirth,CFG.REBIRTH,"REBIRTH: ON","REBIRTH: OFF")
 		F.paintToggle(SET.guard,CFG.GUARD,"GUARD: ON","GUARD: OFF")
 		F.paintToggle(SET.claim,CFG.CLAIM,"CLAIM: ON","CLAIM: OFF")
 		F.paintToggle(SET.evolve,CFG.EVOLVE,"HATCH: ON","HATCH: OFF")
@@ -2866,7 +2750,6 @@ local okRun, errRun = xpcall(function()
 			F.paintToggle(btn,CFG[key],onT,offT)
 		end)
 	end
-	simpleToggle(SET.rebirth,"REBIRTH","REBIRTH: ON","REBIRTH: OFF")
 	simpleToggle(SET.guard,"GUARD","GUARD: ON","GUARD: OFF")
 	simpleToggle(SET.claim,"CLAIM","CLAIM: ON","CLAIM: OFF")
 	simpleToggle(SET.evolve,"EVOLVE","HATCH: ON","HATCH: OFF")
@@ -2900,7 +2783,7 @@ local okRun, errRun = xpcall(function()
 		ST.closing=true
 		pcall(F.saveState)
 		ST.combatOn=false; ST.autoAttackOn=false
-		CFG.GUARD=false; CFG.REBIRTH=false; CFG.CLAIM=false
+		CFG.GUARD=false; CFG.CLAIM=false
 		CFG.EVOLVE=false; CFG.SKILLS=false; CFG.ROAM=false
 		CFG.QUEST=false; CFG.BAG=false
 		GL.stop()
