@@ -405,13 +405,20 @@ function TargetService:EnsureCombatOwner()
             local nearestPlayer, nearestChar = TargetService:FindNearest(math.huge, true)
             TargetService.WalkTarget = nearestPlayer
 
-            -- Retaliation is tracked separately and never overwrites WalkTarget.
+            -- Keep retaliation separate from the nearest-player target.
+            -- Share the attack cooldown by alternating lanes when the attacker
+            -- differs from the nearest target, so neither role replaces the other.
             local attacker = TargetService:FindRetaliationTarget()
-            if attacker then
-                local _, attackerChar = distanceTo(attacker)
-                if attackerChar then
-                    pcall(attackFn, attackerChar)
+            local _, attackerChar = attacker and distanceTo(attacker) or nil
+            if attackerChar and nearestChar and attacker ~= nearestPlayer then
+                local lane = TargetService._combatLane or "walk"
+                local chosenChar = lane == "retaliation" and attackerChar or nearestChar
+                local ok, attacked = pcall(attackFn, chosenChar)
+                if ok and attacked == true then
+                    TargetService._combatLane = lane == "retaliation" and "walk" or "retaliation"
                 end
+            elseif attackerChar then
+                pcall(attackFn, attackerChar)
             elseif nearestChar then
                 pcall(attackFn, nearestChar)
             end
