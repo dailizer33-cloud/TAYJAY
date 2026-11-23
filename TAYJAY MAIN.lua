@@ -1090,146 +1090,7 @@ local function distanceTo(player)
 end
 
 
--- =========================================================
--- WALK HOLD BITE: resolve the game's visible BITE button and
--- maintain a press while the selected target remains valid.
--- =========================================================
-local HoldSystem = {
-    isHolding = false,
-    currentTarget = nil,
-    biteButton = nil,
-    lastDownAt = 0,
-    reFireInterval = 0.05,
-    lastFindAt = 0,
-}
-
-local function findHoldBiteButton()
-    local now = os.clock()
-    if HoldSystem.biteButton and HoldSystem.biteButton.Parent then
-        return HoldSystem.biteButton
-    end
-    if now - HoldSystem.lastFindAt < 0.35 then return nil end
-    HoldSystem.lastFindAt = now
-
-    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if not playerGui then return nil end
-
-    for _, obj in ipairs(playerGui:GetDescendants()) do
-        if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and #obj.Text > 0 and #obj.Text <= 24 then
-            local normalized = string.lower(tostring(obj.Text)):gsub("<[^>]*>", ""):gsub("[^%w]", "")
-            if normalized == "bite" then
-                local gui = obj:FindFirstAncestorWhichIsA("ScreenGui")
-                local visible = gui ~= nil and gui.Enabled
-                local parent = obj
-                while visible and parent and parent ~= gui do
-                    if parent:IsA("GuiObject") and not parent.Visible then visible = false end
-                    parent = parent.Parent
-                end
-                if visible then
-                    local button = obj:IsA("GuiButton") and obj or obj:FindFirstAncestorWhichIsA("GuiButton")
-                    if button then
-                        HoldSystem.biteButton = button
-                        return button
-                    end
-                end
-            end
-        end
-    end
-    return nil
-end
-
-local function fireHoldDown(button)
-    if not button or not button.Parent then return false end
-    local fired = false
-    pcall(function()
-        if type(firesignal) == "function" then
-            firesignal(button.MouseButton1Down)
-            fired = true
-        end
-    end)
-    pcall(function()
-        if type(getconnections) == "function" then
-            local connections = getconnections(button.MouseButton1Down)
-            for _, connection in ipairs(connections or {}) do
-                pcall(function() connection:Fire(); fired = true end)
-            end
-        end
-    end)
-    if not fired then
-        pcall(function() button:Activate(); fired = true end)
-    end
-    return fired
-end
-
-local function fireHoldUp(button)
-    if not button or not button.Parent then return end
-    pcall(function()
-        if type(firesignal) == "function" then firesignal(button.MouseButton1Up) end
-    end)
-    pcall(function()
-        if type(getconnections) == "function" then
-            for _, connection in ipairs(getconnections(button.MouseButton1Up) or {}) do
-                pcall(function() connection:Fire() end)
-            end
-        end
-    end)
-end
-
-local function stopHold()
-    local wasHolding = HoldSystem.isHolding
-    local button = wasHolding and HoldSystem.biteButton or nil
-    HoldSystem.isHolding = false
-    HoldSystem.currentTarget = nil
-    HoldSystem.lastDownAt = 0
-    if wasHolding then fireHoldUp(button) end
-end
-
-local function startHold(targetChar)
-    if not targetChar or not targetChar.Parent then
-        stopHold()
-        return false
-    end
-    if HoldSystem.isHolding and HoldSystem.currentTarget == targetChar then
-        return true
-    end
-
-    if HoldSystem.isHolding then stopHold() end
-    local button = findHoldBiteButton()
-    if not button or not button.Parent then
-        stopHold()
-        return false
-    end
-
-    HoldSystem.isHolding = true
-    HoldSystem.currentTarget = targetChar
-    HoldSystem.biteButton = button
-    HoldSystem.lastDownAt = os.clock()
-    fireHoldDown(button)
-
-    task.spawn(function()
-        while HoldSystem.isHolding and HoldSystem.currentTarget == targetChar do
-            if not targetChar.Parent then
-                stopHold()
-                break
-            end
-            local currentButton = HoldSystem.biteButton
-            if not currentButton or not currentButton.Parent then
-                HoldSystem.biteButton = nil
-                stopHold()
-                break
-            end
-            local now = os.clock()
-            if now - HoldSystem.lastDownAt >= HoldSystem.reFireInterval then
-                fireHoldDown(currentButton)
-                HoldSystem.lastDownAt = now
-            end
-            task.wait(0.03)
-        end
-    end)
-    return true
-end
-
-
+-- WALK attack is routed through TargetService:BindAttack and the main AttackRemote.
 
 -- Resolve only explicit attacker attribution exposed by the game.
 -- Roblox has no universal damage-attacker API; unsupported games fall back to WALK's nearest target.
@@ -1370,7 +1231,6 @@ function TargetService:TryAttackPlayer(player)
 end
 
 function TargetService:StopCombatOwner(reason)
-    stopHold()
     local owner = self._combatOwner
     self._combatOwner = nil
     if owner and owner.Stopped ~= true and ResourceManager then
@@ -1410,12 +1270,10 @@ function TargetService:EnsureCombatOwner()
         local state = Main.State
         local busy = (state and state.isBusy == true) or Main.isBusy == true
         if busy then
-            stopHold()
             return
         end
 
         if TargetService.Locked and TargetService.Source == "deathnote" then
-            stopHold()
             local player = TargetService:GetPlayer()
             if not player then
                 TargetService:Unlock("invalid_player")
@@ -1455,7 +1313,7 @@ function TargetService:EnsureCombatOwner()
             end
 
             if targetChar then
-                startHold(targetChar)
+                pcall(attackFn, targetChar)
                 if shouldSwitchLane then
                     local now = os.clock()
                     if not TargetService._lastLaneSwitch
@@ -1465,11 +1323,8 @@ function TargetService:EnsureCombatOwner()
                         TargetService._lastLaneSwitch = now
                     end
                 end
-            else
-                stopHold()
             end
         else
-            stopHold()
             TargetService.WalkTarget = nil
             TargetService.RetaliationTarget = nil
             TargetService._combatLane = "walk"
