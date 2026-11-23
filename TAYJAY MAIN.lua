@@ -3958,9 +3958,9 @@ local okMonster, errMonster = pcall(function()
        return alive and candidate.root ~= nil
    end
 
-    -- Priority: Boss > Event > Ladybug > Aphid > Orb collection > other monsters.
-    -- Orb remains a collection phase (not a Monster model candidate).
-    local function getMonsterPriority(candidate)
+   -- Priority: Boss > Event > Ladybug > Aphid > Orb collection > other monsters.
+   -- Orb remains a collection phase (not a Monster model candidate).
+   local function getMonsterPriority(candidate)
         if not candidate or not candidate.model then return 99 end
         local model = candidate.model
         local name = string.lower(tostring(model.Name or ""))
@@ -3979,7 +3979,7 @@ local okMonster, errMonster = pcall(function()
         return 6
     end
 
-    local function nearestMonster(origin, ignoreModel)
+   local function nearestMonster(origin, ignoreModel)
         local best, bestPriority, bestDistance = nil, math.huge, math.huge
         for _, candidate in ipairs(monsterCandidates) do
             if candidate.model ~= ignoreModel and isMonsterAlive(candidate) then
@@ -3995,7 +3995,8 @@ local okMonster, errMonster = pcall(function()
         return best
     end
 
-       local function findLargeAcronSugarOrb()
+   -- ค้นหาเฉพาะ ACRON SUGAR ORB ขนาดใหญ่ ไม่กรองด้วยระยะทาง
+   local function findLargeAcronSugarOrb()
        local descendants = workspace:GetDescendants()
        for _, obj in ipairs(descendants) do
            if obj:IsA("Model") or obj:IsA("BasePart") then
