@@ -3546,6 +3546,13 @@ local okMonster, errMonster = pcall(function()
    local monsterHiddenCharacter = nil
    local monsterPlatform = nil
    local monsterLastAttack = 0
+   -- ACRON SUGAR ORB: สลับเก็บทั่ว Workspace โดยไม่จำกัดระยะจากมอนสเตอร์
+   local monsterOrbPhase = "ATTACK"
+   local monsterOrbItem = nil
+   local monsterOrbPart = nil
+   local monsterOrbNextSearch = 0
+   local monsterOrbPhaseUntil = 0
+   local monsterOrbLastTouch = 0
    local monsterNextSelectAt = 0
    local monsterWarpWasOn = false
    local monsterWarpStarting = false
@@ -3965,6 +3972,50 @@ local okMonster, errMonster = pcall(function()
        return best
    end
 
+   -- ค้นหาเฉพาะ ACRON SUGAR ORB ขนาดใหญ่ ไม่กรองด้วยระยะทาง
+   local function findLargeAcronSugarOrb()
+       local descendants = workspace:GetDescendants()
+       for _, obj in ipairs(descendants) do
+           if obj:IsA("Model") or obj:IsA("BasePart") then
+               local names = ""
+               local node = obj
+               for _ = 1, 4 do
+                   if not node then break end
+                   names = names .. " " .. string.lower(tostring(node.Name or ""))
+                   node = node.Parent
+               end
+               if string.find(names, "acron", 1, true)
+                   and string.find(names, "sugar", 1, true)
+                   and string.find(names, "orb", 1, true) then
+                   local size = Vector3.zero
+                   local part = nil
+                   if obj:IsA("BasePart") then
+                       size = obj.Size
+                       part = obj
+                   else
+                       local ok, extents = pcall(function() return obj:GetExtentsSize() end)
+                       if ok then size = extents end
+                       part = obj.PrimaryPart
+                       if not part then
+                           for _, child in ipairs(obj:GetDescendants()) do
+                               if child:IsA("BasePart") then
+                                   part = child
+                                   if child:FindFirstChildWhichIsA("TouchTransmitter") then break end
+                               end
+                           end
+                       end
+                   end
+                   local isLarge = string.find(names, "large", 1, true) ~= nil
+                       or math.max(size.X, size.Y, size.Z) >= 4
+                   if isLarge and part and part.Parent and obj:IsDescendantOf(workspace) then
+                       return obj, part
+                   end
+               end
+           end
+       end
+       return nil, nil
+   end
+
    local function setMonsterPanelStatus(titleText, infoText, hp, maxHp)
        if monsterFilterMode == "NPC" then
            titleText = string.gsub(titleText, "👾 MONSTER", "🧑 NPC")
@@ -4145,7 +4196,17 @@ local okMonster, errMonster = pcall(function()
        if not myRoot then return end
        _tjMovementController:SetPositionLock("MONSTER", os.clock() + 0.3) -- บอก Fly ว่าตอนนี้ MONSTER คุมตำแหน่งอยู่
        local destination = targetRoot.CFrame
-       local orbiting = monsterOrbitOn and monsterFilterMode == "Monster"
+       if monsterOrbPhase == "COLLECT" and monsterOrbItem and monsterOrbPart and monsterOrbPart.Parent then
+           destination = CFrame.lookAt(monsterOrbPart.Position + Vector3.new(0, 2, 0), monsterOrbPart.Position)
+           if os.clock() - monsterOrbLastTouch >= 0.18 then
+               monsterOrbLastTouch = os.clock()
+               if typeof(firetouchinterest) == "function" then
+                   pcall(firetouchinterest, myRoot, monsterOrbPart, 0)
+                   pcall(firetouchinterest, myRoot, monsterOrbPart, 1)
+               end
+           end
+       end
+       local orbiting = monsterOrbPhase ~= "COLLECT" and monsterOrbitOn and monsterFilterMode == "Monster"
        local nowClock = os.clock()
        if monsterLastRoot ~= targetRoot then monsterEnterAt = nowClock end -- เป้าใหม่: เข้าสิงร่างทันที
        local dodging = monsterDodgeOn and monsterFilterMode == "Monster" and nowClock < monsterDodgeUntil
@@ -4191,6 +4252,9 @@ local okMonster, errMonster = pcall(function()
        monsterCurrent = nil
        monsterLastRoot = nil
        monsterTrackedTarget = nil
+       monsterOrbPhase = "ATTACK"
+       monsterOrbItem, monsterOrbPart = nil, nil
+       monsterOrbNextSearch, monsterOrbPhaseUntil, monsterOrbLastTouch = 0, 0, 0
        if _tjMovementController then
            _tjMovementController:ClearPositionLock("MONSTER")
        end
@@ -4499,8 +4563,32 @@ local okMonster, errMonster = pcall(function()
                                    monsterDodgeWhy = attackName
                                end
                            end
+                           -- วนลูปโจมตีและเก็บ ACRON SUGAR ORB ขนาดใหญ่จากทั่ว Workspace
+                           if monsterOrbPhase == "ATTACK" and now >= monsterOrbNextSearch then
+                               local orb, orbPart = findLargeAcronSugarOrb()
+                               if orb and orbPart then
+                                   monsterOrbItem, monsterOrbPart = orb, orbPart
+                                   monsterOrbPhase = "COLLECT"
+                                   monsterOrbPhaseUntil = now + 2.8
+                                   monsterOrbLastTouch = 0
+                               else
+                                   monsterOrbNextSearch = now + 3.5
+                               end
+                           elseif monsterOrbPhase == "COLLECT" then
+                               if not monsterOrbItem or not monsterOrbItem.Parent or not monsterOrbPart or not monsterOrbPart.Parent
+                                   or now >= monsterOrbPhaseUntil then
+                                   monsterOrbItem, monsterOrbPart = nil, nil
+                                   monsterOrbPhase = "RETURN"
+                                   monsterOrbPhaseUntil = now + 0.7
+                               end
+                           elseif monsterOrbPhase == "RETURN" and now >= monsterOrbPhaseUntil then
+                               monsterOrbPhase = "ATTACK"
+                               monsterOrbNextSearch = now + 5
+                           end
                            local stateWord = "POSSESS"
-                           if monsterOrbitOn and monsterFilterMode == "Monster" then stateWord = "ORBIT" end
+                           if monsterOrbPhase == "COLLECT" then stateWord = "COLLECT ACRON SUGAR ORB"
+                           elseif monsterOrbPhase == "RETURN" then stateWord = "RETURN TO MONSTER"
+                           elseif monsterOrbitOn and monsterFilterMode == "Monster" then stateWord = "ORBIT" end
                            if monsterDodgeOn and monsterFilterMode == "Monster" and now < monsterDodgeUntil then
                                stateWord = "DODGE " .. tostring(monsterDodgeWhy)
                            end
