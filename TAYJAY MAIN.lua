@@ -4176,6 +4176,232 @@ local okMonster, errMonster = pcall(function()
        monsterResumeGeneration = monsterResumeGeneration + 1
        toggleMonsterMode("NPC")
    end))
+   -- AUTO REBIRTH: ปุ่มแยกในตาราง MONSTER/NPC, ไม่ใช้ Movement
+   do
+   local okAR, errAR = pcall(function()
+       local GuiService = game:GetService("GuiService")
+       local VirtualInputManager
+       pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
+       local unpackArgs = table.unpack or unpack
+       local REBIRTH_INTERVAL, POST_RESPAWN_PAUSE, FIND_COOLDOWN = 3, 3, 5
+       local DEFAULT_ON, REMOTE_NAME, REMOTE_ARGS = false, nil, nil
+       local enabled, loopRunning, reportedMissing = false, false, false
+       local rebirthRemote, rebirthButton, btn = nil, nil, nil
+       local lastFindAt, lastCharAt, lastVisualKey = -100, -100, ""
+
+       local function hasWord(value)
+           local key = string.lower(tostring(value or ""))
+           return string.find(key, "rebirth", 1, true) ~= nil
+       end
+       local function guiShown(obj)
+           local ownerGui = obj:FindFirstAncestorWhichIsA("ScreenGui")
+           if not ownerGui or not ownerGui.Enabled or ownerGui == screenGui then return false end
+           local parent = obj
+           while parent and parent ~= ownerGui do
+               if parent:IsA("GuiObject") and not parent.Visible then return false end
+               parent = parent.Parent
+           end
+           return true
+       end
+       local function buttonUsable(obj)
+           return obj ~= nil and obj.Parent ~= nil and obj.AbsoluteSize.X > 0 and guiShown(obj)
+       end
+       local NOISE = { "data", "info", "update", "effect", "notif", "price", "cost", "check", "ui", "get", "list" }
+       local function scoreRemoteName(name)
+           local key = string.lower(name)
+           if REMOTE_NAME then return key == string.lower(REMOTE_NAME) and 10 or 0 end
+           if key == "rebirth" then return 3 end
+           if not hasWord(key) then return 0 end
+           for _, noise in ipairs(NOISE) do
+               if string.find(key, noise, 1, true) then return 1 end
+           end
+           return 2
+       end
+       local function findRemote()
+           local best, bestScore, ties = nil, 0, {}
+           for _, obj in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+               if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                   local score = scoreRemoteName(obj.Name)
+                   if score > bestScore then best, bestScore, ties = obj, score, { obj }
+                   elseif score == bestScore and score > 0 then ties[#ties + 1] = obj end
+               end
+           end
+           if best and #ties > 1 then
+               local names = {}
+               for _, remote in ipairs(ties) do names[#names + 1] = remote:GetFullName() end
+               pcall(function() print("[TAYJAY REBIRTH] พบหลาย remote ที่ใกล้เคียง (ใช้ตัวแรก): " .. table.concat(names, " | ")) end)
+           end
+           return best
+       end
+       local function fireRemote(remote)
+           local args = REMOTE_ARGS or {}
+           if remote:IsA("RemoteEvent") then return pcall(function() remote:FireServer(unpackArgs(args)) end) end
+           task.spawn(function() pcall(function() remote:InvokeServer(unpackArgs(args)) end) end)
+           return true
+       end
+       local function findButton()
+           local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+           if not playerGui then return nil end
+           for _, obj in ipairs(playerGui:GetDescendants()) do
+               if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and #obj.Text > 0 and #obj.Text <= 30 then
+                   local value = obj.Text:gsub("<[^>]*>", "")
+                   if hasWord(value) and guiShown(obj) then
+                       local target = obj:IsA("GuiButton") and obj or obj:FindFirstAncestorWhichIsA("GuiButton")
+                       if target and target.AbsoluteSize.X > 0 then return target end
+                   end
+               end
+           end
+           return nil
+       end
+       local function activateButton(target)
+           local fired = false
+           if type(getconnections) == "function" then
+               for _, signalName in ipairs({ "Activated", "MouseButton1Click", "TouchTap" }) do
+                   local okSig, signal = pcall(function() return target[signalName] end)
+                   if okSig and signal then
+                       local okConn, connections = pcall(getconnections, signal)
+                       if okConn and type(connections) == "table" then
+                           for _, conn in ipairs(connections) do
+                               if pcall(function() conn:Fire() end) then fired = true end
+                           end
+                       end
+                   end
+               end
+           end
+           if fired then return true end
+           if not VirtualInputManager then return false end
+           local position, size = target.AbsolutePosition, target.AbsoluteSize
+           local x, y = position.X + size.X / 2, position.Y + size.Y / 2
+           local ownerGui = target:FindFirstAncestorWhichIsA("ScreenGui")
+           if ownerGui and not ownerGui.IgnoreGuiInset then
+               local okInset, inset = pcall(function() return GuiService:GetGuiInset() end)
+               if okInset and inset then x = x + inset.X; y = y + inset.Y end
+           end
+           return pcall(function()
+               if UserInputService.TouchEnabled then
+                   VirtualInputManager:SendTouchEvent(92, 0, x, y)
+                   task.wait(0.03)
+                   VirtualInputManager:SendTouchEvent(92, 2, x, y)
+               else
+                   VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+                   task.wait(0.03)
+                   VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+               end
+           end)
+       end
+       local function updateVisual()
+           if not btn or not btn.Parent then return end
+           local value, color
+           if not enabled then value, color = "♻ REBIRTH", Color3.fromRGB(65, 74, 63)
+           elseif rebirthRemote or buttonUsable(rebirthButton) then value, color = "♻ REBIRTH: ON", GREEN.on
+           else value, color = "♻ REBIRTH: ไม่พบ", GREEN.warning end
+           local key = value .. "|" .. tostring(color)
+           if key == lastVisualKey then return end
+           lastVisualKey = key
+           btn.Text, btn.BackgroundColor3 = value, color
+       end
+       local function attempt()
+           local now = os.clock()
+           local char = LocalPlayer.Character
+           local hum = char and char:FindFirstChildOfClass("Humanoid")
+           if not hum or hum.Health <= 0 or now - lastCharAt < POST_RESPAWN_PAUSE then return end
+           if not (rebirthRemote and rebirthRemote.Parent) then rebirthRemote = nil end
+           if not rebirthRemote and not buttonUsable(rebirthButton) and now - lastFindAt >= FIND_COOLDOWN then
+               lastFindAt = now
+               rebirthRemote = findRemote()
+               rebirthButton = nil
+               if not rebirthRemote then rebirthButton = findButton() end
+               if rebirthRemote then pcall(function() print("[TAYJAY REBIRTH] ใช้ remote: " .. rebirthRemote:GetFullName()) end)
+               elseif rebirthButton then pcall(function() print("[TAYJAY REBIRTH] ใช้ปุ่ม: " .. rebirthButton:GetFullName()) end)
+               elseif not reportedMissing then
+                   reportedMissing = true
+                   pcall(function() print("[TAYJAY REBIRTH] ไม่พบ remote หรือปุ่ม rebirth (ตั้ง REMOTE_NAME ถ้ารู้ชื่อ)") end)
+               end
+           end
+           if rebirthRemote then
+               if not fireRemote(rebirthRemote) then rebirthRemote = nil end
+           elseif buttonUsable(rebirthButton) then activateButton(rebirthButton) end
+       end
+       local function startLoop()
+           if loopRunning then return end
+           loopRunning = true
+           task.spawn(function()
+               while enabled and btn and btn.Parent and not _G.TAYJAY_STOPPED do
+                   pcall(attempt)
+                   updateVisual()
+                   task.wait(REBIRTH_INTERVAL)
+               end
+               loopRunning = false
+               if _G.TAYJAY_STOPPED or not (btn and btn.Parent) then enabled = false end
+               pcall(updateVisual)
+           end)
+       end
+       trackConnection(LocalPlayer.CharacterAdded:Connect(function() lastCharAt = os.clock() end))
+       local function findPanelRoot()
+           local root = monsterFilterBtn
+           while root and root.Parent and root.Parent ~= screenGui and not root.Parent:IsA("LayerCollector") do root = root.Parent end
+           if root and root:IsA("GuiObject") and root ~= monsterFilterBtn then return root end
+           return monsterFilterBtn and monsterFilterBtn.Parent
+       end
+       local function attachButton()
+           for _ = 1, 20 do
+               if monsterFilterBtn and monsterFilterBtn.Parent and monsterFilterBtn.AbsoluteSize.X > 0 then break end
+               task.wait(0.5)
+           end
+           local root = findPanelRoot()
+           if not root or not root:IsA("GuiObject") then
+               pcall(function() warn("[TAYJAY REBIRTH] ไม่พบตาราง MONSTER สำหรับวางปุ่ม") end)
+               return
+           end
+           local newBtn = monsterFilterBtn:Clone()
+           newBtn.Name, newBtn.Text = "TayJayAutoRebirthBtn", "♻ REBIRTH"
+           newBtn.BackgroundColor3 = Color3.fromRGB(65, 74, 63)
+           local layout = root:FindFirstChildOfClass("UIListLayout") or root:FindFirstChildOfClass("UIGridLayout")
+           local k = 1
+           local uiScale = root:FindFirstChildOfClass("UIScale")
+           if uiScale and uiScale.Scale > 0 then k = uiScale.Scale end
+           local h, gap = math.clamp(monsterFilterBtn.AbsoluteSize.Y / k, 26, 44), 6
+           if layout then
+               newBtn.LayoutOrder = 9999
+               newBtn.Parent = root
+           else
+               local panelTop, lowest = root.AbsolutePosition.Y, 0
+               for _, child in ipairs(root:GetChildren()) do
+                   if child:IsA("GuiObject") and child.Visible then
+                       local bottom = (child.AbsolutePosition.Y + child.AbsoluteSize.Y - panelTop) / k
+                       if bottom > lowest then lowest = bottom end
+                   end
+               end
+               local x0 = (monsterFilterBtn.AbsolutePosition.X - root.AbsolutePosition.X) / k
+               local width = root.AbsoluteSize.X / k - 2 * x0
+               if width < 40 then x0, width = 8, root.AbsoluteSize.X / k - 16 end
+               newBtn.AnchorPoint = Vector2.new(0, 0)
+               newBtn.Position, newBtn.Size = UDim2.fromOffset(x0, lowest + gap), UDim2.fromOffset(width, h)
+               newBtn.Parent = root
+           end
+           if root.AutomaticSize == Enum.AutomaticSize.None then
+               local size = root.Size
+               root.Size = UDim2.new(size.X.Scale, size.X.Offset, size.Y.Scale, size.Y.Offset + h + gap * 2)
+           end
+           btn = newBtn
+           trackConnection(btn.Activated:Connect(function()
+               enabled = not enabled
+               if enabled then reportedMissing = false; lastFindAt = -100; startLoop() end
+               updateVisual()
+           end))
+           if DEFAULT_ON then enabled = true; startLoop() end
+           updateVisual()
+       end
+       task.spawn(attachButton)
+   end)
+   if not okAR then
+       pcall(function() warn("[TAYJAY REBIRTH] initialization failed: " .. tostring(errAR)) end)
+       pcall(function()
+           if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "REBIRTH: " .. tostring(errAR)) end
+       end)
+   end
+   end
+
    trackConnection(dodgeBtn.Activated:Connect(function()
        monsterDodgeOn = not monsterDodgeOn
        monsterDodgeUntil = 0
