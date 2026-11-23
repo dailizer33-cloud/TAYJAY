@@ -4547,15 +4547,19 @@ end
 
 -- =========================================================
 -- =========================================================
--- RAPID BITE (แก้แล้ว): ปุ่มโจมตีแบบแยกอิสระ
+-- =========================================================
+-- RAPID BITE (โหมดกดค้าง): ปุ่มโจมตีแบบแยกอิสระ
 -- วิธีใช้: แทนที่ทั้งก้อนเดิม ตั้งแต่บรรทัด "-- RAPID BITE: standalone attack button"
---          จนถึง `end` ท้ายก้อน ด้วยโค้ดนี้
--- สิ่งที่แก้:
---  1) เดิม auto ลอง touch แล้วหยุดทันที -> ตอนนี้ยิง signal + touch ทั้งคู่ (RAPID_METHOD = "both")
---  2) fireSignals เดิมหยุดที่ signal แรกที่มี handler -> ตอนนี้ยิงครบทุก signal
---  3) ปุ่ม bite ที่จำไว้เดิมไม่เช็กว่ายังเห็นอยู่ไหม -> ตอนนี้เช็กทุกครั้ง แล้วค้นใหม่ถ้าหาย/ซ่อน
---  4) ค้นหาปุ่มโดยเลือกตัวที่เป็นปุ่มจริงก่อน (ไม่ใช่ป้ายข้อความเฉยๆ) และรองรับชื่อ Object = "Bite"
---  5) touch ส่ง Begin แล้วส่ง End ตามหลัง 0.02 วิ (เดิมส่งพร้อมกันในเฟรมเดียว) และส่งสูงสุด 1 ครั้ง/เฟรม
+--          จนถึง end ท้ายก้อน ด้วยโค้ดนี้
+--
+-- เปลี่ยนจาก "แตะรัว 20 ครั้ง/วิ" เป็น "กดค้างปุ่ม bite ไว้" และลดการรันคำสั่ง:
+--  - ไม่มี Heartbeat แล้ว (เดิมรันทุกเฟรมแม้ปิดอยู่) ตอนนี้มีลูปเฉพาะตอนเปิด และเช็กทุก 0.5 วิ
+--  - ส่งคำสั่ง "กด" ครั้งเดียวตอนเริ่ม และ "ปล่อย" ครั้งเดียวตอนปิด
+--  - สแกน GUI เฉพาะตอนหาปุ่ม (จำปุ่มไว้) และตอนเช็กมึนในโหมด AUTO
+--  - ตัวดักข้อความ error ของ signal ต่อไว้แค่ 2 วิหลังยิง signal
+--  - อัปเดตข้อความบนปุ่มเฉพาะตอนที่ข้อความเปลี่ยน
+--
+-- กดปุ่ม RAPID: OFF -> ON (กดค้างตลอด) -> AUTO (กดค้างเฉพาะตอนมึน) -> OFF
 -- =========================================================
 do
 local okRB, errRB = pcall(function()
@@ -4564,27 +4568,20 @@ local okRB, errRB = pcall(function()
    local VirtualInputManager = nil
    pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
 
-   local RAPID_CPS = 20
-   local RAPID_METHOD = "both"               -- "both" | "touch" | "signal"
+   local RAPID_METHOD = "both"
    local RAPID_TEXTS = { "bite" }
    local STUN_WORDS = { "stun", "daze", "dizzy", "vulnerab", "exhaust", "weaken", "มึน", "สตัน" }
+   local CHECK_INTERVAL = 0.5
+   local FIND_COOLDOWN = 1.5
+   local REFRESH_SECS = 0
 
-   local signalBad, lastSignalFireAt = false, -10
+   local signalBad = false
    local rapidMode = 0
    local biteButton, lastFindAt = nil, -10
-   local lastMethod, stunSeen, stunText = "-", false, ""
-   local clickAccumulator, stunCheckAt, visualAt = 0, 0, 0
-
-   trackConnection(LogService.MessageOut:Connect(function(message)
-       if signalBad or os.clock() - lastSignalFireAt > 2 then return end
-       local msg = string.lower(tostring(message or ""))
-       if string.find(msg, "current thread cannot access", 1, true)
-           or (string.find(msg, "lacking capability", 1, true) and string.find(msg, "plugin", 1, true)) then
-           signalBad = true
-           lastMethod = "SIGNAL BLOCKED"
-           pcall(function() warn("[TAYJAY RAPID] signal method disabled after capability error") end)
-       end
-   end))
+   local holding, holdX, holdY, holdTouch, holdSignal, holdButton, holdSince = false, 0, 0, false, false, nil, 0
+   local lastMethod, stunSeen = "-", false
+   local loopRunning = false
+   local lastVisualKey = ""
 
    local button = Instance.new("TextButton", screenGui)
    button.Name = "TayJayRapidBiteBtn"
@@ -4608,7 +4605,7 @@ local okRB, errRB = pcall(function()
    local function normalize(text)
        local str = tostring(text or "")
        str = str:gsub("<[^>]*>", "")
-       str = str:gsub("[^%w\\128-\\255]", "")
+       str = str:gsub("[^%w\128-\255]", "")
        return string.lower(str)
    end
 
@@ -4623,7 +4620,6 @@ local okRB, errRB = pcall(function()
        return true
    end
 
-   -- ปุ่มที่จำไว้ยังใช้ได้ไหม (ยังอยู่ใน GUI, มองเห็น, มีขนาดจริง)
    local function buttonUsable(obj)
        if not obj or not obj.Parent then return false end
        local size = obj.AbsoluteSize
@@ -4636,21 +4632,19 @@ local okRB, errRB = pcall(function()
        if not playerGui then return nil end
        local fallback = nil
        for _, obj in ipairs(playerGui:GetDescendants()) do
-           -- ปุ่มที่ตั้งชื่อ Object ว่า Bite
            if obj:IsA("GuiButton") and obj.AbsoluteSize.X > 0 and guiShown(obj) then
                local nameKey = normalize(obj.Name)
                for _, want in ipairs(RAPID_TEXTS) do
                    if nameKey == want then return obj end
                end
            end
-           -- ปุ่ม/ป้ายที่ข้อความเป็น bite
            if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and #obj.Text > 0 and #obj.Text <= 24 then
                local key = normalize(obj.Text)
                for _, want in ipairs(RAPID_TEXTS) do
                    if key == want and guiShown(obj) then
                        local target = obj:IsA("GuiButton") and obj or obj:FindFirstAncestorWhichIsA("GuiButton")
                        if target and target.AbsoluteSize.X > 0 then return target end
-                       fallback = fallback or obj -- ป้ายที่ไม่ใช่ปุ่ม ใช้เป็นตัวสำรองเท่านั้น
+                       fallback = fallback or obj
                    end
                end
            end
@@ -4658,26 +4652,38 @@ local okRB, errRB = pcall(function()
        return fallback
    end
 
-   -- ยิงทุก signal (เดิมหยุดที่ signal แรกที่มี handler)
-   local function fireSignals(target)
-       if type(getconnections) ~= "function" then return false end
-       local fired = false
-       for _, signalName in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down", "TouchTap" }) do
-           local okSig, signal = pcall(function() return target[signalName] end)
-           if okSig and signal then
-               local okConn, connections = pcall(getconnections, signal)
-               if okConn and type(connections) == "table" then
-                   for _, conn in ipairs(connections) do
-                       if pcall(function() conn:Fire() end) then fired = true end
-                   end
-               end
+   local function watchSignalErrors()
+       local conn
+       conn = LogService.MessageOut:Connect(function(message)
+           local msg = string.lower(tostring(message or ""))
+           if string.find(msg, "current thread cannot access", 1, true)
+               or (string.find(msg, "lacking capability", 1, true) and string.find(msg, "plugin", 1, true)) then
+               signalBad = true
+               lastMethod = "SIGNAL BLOCKED"
+               pcall(function() warn("[TAYJAY RAPID] signal method disabled after capability error") end)
+               if conn then pcall(function() conn:Disconnect() end) end
            end
+       end)
+       task.delay(2, function()
+           if conn then pcall(function() conn:Disconnect() end) end
+       end)
+   end
+
+   local function fireSignal(target, signalName)
+       if signalBad or type(getconnections) ~= "function" then return false end
+       local okSig, signal = pcall(function() return target[signalName] end)
+       if not okSig or not signal then return false end
+       watchSignalErrors()
+       local okConn, connections = pcall(getconnections, signal)
+       if not okConn or type(connections) ~= "table" then return false end
+       local fired = false
+       for _, conn in ipairs(connections) do
+           if pcall(function() conn:Fire() end) then fired = true end
        end
        return fired
    end
 
-   local function clickScreen(target)
-       if not VirtualInputManager then return false end
+   local function buttonCenter(target)
        local position, size = target.AbsolutePosition, target.AbsoluteSize
        local x, y = position.X + size.X / 2, position.Y + size.Y / 2
        local gui = target:FindFirstAncestorWhichIsA("ScreenGui")
@@ -4685,53 +4691,64 @@ local okRB, errRB = pcall(function()
            local okInset, inset = pcall(function() return GuiService:GetGuiInset() end)
            if okInset and inset then x = x + inset.X; y = y + inset.Y end
        end
-       local useTouch = UserInputService.TouchEnabled
-       local okDown = pcall(function()
-           if useTouch then
+       return x, y
+   end
+
+   local function sendPress(x, y)
+       if not VirtualInputManager then return false end
+       return (pcall(function()
+           if UserInputService.TouchEnabled then
                VirtualInputManager:SendTouchEvent(91, 0, x, y)
            else
                VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
            end
-       end)
-       if not okDown then return false end
-       -- ปล่อยนิ้วตามหลังเล็กน้อย (ไม่ส่งพร้อมกันในเฟรมเดียว) และปล่อยเสมอ แม้ปิด RAPID ไปแล้ว
-       task.delay(0.02, function()
-           pcall(function()
-               if useTouch then
-                   VirtualInputManager:SendTouchEvent(91, 2, x, y)
-               else
-                   VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
-               end
-           end)
-       end)
-       return true
+       end))
    end
 
-   local function biteOnce()
+   local function sendRelease(x, y)
+       if not VirtualInputManager then return false end
+       return (pcall(function()
+           if UserInputService.TouchEnabled then
+               VirtualInputManager:SendTouchEvent(91, 2, x, y)
+           else
+               VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+           end
+       end))
+   end
+
+   local function pressHold()
        local now = os.clock()
        if not buttonUsable(biteButton) then
            biteButton = nil
-           if now - lastFindAt > 0.5 then
-               lastFindAt = now
-               biteButton = findBiteButton()
-               if biteButton then
-                   pcall(function() print("[TAYJAY RAPID] attack button found: " .. biteButton:GetFullName()) end)
-               end
+           if now - lastFindAt < FIND_COOLDOWN then return false end
+           lastFindAt = now
+           biteButton = findBiteButton()
+           if biteButton then
+               pcall(function() print("[TAYJAY RAPID] attack button found: " .. biteButton:GetFullName()) end)
            end
        end
        if not biteButton then lastMethod = "NO BUTTON" return false end
 
-       local used = {}
-       if RAPID_METHOD ~= "touch" and not signalBad then
-           lastSignalFireAt = os.clock()
-           if fireSignals(biteButton) then used[#used + 1] = "signal" end
-       end
-       if RAPID_METHOD ~= "signal" and clickScreen(biteButton) then
-           used[#used + 1] = "touch"
-       end
-       if #used == 0 then lastMethod = "NO INPUT" return false end
-       lastMethod = table.concat(used, "+")
+       local x, y = buttonCenter(biteButton)
+       local usedTouch, usedSignal = false, false
+       if RAPID_METHOD ~= "signal" then usedTouch = sendPress(x, y) end
+       if RAPID_METHOD ~= "touch" then usedSignal = fireSignal(biteButton, "MouseButton1Down") end
+       if not usedTouch and not usedSignal then lastMethod = "NO INPUT" return false end
+
+       holding, holdX, holdY, holdButton, holdSince = true, x, y, biteButton, now
+       holdTouch, holdSignal = usedTouch, usedSignal
+       if usedTouch and usedSignal then lastMethod = "touch+signal"
+       elseif usedTouch then lastMethod = "touch"
+       else lastMethod = "signal" end
        return true
+   end
+
+   local function release()
+       if not holding then return end
+       holding = false
+       if holdTouch then sendRelease(holdX, holdY) end
+       if holdSignal and holdButton then fireSignal(holdButton, "MouseButton1Up") end
+       holdTouch, holdSignal, holdButton = false, false, nil
    end
 
    local function scanStun()
@@ -4751,43 +4768,86 @@ local okRB, errRB = pcall(function()
    local function updateVisual()
        local line3, color = "OFF", GREEN.off
        if rapidMode == 1 then
-           line3, color = "ON • " .. lastMethod, GREEN.on
+           line3 = "ON • " .. lastMethod
+           color = holding and GREEN.on or GREEN.warning
        elseif rapidMode == 2 then
-           if stunSeen then line3, color = "AUTO • STUN! " .. lastMethod, GREEN.on
-           else line3, color = "AUTO • รอมึน", GREEN.warning end
+           if stunSeen then
+               line3 = "AUTO • STUN! " .. lastMethod
+               color = holding and GREEN.on or GREEN.warning
+           else
+               line3, color = "AUTO • รอมึน", GREEN.warning
+           end
        end
+       local key = line3 .. "|" .. tostring(color)
+       if key == lastVisualKey then return end
+       lastVisualKey = key
        button.BackgroundColor3 = color
        button.Text = '<font size="25">⚔</font>\n<font size="13">RAPID</font>\n<font size="9">' .. line3 .. '</font>'
    end
 
-   -- OFF -> ON (กัดต่อเนื่อง) -> AUTO (กัดเฉพาะตอนมึน) -> OFF
+   local function tick()
+       if rapidMode == 0 then return end
+       local want = true
+       if rapidMode == 2 then
+           local seen, text = scanStun()
+           if seen and not stunSeen then print("[TAYJAY RAPID] stun text detected: " .. tostring(text)) end
+           stunSeen = seen
+           want = seen
+       end
+       if want then
+           if holding then
+               local stale = not buttonUsable(holdButton)
+               if not stale then
+                   local x, y = buttonCenter(holdButton)
+                   stale = math.abs(x - holdX) > 8 or math.abs(y - holdY) > 8
+               end
+               if not stale and REFRESH_SECS > 0 and os.clock() - holdSince >= REFRESH_SECS then
+                   stale = true
+               end
+               if stale then release(); pressHold() end
+           else
+               pressHold()
+           end
+       elseif holding then
+           release()
+       end
+       updateVisual()
+   end
+
+   local function startLoop()
+       if loopRunning then return end
+       loopRunning = true
+       task.spawn(function()
+           while rapidMode ~= 0 and button.Parent and not _G.TAYJAY_STOPPED do
+               pcall(tick)
+               task.wait(CHECK_INTERVAL)
+           end
+           loopRunning = false
+           rapidMode = 0
+           release()
+           pcall(updateVisual)
+       end)
+   end
+
    trackConnection(button.Activated:Connect(function()
+       release()
        rapidMode = (rapidMode + 1) % 3
-       clickAccumulator, stunSeen, stunCheckAt = 0, false, 0
-       if rapidMode ~= 0 then lastFindAt = -10; biteButton = nil end
+       stunSeen = false
+       lastMethod = "-"
+       if rapidMode ~= 0 then
+           lastFindAt = -10
+           if not loopRunning then
+               startLoop()
+           else
+               task.spawn(pcall, tick)
+           end
+       end
        updateVisual()
    end))
 
-   trackConnection(RunService.Heartbeat:Connect(function(dt)
-       if rapidMode == 0 then clickAccumulator = 0 return end
-       local now = os.clock()
-       if rapidMode == 2 and now >= stunCheckAt then
-           stunCheckAt = now + 0.3
-           local seen, text = scanStun()
-           if seen and not stunSeen then print("[TAYJAY RAPID] stun text detected: " .. tostring(text)) end
-           stunSeen, stunText = seen, text or ""
-       end
-       if rapidMode == 2 and not stunSeen then clickAccumulator = 0 end
-       if rapidMode == 1 or stunSeen then
-           clickAccumulator = clickAccumulator + dt
-           local interval = 1 / RAPID_CPS
-           if clickAccumulator >= interval then
-               clickAccumulator = clickAccumulator - interval
-               if clickAccumulator > interval then clickAccumulator = 0 end
-               biteOnce() -- สูงสุด 1 ครั้ง/เฟรม
-           end
-       end
-       if now >= visualAt then visualAt = now + 0.25; updateVisual() end
+   trackConnection(button.Destroying:Connect(function()
+       rapidMode = 0
+       release()
    end))
 
    updateVisual()
@@ -4799,7 +4859,6 @@ if not okRB then
    end)
 end
 end
-
 
 -- =========================================================
 -- WALK Dynamic Target: TargetService owns nearest-target selection
