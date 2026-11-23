@@ -813,17 +813,23 @@ local okMonster, errMonster = pcall(function()
        if not myRoot then return end
        _tjMovementController:SetPositionLock("MONSTER", os.clock() + 0.3) -- บอก Fly ว่าตอนนี้ MONSTER คุมตำแหน่งอยู่
        local destination = targetRoot.CFrame
-       local orbiting = monsterOrbitOn and monsterFilterMode == "Monster"
+       local isBoss = target.reason == "boss-hud"
+       local orbiting = monsterOrbitOn and monsterFilterMode == "Monster" and not isBoss
        local nowClock = os.clock()
        if monsterLastRoot ~= targetRoot then monsterEnterAt = nowClock end -- เป้าใหม่: เข้าสิงร่างทันที
-       local dodging = monsterDodgeOn and monsterFilterMode == "Monster" and nowClock < monsterDodgeUntil
+       local dodging = not isBoss and monsterDodgeOn and monsterFilterMode == "Monster" and nowClock < monsterDodgeUntil
        if dodging then
            monsterWasDodging = true
        elseif monsterWasDodging then
            monsterWasDodging = false
            monsterEnterAt = nowClock -- หนีเสร็จ: กลับเข้าสิงร่างใหม่ แล้วค่อยขยายวง
        end
-       if orbiting then
+       if isBoss then
+           -- Boss stance: เกาะด้านหลังช่วงท้ายลำตัว ไม่ Orbit และไม่ Dodge
+           local tailOffset = math.max(2.5, (targetRoot.Size.Z * 0.5) + 1.25)
+           local rearPosition = targetRoot.Position - targetRoot.CFrame.LookVector * tailOffset
+           destination = CFrame.lookAt(rearPosition, targetRoot.Position)
+       elseif orbiting then
            -- เริ่มจากกลางตัวมอนสเตอร์ (สิงร่าง) แล้วขยายวงโคจรออกอย่างนุ่มนวล
            local grow = math.clamp((nowClock - monsterEnterAt) / MONSTER_ENTER_SECONDS, 0, 1)
            local angle = nowClock * MONSTER_ORBIT_SPEED
@@ -1191,7 +1197,7 @@ local okMonster, errMonster = pcall(function()
                            if target.lastHp == nil or math.abs(hpNow - target.lastHp) > 0.01 then
                                target.lastHp = hpNow
                                target.hpChangedAt = now
-                           elseif now - target.hpChangedAt >= MONSTER_STUCK_SECONDS then
+                           elseif target.reason ~= "boss-hud" and now - target.hpChangedAt >= MONSTER_STUCK_SECONDS then
                                monsterBlockedUntil[target.model] = now + MONSTER_BLOCK_SECONDS
                                monsterNoticeText = "ข้าม " .. tostring(target.name) .. " (HP ไม่เปลี่ยน " .. tostring(MONSTER_STUCK_SECONDS) .. " วิ)"
                                monsterNoticeUntil = now + 4
@@ -1217,7 +1223,7 @@ local okMonster, errMonster = pcall(function()
                            -- Remote โจมตีทั่วไปไม่ถูกเรียกจากโหมดนี้ (กันพลาดไปโจมตีผู้เล่น):
                            -- ใช้ AUTO ATK / ปุ่มโจมตีของเกมเองตอนอยู่บนมอนสเตอร์
                            local notice = (now < monsterNoticeUntil) and ("\n⚠ " .. monsterNoticeText) or ""
-                           if monsterFilterMode == "Monster" and monsterDodgeOn then
+                           if target.reason ~= "boss-hud" and monsterFilterMode == "Monster" and monsterDodgeOn then
                                local myHpNow = myHumanoid.Health
                                if monsterLastMyHealth and myHpNow < monsterLastMyHealth - 0.5 then
                                    learnDanger(target)
@@ -1232,8 +1238,9 @@ local okMonster, errMonster = pcall(function()
                                end
                            end
                            local stateWord = "POSSESS"
-                           if monsterOrbitOn and monsterFilterMode == "Monster" then stateWord = "ORBIT" end
-                           if monsterDodgeOn and monsterFilterMode == "Monster" and now < monsterDodgeUntil then
+                           if target.reason == "boss-hud" then stateWord = "BOSS REAR" end
+                            if target.reason ~= "boss-hud" and monsterOrbitOn and monsterFilterMode == "Monster" then stateWord = "ORBIT" end
+                           if target.reason ~= "boss-hud" and monsterDodgeOn and monsterFilterMode == "Monster" and now < monsterDodgeUntil then
                                stateWord = "DODGE " .. tostring(monsterDodgeWhy)
                            end
                            setMonsterPanelStatus(
