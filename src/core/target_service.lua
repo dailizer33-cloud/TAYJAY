@@ -409,7 +409,11 @@ function TargetService:EnsureCombatOwner()
             -- Share the attack cooldown by alternating lanes when the attacker
             -- differs from the nearest target, so neither role replaces the other.
             local attacker = TargetService:FindRetaliationTarget()
-            local _, attackerChar = attacker and distanceTo(attacker) or nil
+            local attackerChar
+            if attacker then
+                local attackerDistance
+                attackerDistance, attackerChar = distanceTo(attacker)
+            end
             if attackerChar and nearestChar and attacker ~= nearestPlayer then
                 local lane = TargetService._combatLane or "walk"
                 local chosenChar = lane == "retaliation" and attackerChar or nearestChar
