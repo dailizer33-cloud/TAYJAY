@@ -3194,7 +3194,7 @@ local okMonster, errMonster = pcall(function()
 
    local monsterPanel = Instance.new("Frame", screenGui)
    monsterPanel.Name = "TayJayMonsterTargetPanel"
-   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 207)
+   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 180)
    monsterPanel.Position = UI_LAYOUT.MonsterTargetPanel
    monsterPanel.BackgroundColor3 = GREEN.dark
    monsterPanel.BackgroundTransparency = 0.03
@@ -3299,24 +3299,10 @@ local okMonster, errMonster = pcall(function()
 
    local claimPlaytimeBusy = false
 
-   local rebirthToggle = Instance.new("TextButton", monsterPanel)
-   rebirthToggle.Name = "MonsterRebirthToggle"
-   rebirthToggle.Size = UDim2.new(1, -18, 0, 22)
-   rebirthToggle.Position = UDim2.fromOffset(9, 128)
-   rebirthToggle.BackgroundColor3 = Color3.fromRGB(39, 174, 119)
-   rebirthToggle.Text = "REBIRTH BACKGROUND: ON"
-   rebirthToggle.TextColor3 = WHITE_TEXT
-   rebirthToggle.Font = Enum.Font.GothamBold
-   rebirthToggle.TextSize = 11
-   rebirthToggle.Active = true
-   Instance.new("UICorner", rebirthToggle).CornerRadius = UDim.new(0, 7)
-   local rebirthEnabled = true
-   local rebirthStatus = "REBIRTH: SCANNING"
-
    local monsterCountLabel = Instance.new("TextLabel", monsterPanel)
    monsterCountLabel.Name = "MonsterFilterCount"
    monsterCountLabel.Size = UDim2.new(1, -18, 0, 14)
-   monsterCountLabel.Position = UDim2.fromOffset(9, 154)
+   monsterCountLabel.Position = UDim2.fromOffset(9, 128)
    monsterCountLabel.BackgroundTransparency = 1
    monsterCountLabel.RichText = true
    monsterCountLabel.Text = "👾 Monster: 0  |  🧑 NPC: 0"
@@ -3328,7 +3314,7 @@ local okMonster, errMonster = pcall(function()
    local monsterInfo = Instance.new("TextLabel", monsterPanel)
    monsterInfo.Name = "MonsterTargetInfo"
    monsterInfo.Size = UDim2.new(1, -18, 0, 28)
-   monsterInfo.Position = UDim2.fromOffset(9, 169)
+   monsterInfo.Position = UDim2.fromOffset(9, 145)
    monsterInfo.Size = UDim2.new(1, -18, 0, 30)
    monsterInfo.BackgroundTransparency = 1
    monsterInfo.Text = "ปิดอยู่ • กด MONSTER เพื่อเริ่มค้นหา"
@@ -3339,143 +3325,6 @@ local okMonster, errMonster = pcall(function()
    monsterInfo.TextSize = 11
    monsterInfo.TextWrapped = true
    monsterInfo.TextXAlignment = Enum.TextXAlignment.Left
-
-   -- Rebirth logic copied from Tayjay Farm.lua; original Farm file remains untouched.
-   -- Independent background worker: does not require MONSTER/WARP movement to be enabled.
-   local RB_WORDS = {"REBIRTH","REBORN","PRESTIGE","เกิดใหม่","รีเบิร์ธ","รีบิร์ธ"}
-   local RB_CONFIRM = {"TAP AGAIN","CONFIRM","YES","ตกลง","ยืนยัน","อีกครั้ง"}
-   local RB_NOT_READY = {"NOT READY","NEED MORE","REQUIRE","ไม่พร้อม","ยังไม่พอ"}
-   local rbScanAt, rbTryAt, rbOpenAt, rbBlockedUntil = 0, 0, 0, 0
-   local rbFails, rbBurstCount, rbBurstStart = 0, 0, 0
-   local rbUI = {}
-
-   local function rbHas(text, words)
-       text = string.upper(tostring(text or ""))
-       for _, word in ipairs(words) do if string.find(text, word, 1, true) then return true end end
-       return false
-   end
-   local function rbText(obj)
-       if not (obj and obj.Parent) then return "" end
-       local out = {string.upper(obj.Name or "")}
-       pcall(function()
-           if obj:IsA("TextLabel") or obj:IsA("TextButton") then table.insert(out, string.upper(obj.Text or "")) end
-           for _, d in ipairs(obj:GetDescendants()) do
-               if d:IsA("TextLabel") or d:IsA("TextButton") then table.insert(out, string.upper(d.Text or "")) end
-           end
-       end)
-       return table.concat(out, " ")
-   end
-   local function rbPair(value)
-       local raw = tostring(value or ""):upper():gsub(",", ""):gsub("%s+", "")
-       local a, sa, b, sb = raw:match("([%d%.]+)([KMBT]?)/([%d%.]+)([KMBT]?)")
-       if not a then return nil end
-       local scale = {K=1e3,M=1e6,B=1e9,T=1e12}
-       return tonumber(a)*(scale[sa] or 1), tonumber(b)*(scale[sb] or 1)
-   end
-   local function rbClick(btn)
-       if not (btn and btn.Parent and btn:IsA("GuiButton") and btn.Visible and btn.Active) then return false end
-       -- Fire one activation only; do not double-trigger through both Activate and signal connections.
-       return pcall(function() btn:Activate() end)
-   end
-   local function rbScan()
-       local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-       local ui = {opener=nil,first=nil,confirm=nil,power=nil,top=nil,ready=nil,evolve=nil}
-       if not pg then return ui end
-       local cam = workspace.CurrentCamera
-       local vh = cam and cam.ViewportSize.Y or 1000
-       for _, o in ipairs(pg:GetDescendants()) do
-           if o:IsA("GuiObject") and o.Visible then
-               local visible, p = true, o.Parent
-               while p and p ~= pg do
-                   if p:IsA("GuiObject") and not p.Visible then visible=false break end
-                   if p:IsA("LayerCollector") and not p.Enabled then visible=false break end
-                   p=p.Parent
-               end
-               if visible then
-                   if o:IsA("TextLabel") or o:IsA("TextButton") then
-                       local txt = tostring(o.Text or "")
-                       if string.find(txt,"/",1,true) then
-                           local cur,req = rbPair(txt)
-                           if cur and req and req>0 and (string.find(string.upper(txt),"POWER",1,true) or not ui.power) then ui.power=o end
-                           if not ui.top and o.AbsolutePosition.Y<vh*0.22 then ui.top=o end
-                       end
-                       if not ui.ready and rbHas(txt,{"READY TO REBIRTH","READY","พร้อม"}) then ui.ready=o end
-                   end
-                   if o:IsA("GuiButton") then
-                       local all,name=rbText(o),string.lower(o.Name or "")
-                       if not ui.evolve and (string.find(all,"EVOLVE",1,true) or string.find(all,"HATCH",1,true)) then ui.evolve=o end
-                       if rbHas(all,RB_CONFIRM) then ui.confirm=ui.confirm or o
-                       elseif rbHas(all,RB_WORDS) or string.find(name,"rebirth",1,true) or string.find(name,"prestige",1,true) then
-                           if string.find(all,"REBIRTH X",1,true) or string.find(all,"X2",1,true) then ui.first=ui.first or o
-                           else ui.opener=ui.opener or o end
-                       end
-                   end
-               end
-           end
-       end
-       return ui
-   end
-   local function rbReady(ui)
-       if ui.evolve then local t=rbText(ui.evolve); if rbHas(t,RB_WORDS) and not rbHas(t,RB_NOT_READY) then return true end end
-       for _,o in ipairs({ui.power,ui.top}) do
-           if o and o.Parent then local a,b=rbPair(o.Text); if a and b and b>0 then return a>=b end end
-       end
-       if ui.ready and ui.ready.Parent then
-           local t=string.upper(ui.ready.Text or "")
-           if rbHas(t,RB_NOT_READY) then return false end
-           if rbHas(t,{"READY","พร้อม"}) then return true end
-       end
-       return (ui.confirm and ui.confirm.Parent and ui.confirm.Visible) or (ui.first and ui.first.Parent and ui.first.Visible) or false
-   end
-   local function rbCount()
-       local ls=LocalPlayer:FindFirstChild("leaderstats")
-       if ls then
-           for _,v in ipairs(ls:GetChildren()) do
-               local n=string.lower(v.Name or "")
-               if v:IsA("ValueBase") and (string.find(n,"rebirth",1,true) or string.find(n,"prestige",1,true) or n=="rb") then return tonumber(v.Value) end
-           end
-       end
-       local ok,v=pcall(function() return LocalPlayer:GetAttribute("Rebirths") or LocalPlayer:GetAttribute("Rebirth") end)
-       return ok and tonumber(v) or nil
-   end
-   trackConnection(rebirthToggle.Activated:Connect(function()
-       rebirthEnabled=not rebirthEnabled
-       rebirthToggle.Text=rebirthEnabled and "REBIRTH BACKGROUND: ON" or "REBIRTH BACKGROUND: OFF"
-       rebirthToggle.BackgroundColor3=rebirthEnabled and Color3.fromRGB(39,174,119) or Color3.fromRGB(65,74,63)
-       if not rebirthEnabled then rebirthStatus="REBIRTH: PAUSED" end
-   end))
-   task.spawn(function()
-       while screenGui and screenGui.Parent do
-           if rebirthEnabled then
-               local now=os.clock()
-               if now-rbScanAt>=0.2 then rbScanAt=now; rbUI=rbScan() end
-               if now>=rbBlockedUntil and now-rbTryAt>=0.2 and rbReady(rbUI) then
-                   local pick,stage=nil,1
-                   if rbUI.confirm and rbUI.confirm.Parent and rbUI.confirm.Visible then pick,stage=rbUI.confirm,3
-                   elseif rbUI.first and rbUI.first.Parent and rbUI.first.Visible then pick,stage=rbUI.first,2
-                   elseif rbUI.opener and rbUI.opener.Parent and now-rbOpenAt>=4.5 then pick,stage=rbUI.opener,1; rbOpenAt=now end
-                   if pick and rbClick(pick) then
-                       rbTryAt=now; rebirthStatus="REBIRTH STEP "..stage.."/3"
-                       if stage==3 then
-                           local before=rbCount()
-                           if before~=nil then task.delay(3,function()
-                               local after=rbCount()
-                               if after and after>before then
-                                   rbFails=0
-                                   rebirthStatus="REBIRTH SUCCESS x"..tostring(after)
-                               else
-                                   rbFails=rbFails+1
-                                   rebirthStatus="REBIRTH RETRY "..tostring(rbFails)
-                               end
-                           end) end
-                       end
-                   end
-               elseif not rbReady(rbUI) then rebirthStatus="REBIRTH: WAITING REQUIREMENT" end
-           end
-           rebirthToggle:SetAttribute("Status",rebirthStatus)
-           task.wait(0.28)
-       end
-   end)
 
    local MONSTER_SCAN_ROOT_NAMES = {
        "HumanoidRootPart", "RootPart", "Root", "MonsterRoot", "MainPart",
@@ -3546,13 +3395,6 @@ local okMonster, errMonster = pcall(function()
    local monsterHiddenCharacter = nil
    local monsterPlatform = nil
    local monsterLastAttack = 0
-   -- ACRON SUGAR ORB: สลับเก็บทั่ว Workspace โดยไม่จำกัดระยะจากมอนสเตอร์
-   local monsterOrbPhase = "ATTACK"
-   local monsterOrbItem = nil
-   local monsterOrbPart = nil
-   local monsterOrbNextSearch = 0
-   local monsterOrbPhaseUntil = 0
-   local monsterOrbLastTouch = 0
    local monsterNextSelectAt = 0
    local monsterWarpWasOn = false
    local monsterWarpStarting = false
@@ -3958,85 +3800,18 @@ local okMonster, errMonster = pcall(function()
        return alive and candidate.root ~= nil
    end
 
-   -- Priority: Boss > Event > Ladybug > Aphid > Orb collection > other monsters.
-   -- Orb remains a collection phase (not a Monster model candidate).
-   local function getMonsterPriority(candidate)
-        if not candidate or not candidate.model then return 99 end
-        local model = candidate.model
-        local name = string.lower(tostring(model.Name or ""))
-        if string.find(name, "boss", 1, true)
-            or currentGuiNames[normalizeKey(model.Name)] ~= nil then
-            return 1
-        end
-        local node = model
-        while node and node ~= workspace and node ~= game do
-            local nodeName = string.lower(tostring(node.Name or ""))
-            if string.find(nodeName, "event", 1, true) then return 2 end
-            node = node.Parent
-        end
-        if string.find(name, "ladybug", 1, true) then return 3 end
-        if string.find(name, "aphid", 1, true) then return 4 end
-        return 6
-    end
-
    local function nearestMonster(origin, ignoreModel)
-        local best, bestPriority, bestDistance = nil, math.huge, math.huge
-        for _, candidate in ipairs(monsterCandidates) do
-            if candidate.model ~= ignoreModel and isMonsterAlive(candidate) then
-                local priority = getMonsterPriority(candidate)
-                local distance = (candidate.root.Position - origin).Magnitude
-                if priority < bestPriority or (priority == bestPriority and distance < bestDistance) then
-                    best = candidate
-                    bestPriority = priority
-                    bestDistance = distance
-                end
-            end
-        end
-        return best
-    end
-
-   -- ค้นหาเฉพาะ ACRON SUGAR ORB ขนาดใหญ่ ไม่กรองด้วยระยะทาง
-   local function findLargeAcronSugarOrb()
-       local descendants = workspace:GetDescendants()
-       for _, obj in ipairs(descendants) do
-           if obj:IsA("Model") or obj:IsA("BasePart") then
-               local names = ""
-               local node = obj
-               for _ = 1, 4 do
-                   if not node then break end
-                   names = names .. " " .. string.lower(tostring(node.Name or ""))
-                   node = node.Parent
-               end
-               if string.find(names, "acron", 1, true)
-                   and string.find(names, "sugar", 1, true)
-                   and string.find(names, "orb", 1, true) then
-                   local size = Vector3.zero
-                   local part = nil
-                   if obj:IsA("BasePart") then
-                       size = obj.Size
-                       part = obj
-                   else
-                       local ok, extents = pcall(function() return obj:GetExtentsSize() end)
-                       if ok then size = extents end
-                       part = obj.PrimaryPart
-                       if not part then
-                           for _, child in ipairs(obj:GetDescendants()) do
-                               if child:IsA("BasePart") then
-                                   part = child
-                                   if child:FindFirstChildWhichIsA("TouchTransmitter") then break end
-                               end
-                           end
-                       end
-                   end
-                   local isLarge = string.find(names, "large", 1, true) ~= nil
-                       or math.max(size.X, size.Y, size.Z) >= 4
-                   if isLarge and part and part.Parent and obj:IsDescendantOf(workspace) then
-                       return obj, part
-                   end
+       local best, bestDistance = nil, math.huge
+       for _, candidate in ipairs(monsterCandidates) do
+           if candidate.model ~= ignoreModel and isMonsterAlive(candidate) then
+               local distance = (candidate.root.Position - origin).Magnitude
+               if distance < bestDistance then
+                   best = candidate
+                   bestDistance = distance
                end
            end
        end
-       return nil, nil
+       return best
    end
 
    local function setMonsterPanelStatus(titleText, infoText, hp, maxHp)
@@ -4059,9 +3834,8 @@ local okMonster, errMonster = pcall(function()
 
    local function refreshMonsterFilterUI()
        local isMonster = monsterFilterMode == "Monster"
-       -- ON/OFF reflects the running toggle only; changing the target filter must not clear MONSTER status.
-       local monsterActive = states.MonsterWarp == true
-       local npcActive = states.MonsterWarp == true and not isMonster
+       local monsterActive = states.MonsterWarp and isMonster
+       local npcActive = states.MonsterWarp and not isMonster
        monsterFilterBtn.Text = monsterActive and "👾 MONSTER: ON" or "👾 MONSTER"
        npcFilterBtn.Text = npcActive and "🧑 NPC: ON" or "🧑 NPC"
        monsterFilterBtn.BackgroundColor3 = monsterActive and GREEN.on or (isMonster and GREEN.off or Color3.fromRGB(65, 74, 63))
@@ -4220,20 +3994,10 @@ local okMonster, errMonster = pcall(function()
        if not myRoot then return end
        _tjMovementController:SetPositionLock("MONSTER", os.clock() + 0.3) -- บอก Fly ว่าตอนนี้ MONSTER คุมตำแหน่งอยู่
        local destination = targetRoot.CFrame
-       if monsterFilterMode == "Monster" and monsterOrbPhase == "COLLECT" and monsterOrbItem and monsterOrbPart and monsterOrbPart.Parent then
-           destination = CFrame.lookAt(monsterOrbPart.Position + Vector3.new(0, 2, 0), monsterOrbPart.Position)
-           if os.clock() - monsterOrbLastTouch >= 0.18 then
-               monsterOrbLastTouch = os.clock()
-               if typeof(firetouchinterest) == "function" then
-                   pcall(firetouchinterest, myRoot, monsterOrbPart, 0)
-                   pcall(firetouchinterest, myRoot, monsterOrbPart, 1)
-               end
-           end
-       end
-       local orbiting = monsterOrbPhase ~= "COLLECT" and monsterOrbitOn and monsterFilterMode == "Monster"
+       local orbiting = monsterOrbitOn and monsterFilterMode == "Monster"
        local nowClock = os.clock()
        if monsterLastRoot ~= targetRoot then monsterEnterAt = nowClock end -- เป้าใหม่: เข้าสิงร่างทันที
-       local dodging = monsterOrbPhase ~= "COLLECT" and monsterDodgeOn and monsterFilterMode == "Monster" and nowClock < monsterDodgeUntil
+       local dodging = monsterDodgeOn and monsterFilterMode == "Monster" and nowClock < monsterDodgeUntil
        if dodging then
            monsterWasDodging = true
        elseif monsterWasDodging then
@@ -4276,9 +4040,6 @@ local okMonster, errMonster = pcall(function()
        monsterCurrent = nil
        monsterLastRoot = nil
        monsterTrackedTarget = nil
-       monsterOrbPhase = "ATTACK"
-       monsterOrbItem, monsterOrbPart = nil, nil
-       monsterOrbNextSearch, monsterOrbPhaseUntil, monsterOrbLastTouch = 0, 0, 0
        if _tjMovementController then
            _tjMovementController:ClearPositionLock("MONSTER")
        end
@@ -4307,7 +4068,15 @@ local okMonster, errMonster = pcall(function()
        updateMonsterWarpVisual()
    end
 
+   local monsterResumeLatched = false
+   local monsterResumeMode = nil
+   local monsterResumeGeneration = 0
+   local monsterResumeCancelled = false
+
    _G.TAYJAY_MONSTER_STOP = function()
+       monsterResumeCancelled = true
+       monsterResumeLatched = false
+       monsterResumeGeneration = monsterResumeGeneration + 1
        stopMonsterWarp(true)
    end
 
@@ -4355,10 +4124,6 @@ local okMonster, errMonster = pcall(function()
        monsterScanDirty = true
        monsterLastScan = 0
        monsterLastAttack = 0
-       monsterOrbPhase = "ATTACK"
-       monsterOrbItem, monsterOrbPart = nil, nil
-       monsterOrbNextSearch = os.clock() + 5
-       monsterOrbPhaseUntil, monsterOrbLastTouch = 0, 0
        monsterNextSelectAt = 0
        monsterTrackedTarget = nil
        monsterNoticeText, monsterNoticeUntil = "", 0
@@ -4372,10 +4137,6 @@ local okMonster, errMonster = pcall(function()
    local function setMonsterFilter(mode)
        if monsterFilterMode == mode then return end
        monsterFilterMode = mode
-       monsterOrbPhase = "ATTACK"
-       monsterOrbItem, monsterOrbPart = nil, nil
-       monsterOrbNextSearch = os.clock() + 5
-       monsterOrbPhaseUntil, monsterOrbLastTouch = 0, 0
        -- เปลี่ยนกลุ่ม → ทิ้งเป้าเดิมทันที แล้วเลือกใหม่จากกลุ่มที่เลือก
        monsterCurrent = nil
        monsterLastRoot = nil
@@ -4403,8 +4164,18 @@ local okMonster, errMonster = pcall(function()
            startMonsterWarp()
        end
    end
-   trackConnection(monsterFilterBtn.Activated:Connect(function() toggleMonsterMode("Monster") end))
-   trackConnection(npcFilterBtn.Activated:Connect(function() toggleMonsterMode("NPC") end))
+   trackConnection(monsterFilterBtn.Activated:Connect(function()
+       monsterResumeCancelled = true
+       monsterResumeLatched = false
+       monsterResumeGeneration = monsterResumeGeneration + 1
+       toggleMonsterMode("Monster")
+   end))
+   trackConnection(npcFilterBtn.Activated:Connect(function()
+       monsterResumeCancelled = true
+       monsterResumeLatched = false
+       monsterResumeGeneration = monsterResumeGeneration + 1
+       toggleMonsterMode("NPC")
+   end))
    trackConnection(dodgeBtn.Activated:Connect(function()
        monsterDodgeOn = not monsterDodgeOn
        monsterDodgeUntil = 0
@@ -4482,6 +4253,52 @@ local okMonster, errMonster = pcall(function()
        if states.MonsterWarp then stopMonsterWarp(false) end
    end))
 
+   -- Resume Monster Warp after evolve/rebirth without taking movement from another warp.
+   trackConnection(LocalPlayer.CharacterRemoving:Connect(function()
+       monsterResumeCancelled = false
+       monsterResumeLatched = states.MonsterWarp == true
+       monsterResumeMode = monsterResumeLatched and monsterFilterMode or nil
+       monsterResumeGeneration = monsterResumeGeneration + 1
+   end))
+   trackConnection(LocalPlayer.CharacterAdded:Connect(function(char)
+       if not monsterResumeLatched or monsterResumeCancelled then return end
+       local myGeneration = monsterResumeGeneration
+       task.spawn(function()
+           local root = char:WaitForChild("HumanoidRootPart", 15)
+           local humanoid = char:WaitForChild("Humanoid", 15)
+           if not root or not humanoid then
+               if monsterResumeGeneration == myGeneration then monsterResumeLatched = false end
+               return
+           end
+           task.wait(1.5)
+           for attempt = 1, 8 do
+               if monsterResumeCancelled or _G.TAYJAY_STOPPED
+                   or monsterResumeGeneration ~= myGeneration
+                   or not monsterResumeLatched then return end
+               if states.MonsterWarp then
+                   monsterResumeLatched = false
+                   return
+               end
+               local otherWarpActive = states.KillAura or states.DNWarp or states.AutoWarp
+               local movementOwner = _tjMovementController and _tjMovementController.Owner
+               local transitioning = _tjMovementController and _tjMovementController.Transition
+               if not otherWarpActive and not transitioning
+                   and (movementOwner == nil or movementOwner == "MONSTER") then
+                   if monsterResumeMode and monsterFilterMode ~= monsterResumeMode then
+                       pcall(setMonsterFilter, monsterResumeMode)
+                   end
+                   pcall(startMonsterWarp)
+                   if states.MonsterWarp then
+                       monsterResumeLatched = false
+                       return
+                   end
+               end
+               if attempt < 8 then task.wait(1) end
+           end
+           if monsterResumeGeneration == myGeneration then monsterResumeLatched = false end
+       end)
+   end))
+
    trackConnection(RunService.Heartbeat:Connect(monsterGlueStep))
    trackConnection(RunService.Stepped:Connect(monsterNoclipStep))
    do
@@ -4542,17 +4359,6 @@ local okMonster, errMonster = pcall(function()
                            monsterNextSelectAt = now + 0.7
                        end
 
-                       -- Recheck priority while locked: switch only when a higher-priority class appears.
-                       if target and isMonsterAlive(target) then
-                           local origin = monsterHome and monsterHome.Position or myRoot.Position
-                           local preferred = nearestMonster(origin, nil)
-                           if preferred and getMonsterPriority(preferred) < getMonsterPriority(target) then
-                               target = preferred
-                               monsterCurrent = preferred
-                               monsterLastRoot = nil
-                           end
-                       end
-
                        if target and target ~= monsterTrackedTarget then
                            monsterTrackedTarget = target
                            target.lastHp = nil
@@ -4606,33 +4412,9 @@ local okMonster, errMonster = pcall(function()
                                    monsterDodgeWhy = attackName
                                end
                            end
-                           -- วนลูปโจมตีและเก็บ ACRON SUGAR ORB ขนาดใหญ่จากทั่ว Workspace
-                           if monsterFilterMode == "Monster" and monsterOrbPhase == "ATTACK" and now >= monsterOrbNextSearch then
-                               local orb, orbPart = findLargeAcronSugarOrb()
-                               if orb and orbPart then
-                                   monsterOrbItem, monsterOrbPart = orb, orbPart
-                                   monsterOrbPhase = "COLLECT"
-                                   monsterOrbPhaseUntil = now + 2.8
-                                   monsterOrbLastTouch = 0
-                               else
-                                   monsterOrbNextSearch = now + 3.5
-                               end
-                           elseif monsterFilterMode == "Monster" and monsterOrbPhase == "COLLECT" then
-                               if not monsterOrbItem or not monsterOrbItem.Parent or not monsterOrbPart or not monsterOrbPart.Parent
-                                   or now >= monsterOrbPhaseUntil then
-                                   monsterOrbItem, monsterOrbPart = nil, nil
-                                   monsterOrbPhase = "RETURN"
-                                   monsterOrbPhaseUntil = now + 0.7
-                               end
-                           elseif monsterFilterMode == "Monster" and monsterOrbPhase == "RETURN" and now >= monsterOrbPhaseUntil then
-                               monsterOrbPhase = "ATTACK"
-                               monsterOrbNextSearch = now + 5
-                           end
                            local stateWord = "POSSESS"
-                           if monsterOrbPhase == "COLLECT" then stateWord = "COLLECT ACRON SUGAR ORB"
-                           elseif monsterOrbPhase == "RETURN" then stateWord = "RETURN TO MONSTER"
-                           elseif monsterOrbitOn and monsterFilterMode == "Monster" then stateWord = "ORBIT" end
-                           if monsterOrbPhase ~= "COLLECT" and monsterDodgeOn and monsterFilterMode == "Monster" and now < monsterDodgeUntil then
+                           if monsterOrbitOn and monsterFilterMode == "Monster" then stateWord = "ORBIT" end
+                           if monsterDodgeOn and monsterFilterMode == "Monster" and now < monsterDodgeUntil then
                                stateWord = "DODGE " .. tostring(monsterDodgeWhy)
                            end
                            setMonsterPanelStatus(
@@ -4677,20 +4459,7 @@ end
 end
 
 -- =========================================================
--- =========================================================
--- =========================================================
--- RAPID BITE (โหมดกดค้าง): ปุ่มโจมตีแบบแยกอิสระ
--- วิธีใช้: แทนที่ทั้งก้อนเดิม ตั้งแต่บรรทัด "-- RAPID BITE: standalone attack button"
---          จนถึง end ท้ายก้อน ด้วยโค้ดนี้
---
--- เปลี่ยนจาก "แตะรัว 20 ครั้ง/วิ" เป็น "กดค้างปุ่ม bite ไว้" และลดการรันคำสั่ง:
---  - ไม่มี Heartbeat แล้ว (เดิมรันทุกเฟรมแม้ปิดอยู่) ตอนนี้มีลูปเฉพาะตอนเปิด และเช็กทุก 0.5 วิ
---  - ส่งคำสั่ง "กด" ครั้งเดียวตอนเริ่ม และ "ปล่อย" ครั้งเดียวตอนปิด
---  - สแกน GUI เฉพาะตอนหาปุ่ม (จำปุ่มไว้) และตอนเช็กมึนในโหมด AUTO
---  - ตัวดักข้อความ error ของ signal ต่อไว้แค่ 2 วิหลังยิง signal
---  - อัปเดตข้อความบนปุ่มเฉพาะตอนที่ข้อความเปลี่ยน
---
--- กดปุ่ม RAPID: OFF -> ON (กดค้างตลอด) -> AUTO (กดค้างเฉพาะตอนมึน) -> OFF
+-- RAPID BITE: standalone attack button
 -- =========================================================
 do
 local okRB, errRB = pcall(function()
@@ -4699,20 +4468,27 @@ local okRB, errRB = pcall(function()
    local VirtualInputManager = nil
    pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
 
-   local RAPID_METHOD = "both"
+   local RAPID_CPS = 20
+   local RAPID_METHOD = "auto"               -- "auto" | "touch" | "signal"
    local RAPID_TEXTS = { "bite" }
    local STUN_WORDS = { "stun", "daze", "dizzy", "vulnerab", "exhaust", "weaken", "มึน", "สตัน" }
-   local CHECK_INTERVAL = 0.5
-   local FIND_COOLDOWN = 1.5
-   local REFRESH_SECS = 0
 
-   local signalBad = false
+   local signalBad, lastSignalFireAt = false, -10
    local rapidMode = 0
    local biteButton, lastFindAt = nil, -10
-   local holding, holdX, holdY, holdTouch, holdSignal, holdButton, holdSince = false, 0, 0, false, false, nil, 0
-   local lastMethod, stunSeen = "-", false
-   local loopRunning = false
-   local lastVisualKey = ""
+   local lastMethod, stunSeen, stunText = "-", false, ""
+   local clickAccumulator, stunCheckAt, visualAt = 0, 0, 0
+
+   trackConnection(LogService.MessageOut:Connect(function(message)
+       if signalBad or os.clock() - lastSignalFireAt > 2 then return end
+       local msg = string.lower(tostring(message or ""))
+       if string.find(msg, "current thread cannot access", 1, true)
+           or (string.find(msg, "lacking capability", 1, true) and string.find(msg, "plugin", 1, true)) then
+           signalBad = true
+           lastMethod = "SIGNAL BLOCKED"
+           pcall(function() warn("[TAYJAY RAPID] signal method disabled after capability error") end)
+       end
+   end))
 
    local button = Instance.new("TextButton", screenGui)
    button.Name = "TayJayRapidBiteBtn"
@@ -4751,135 +4527,78 @@ local okRB, errRB = pcall(function()
        return true
    end
 
-   local function buttonUsable(obj)
-       if not obj or not obj.Parent then return false end
-       local size = obj.AbsoluteSize
-       if size.X <= 0 or size.Y <= 0 then return false end
-       return guiShown(obj)
-   end
-
    local function findBiteButton()
        local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
        if not playerGui then return nil end
-       local fallback = nil
        for _, obj in ipairs(playerGui:GetDescendants()) do
-           if obj:IsA("GuiButton") and obj.AbsoluteSize.X > 0 and guiShown(obj) then
-               local nameKey = normalize(obj.Name)
-               for _, want in ipairs(RAPID_TEXTS) do
-                   if nameKey == want then return obj end
-               end
-           end
            if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and #obj.Text > 0 and #obj.Text <= 24 then
                local key = normalize(obj.Text)
                for _, want in ipairs(RAPID_TEXTS) do
                    if key == want and guiShown(obj) then
                        local target = obj:IsA("GuiButton") and obj or obj:FindFirstAncestorWhichIsA("GuiButton")
-                       if target and target.AbsoluteSize.X > 0 then return target end
-                       fallback = fallback or obj
+                       return target or obj
                    end
                end
            end
        end
-       return fallback
+       return nil
    end
 
-   local function watchSignalErrors()
-       local conn
-       conn = LogService.MessageOut:Connect(function(message)
-           local msg = string.lower(tostring(message or ""))
-           if string.find(msg, "current thread cannot access", 1, true)
-               or (string.find(msg, "lacking capability", 1, true) and string.find(msg, "plugin", 1, true)) then
-               signalBad = true
-               lastMethod = "SIGNAL BLOCKED"
-               pcall(function() warn("[TAYJAY RAPID] signal method disabled after capability error") end)
-               if conn then pcall(function() conn:Disconnect() end) end
+   local function fireSignals(target)
+       if type(getconnections) ~= "function" then return false end
+       for _, signalName in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down", "TouchTap" }) do
+           local okSig, signal = pcall(function() return target[signalName] end)
+           if okSig and signal then
+               local okConn, connections = pcall(getconnections, signal)
+               if okConn and type(connections) == "table" then
+                   local fired = false
+                   for _, conn in ipairs(connections) do
+                       if pcall(function() conn:Fire() end) then fired = true end
+                   end
+                   if fired then return true end
+               end
            end
-       end)
-       task.delay(2, function()
-           if conn then pcall(function() conn:Disconnect() end) end
-       end)
-   end
-
-   local function fireSignal(target, signalName)
-       if signalBad or type(getconnections) ~= "function" then return false end
-       local okSig, signal = pcall(function() return target[signalName] end)
-       if not okSig or not signal then return false end
-       watchSignalErrors()
-       local okConn, connections = pcall(getconnections, signal)
-       if not okConn or type(connections) ~= "table" then return false end
-       local fired = false
-       for _, conn in ipairs(connections) do
-           if pcall(function() conn:Fire() end) then fired = true end
        end
-       return fired
+       return false
    end
 
-   local function buttonCenter(target)
+   local function clickScreen(target)
+       if not VirtualInputManager then return false end
        local position, size = target.AbsolutePosition, target.AbsoluteSize
        local x, y = position.X + size.X / 2, position.Y + size.Y / 2
        local gui = target:FindFirstAncestorWhichIsA("ScreenGui")
        if gui and not gui.IgnoreGuiInset then
            local okInset, inset = pcall(function() return GuiService:GetGuiInset() end)
-           if okInset and inset then x = x + inset.X; y = y + inset.Y end
+           if okInset and inset then y = y + inset.Y end
        end
-       return x, y
-   end
-
-   local function sendPress(x, y)
-       if not VirtualInputManager then return false end
        return (pcall(function()
            if UserInputService.TouchEnabled then
                VirtualInputManager:SendTouchEvent(91, 0, x, y)
-           else
-               VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
-           end
-       end))
-   end
-
-   local function sendRelease(x, y)
-       if not VirtualInputManager then return false end
-       return (pcall(function()
-           if UserInputService.TouchEnabled then
                VirtualInputManager:SendTouchEvent(91, 2, x, y)
            else
+               VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
                VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
            end
        end))
    end
 
-   local function pressHold()
+   local function biteOnce()
        local now = os.clock()
-       if not buttonUsable(biteButton) then
-           biteButton = nil
-           if now - lastFindAt < FIND_COOLDOWN then return false end
+       if (not biteButton or not biteButton.Parent) and now - lastFindAt > 1.5 then
            lastFindAt = now
            biteButton = findBiteButton()
            if biteButton then
                pcall(function() print("[TAYJAY RAPID] attack button found: " .. biteButton:GetFullName()) end)
            end
        end
-       if not biteButton then lastMethod = "NO BUTTON" return false end
-
-       local x, y = buttonCenter(biteButton)
-       local usedTouch, usedSignal = false, false
-       if RAPID_METHOD ~= "signal" then usedTouch = sendPress(x, y) end
-       if RAPID_METHOD ~= "touch" then usedSignal = fireSignal(biteButton, "MouseButton1Down") end
-       if not usedTouch and not usedSignal then lastMethod = "NO INPUT" return false end
-
-       holding, holdX, holdY, holdButton, holdSince = true, x, y, biteButton, now
-       holdTouch, holdSignal = usedTouch, usedSignal
-       if usedTouch and usedSignal then lastMethod = "touch+signal"
-       elseif usedTouch then lastMethod = "touch"
-       else lastMethod = "signal" end
-       return true
-   end
-
-   local function release()
-       if not holding then return end
-       holding = false
-       if holdTouch then sendRelease(holdX, holdY) end
-       if holdSignal and holdButton then fireSignal(holdButton, "MouseButton1Up") end
-       holdTouch, holdSignal, holdButton = false, false, nil
+       if not biteButton or not biteButton.Parent then lastMethod = "NO BUTTON" return false end
+       if RAPID_METHOD ~= "signal" and clickScreen(biteButton) then lastMethod = "touch" return true end
+       if RAPID_METHOD ~= "touch" and not signalBad then
+           lastSignalFireAt = os.clock()
+           if fireSignals(biteButton) then lastMethod = "signal" return true end
+       end
+       lastMethod = "NO INPUT"
+       return false
    end
 
    local function scanStun()
@@ -4899,86 +4618,44 @@ local okRB, errRB = pcall(function()
    local function updateVisual()
        local line3, color = "OFF", GREEN.off
        if rapidMode == 1 then
-           line3 = "ON • " .. lastMethod
-           color = holding and GREEN.on or GREEN.warning
+           line3, color = "ON • " .. lastMethod, GREEN.on
        elseif rapidMode == 2 then
-           if stunSeen then
-               line3 = "AUTO • STUN! " .. lastMethod
-               color = holding and GREEN.on or GREEN.warning
-           else
-               line3, color = "AUTO • รอมึน", GREEN.warning
-           end
+           if stunSeen then line3, color = "AUTO • STUN! " .. lastMethod, GREEN.on
+           else line3, color = "AUTO • รอมึน", GREEN.warning end
        end
-       local key = line3 .. "|" .. tostring(color)
-       if key == lastVisualKey then return end
-       lastVisualKey = key
        button.BackgroundColor3 = color
        button.Text = '<font size="25">⚔</font>\n<font size="13">RAPID</font>\n<font size="9">' .. line3 .. '</font>'
    end
 
-   local function tick()
-       if rapidMode == 0 then return end
-       local want = true
-       if rapidMode == 2 then
-           local seen, text = scanStun()
-           if seen and not stunSeen then print("[TAYJAY RAPID] stun text detected: " .. tostring(text)) end
-           stunSeen = seen
-           want = seen
-       end
-       if want then
-           if holding then
-               local stale = not buttonUsable(holdButton)
-               if not stale then
-                   local x, y = buttonCenter(holdButton)
-                   stale = math.abs(x - holdX) > 8 or math.abs(y - holdY) > 8
-               end
-               if not stale and REFRESH_SECS > 0 and os.clock() - holdSince >= REFRESH_SECS then
-                   stale = true
-               end
-               if stale then release(); pressHold() end
-           else
-               pressHold()
-           end
-       elseif holding then
-           release()
-       end
-       updateVisual()
-   end
-
-   local function startLoop()
-       if loopRunning then return end
-       loopRunning = true
-       task.spawn(function()
-           while rapidMode ~= 0 and button.Parent and not _G.TAYJAY_STOPPED do
-               pcall(tick)
-               task.wait(CHECK_INTERVAL)
-           end
-           loopRunning = false
-           rapidMode = 0
-           release()
-           pcall(updateVisual)
-       end)
-   end
-
    trackConnection(button.Activated:Connect(function()
-       release()
        rapidMode = (rapidMode + 1) % 3
-       stunSeen = false
-       lastMethod = "-"
-       if rapidMode ~= 0 then
-           lastFindAt = -10
-           if not loopRunning then
-               startLoop()
-           else
-               task.spawn(pcall, tick)
-           end
-       end
+       clickAccumulator, stunSeen, stunCheckAt = 0, false, 0
+       if rapidMode ~= 0 then lastFindAt = -10 end
        updateVisual()
    end))
 
-   trackConnection(button.Destroying:Connect(function()
-       rapidMode = 0
-       release()
+   trackConnection(RunService.Heartbeat:Connect(function(dt)
+       if rapidMode == 0 then clickAccumulator = 0 return end
+       local now = os.clock()
+       if rapidMode == 2 and now >= stunCheckAt then
+           stunCheckAt = now + 0.3
+           local seen, text = scanStun()
+           if seen and not stunSeen then print("[TAYJAY RAPID] stun text detected: " .. tostring(text)) end
+           stunSeen, stunText = seen, text or ""
+       end
+       if rapidMode == 2 and not stunSeen then clickAccumulator = 0 end
+       if rapidMode == 1 or stunSeen then
+           clickAccumulator = clickAccumulator + dt
+           local interval = 1 / RAPID_CPS
+           local clicks = 0
+           while clickAccumulator >= interval and clicks < 3 do
+               clickAccumulator = clickAccumulator - interval
+               clicks = clicks + 1
+               biteOnce()
+           end
+           if clickAccumulator > interval * 3 then clickAccumulator = 0 end
+       end
+       if now >= visualAt then visualAt = now + 0.25; updateVisual() end
    end))
 
    updateVisual()
@@ -4990,6 +4667,7 @@ if not okRB then
    end)
 end
 end
+
 
 -- =========================================================
 -- WALK Dynamic Target: TargetService owns nearest-target selection
