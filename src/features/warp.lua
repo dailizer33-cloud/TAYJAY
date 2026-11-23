@@ -441,6 +441,17 @@ local shadowThread = task.spawn(function()
            stopWarpPhysicsConnections()
            task.wait(0.5)
        end
+       -- The wait above yields. Revalidate ownership before using the cached mode flags
+       -- so this loop cannot perform one stale CFrame write after a handoff.
+       if warpActive and (
+           not _tjMovementController
+           or not _tjMovementController:IsOwner("PLAYER_WARP")
+           or not (states.KillAura or states.DNWarp)
+       ) then
+           warpActive = false
+           shadowEnabled = false
+           _G.TAYJAY_FOLLOW = nil
+       end
        local myCharacterNow = LocalPlayer.Character
        local myRootNow = myCharacterNow and myCharacterNow:FindFirstChild("HumanoidRootPart")
 
