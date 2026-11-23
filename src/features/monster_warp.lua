@@ -13,7 +13,7 @@ local okMonster, errMonster = pcall(function()
 
    local monsterPanel = Instance.new("Frame", screenGui)
    monsterPanel.Name = "TayJayMonsterTargetPanel"
-   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 154)
+   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 180)
    monsterPanel.Position = UI_LAYOUT.MonsterTargetPanel
    monsterPanel.BackgroundColor3 = GREEN.dark
    monsterPanel.BackgroundTransparency = 0.03
@@ -103,10 +103,25 @@ local okMonster, errMonster = pcall(function()
    dodgeBtn.Active = true
    Instance.new("UICorner", dodgeBtn).CornerRadius = UDim.new(0, 7)
 
+   local claimPlaytimeBtn = Instance.new("TextButton", monsterPanel)
+   claimPlaytimeBtn.Name = "ClaimPlaytimeAllBtn"
+   claimPlaytimeBtn.Size = UDim2.new(1, -18, 0, 22)
+   claimPlaytimeBtn.Position = UDim2.fromOffset(9, 102)
+   claimPlaytimeBtn.BackgroundColor3 = Color3.fromRGB(39, 174, 119)
+   claimPlaytimeBtn.Text = "🎁 CLAIM PLAYTIME 1-10"
+   claimPlaytimeBtn.TextColor3 = WHITE_TEXT
+   claimPlaytimeBtn.Font = Enum.Font.GothamBold
+   claimPlaytimeBtn.TextSize = 11
+   claimPlaytimeBtn.AutoButtonColor = true
+   claimPlaytimeBtn.Active = true
+   Instance.new("UICorner", claimPlaytimeBtn).CornerRadius = UDim.new(0, 7)
+
+   local claimPlaytimeBusy = false
+
    local monsterCountLabel = Instance.new("TextLabel", monsterPanel)
    monsterCountLabel.Name = "MonsterFilterCount"
    monsterCountLabel.Size = UDim2.new(1, -18, 0, 14)
-   monsterCountLabel.Position = UDim2.fromOffset(9, 102)
+   monsterCountLabel.Position = UDim2.fromOffset(9, 128)
    monsterCountLabel.BackgroundTransparency = 1
    monsterCountLabel.RichText = true
    monsterCountLabel.Text = "👾 Monster: 0  |  🧑 NPC: 0"
@@ -118,7 +133,8 @@ local okMonster, errMonster = pcall(function()
    local monsterInfo = Instance.new("TextLabel", monsterPanel)
    monsterInfo.Name = "MonsterTargetInfo"
    monsterInfo.Size = UDim2.new(1, -18, 0, 28)
-   monsterInfo.Position = UDim2.fromOffset(9, 119)
+   monsterInfo.Position = UDim2.fromOffset(9, 145)
+   monsterInfo.Size = UDim2.new(1, -18, 0, 30)
    monsterInfo.BackgroundTransparency = 1
    monsterInfo.Text = "ปิดอยู่ • กด MONSTER เพื่อเริ่มค้นหา"
    monsterInfo.TextColor3 = WHITE_TEXT
@@ -965,6 +981,53 @@ local okMonster, errMonster = pcall(function()
        monsterDodgeOn = not monsterDodgeOn
        monsterDodgeUntil = 0
        refreshMonsterFilterUI()
+   end))
+
+   -- Manual one-tap claim only. No timer or automatic background claim loop.
+   trackConnection(claimPlaytimeBtn.Activated:Connect(function()
+       if claimPlaytimeBusy then return end
+       claimPlaytimeBusy = true
+       claimPlaytimeBtn.Active = false
+       claimPlaytimeBtn.AutoButtonColor = false
+       claimPlaytimeBtn.Text = "CLAIMING 1-10..."
+
+       task.spawn(function()
+           local remote
+           local foundRemote = pcall(function()
+               local folder = ReplicatedStorage:WaitForChild("AntRemotes", 5)
+               remote = folder and folder:WaitForChild("ClaimPlaytime", 5)
+           end)
+
+           local claimed, dnaTotal, failed = 0, 0, 0
+           if foundRemote and remote and remote:IsA("RemoteFunction") then
+               for rewardIndex = 1, 10 do
+                   local callOK, result = pcall(function()
+                       return remote:InvokeServer(rewardIndex)
+                   end)
+                   if callOK and type(result) == "table" and result.ok == true then
+                       claimed = claimed + 1
+                       local reward = type(result.reward) == "table" and result.reward or {}
+                       dnaTotal = dnaTotal + (tonumber(reward.dna) or 0)
+                   else
+                       failed = failed + 1
+                   end
+                   task.wait(0.15)
+               end
+           else
+               failed = 10
+           end
+
+           claimPlaytimeBtn.Text = string.format("CLAIM DONE %d/10", claimed)
+           claimPlaytimeBtn.BackgroundColor3 = claimed > 0
+               and Color3.fromRGB(39, 174, 119) or Color3.fromRGB(190, 90, 65)
+           monsterInfo.Text = string.format(
+               "Claim สำเร็จ %d/10 | DNA +%d | ไม่สำเร็จ/ยังไม่พร้อม %d",
+               claimed, dnaTotal, failed
+           )
+           claimPlaytimeBtn.Active = true
+           claimPlaytimeBtn.AutoButtonColor = true
+           claimPlaytimeBusy = false
+       end)
    end))
    trackConnection(orbitBtn.Activated:Connect(function()
        monsterOrbitOn = not monsterOrbitOn
