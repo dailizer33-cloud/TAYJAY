@@ -3373,16 +3373,9 @@ local okMonster, errMonster = pcall(function()
        return tonumber(a)*(scale[sa] or 1), tonumber(b)*(scale[sb] or 1)
    end
    local function rbClick(btn)
-       if not (btn and btn.Parent and btn:IsA("GuiButton")) then return false end
-       local ok = pcall(function() btn:Activate() end)
-       if type(getconnections) == "function" then
-           for _, ev in ipairs({"Activated","MouseButton1Click"}) do
-               pcall(function()
-                   for _, c in ipairs(getconnections(btn[ev])) do if c.Enabled ~= false then pcall(function() c:Fire() end); ok = true end end
-               end)
-           end
-       end
-       return ok
+       if not (btn and btn.Parent and btn:IsA("GuiButton") and btn.Visible and btn.Active) then return false end
+       -- Fire one activation only; do not double-trigger through both Activate and signal connections.
+       return pcall(function() btn:Activate() end)
    end
    local function rbScan()
        local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
@@ -3455,8 +3448,8 @@ local okMonster, errMonster = pcall(function()
        while screenGui and screenGui.Parent do
            if rebirthEnabled then
                local now=os.clock()
-               if now-rbScanAt>=(now-rbTryAt<8 and 0.25 or 1.2) then rbScanAt=now; rbUI=rbScan() end
-               if now>=rbBlockedUntil and now-rbTryAt>=0.75 and rbReady(rbUI) then
+               if now-rbScanAt>=0.2 then rbScanAt=now; rbUI=rbScan() end
+               if now>=rbBlockedUntil and now-rbTryAt>=0.2 and rbReady(rbUI) then
                    local pick,stage=nil,1
                    if rbUI.confirm and rbUI.confirm.Parent and rbUI.confirm.Visible then pick,stage=rbUI.confirm,3
                    elseif rbUI.first and rbUI.first.Parent and rbUI.first.Visible then pick,stage=rbUI.first,2
@@ -3464,14 +3457,16 @@ local okMonster, errMonster = pcall(function()
                    if pick and rbClick(pick) then
                        rbTryAt=now; rebirthStatus="REBIRTH STEP "..stage.."/3"
                        if stage==3 then
-                           if now-rbBurstStart>40 then rbBurstStart,rbBurstCount=now,0 end
-                           rbBurstCount=rbBurstCount+1
-                           if rbBurstCount>6 then rbBurstCount=0; rbBlockedUntil=now+28 end
                            local before=rbCount()
                            if before~=nil then task.delay(3,function()
                                local after=rbCount()
-                               if after and after>before then rbFails=0; rebirthStatus="REBIRTH SUCCESS x"..tostring(after)
-                               else rbFails=rbFails+1; if rbFails>=3 then rbFails=0; rbBlockedUntil=os.clock()+55; rebirthStatus="REBIRTH FAILED • COOLDOWN" end end
+                               if after and after>before then
+                                   rbFails=0
+                                   rebirthStatus="REBIRTH SUCCESS x"..tostring(after)
+                               else
+                                   rbFails=rbFails+1
+                                   rebirthStatus="REBIRTH RETRY "..tostring(rbFails)
+                               end
                            end) end
                        end
                    end
@@ -4560,26 +4555,64 @@ local okRB, errRB = pcall(function()
    local VirtualInputManager = nil
    pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
 
-   local RAPID_CPS = 20
-   local RAPID_METHOD = "auto"               -- "auto" | "touch" | "signal"
+   local RAPID_CPS = 5
    local RAPID_TEXTS = { "bite" }
-   local STUN_WORDS = { "stun", "daze", "dizzy", "vulnerab", "exhaust", "weaken", "มึน", "สตัน" }
 
-   local signalBad, lastSignalFireAt = false, -10
    local rapidMode = 0
    local biteButton, lastFindAt = nil, -10
-   local lastMethod = "-"
+   local lastMethod = "SEARCHING"
    local clickAccumulator, visualAt = 0, 0
 
-   trackConnection(LogService.MessageOut:Connect(function(message)
-       if signalBad or os.clock() - lastSignalFireAt > 2 then return end
-       local msg = string.lower(tostring(message or ""))
-       if string.find(msg, "current thread cannot access", 1, true)
-           or (string.find(msg, "lacking capability", 1, true) and string.find(msg, "plugin", 1, true)) then
-           signalBad = true
-           lastMethod = "SIGNAL BLOCKED"
+   -- Dedicated visible RAPID control. Keep it independent from the Monster panel.
+   local button = Instance.new("TextButton")
+   button.Name = "TayJayRapidBiteBtn"
+   button.Size = UDim2.fromOffset(68, 68)
+   button.Position = UDim2.new(0, 174, 1, -112)
+   button.AnchorPoint = Vector2.new(0, 0)
+   button.BackgroundColor3 = GREEN.off
+   button.BorderSizePixel = 0
+   button.TextColor3 = WHITE_TEXT
+   button.TextStrokeColor3 = TEXT_OUTLINE
+   button.TextStrokeTransparency = 0.35
+   button.TextSize = 12
+   button.Font = Enum.Font.GothamBold
+   button.RichText = true
+   button.Active = true
+   button.AutoButtonColor = true
+   button.ZIndex = 30
+   button.Parent = screenGui
+   Instance.new("UICorner", button).CornerRadius = UDim.new(1, 0)
+   local rapidStroke = Instance.new("UIStroke", button)
+   rapidStroke.Color = GREEN.stroke
+   rapidStroke.Thickness = 2
+
+   local function findBiteButton()
+       local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+       if not playerGui then return nil end
+       for _, obj in ipairs(playerGui:GetDescendants()) do
+           if obj:IsA("GuiButton") and obj.Visible and obj.Active then
+               local text = string.lower(tostring(obj.Name or "") .. " " .. tostring(obj.Text or ""))
+               if string.find(text, "bite", 1, true) then return obj end
+           end
        end
-   end))
+       return nil
+   end
+
+   local function biteOnce()
+       local now = os.clock()
+       if not (biteButton and biteButton.Parent and biteButton.Visible and biteButton.Active)
+           or now - lastFindAt >= 0.5 then
+           biteButton = findBiteButton()
+           lastFindAt = now
+       end
+       if not biteButton then
+           lastMethod = "BITE NOT FOUND"
+           return false
+       end
+       local ok = pcall(function() biteButton:Activate() end)
+       lastMethod = ok and "BITE 5 CPS" or "BITE BLOCKED"
+       return ok
+   end
 
    local function updateVisual()
        local line3 = rapidMode == 1 and ("ON • " .. lastMethod) or "OFF"
@@ -4599,13 +4632,11 @@ local okRB, errRB = pcall(function()
        local now = os.clock()
        clickAccumulator = clickAccumulator + dt
        local interval = 1 / RAPID_CPS
-       local clicks = 0
-       while clickAccumulator >= interval and clicks < 3 do
+       if clickAccumulator >= interval then
            clickAccumulator = clickAccumulator - interval
-           clicks = clicks + 1
            biteOnce()
        end
-       if clickAccumulator > interval * 3 then clickAccumulator = 0 end
+       if clickAccumulator > interval * 2 then clickAccumulator = 0 end
        if now >= visualAt then visualAt = now + 0.25; updateVisual() end
    end))
 
