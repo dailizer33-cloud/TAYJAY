@@ -3779,7 +3779,8 @@ local okMonster, errMonster = pcall(function()
    local function isMonsterAlive(candidate)
        if not candidate or not candidate.model or not candidate.model.Parent then return false end
        if candidate.isBuff then
-           candidate.root=getBuffRoot(candidate.model)
+           local obj=candidate.model
+           candidate.root=obj:IsA("BasePart") and obj or (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart",true))
            return candidate.root~=nil and candidate.root.Parent~=nil
        end
        local model = candidate.model
