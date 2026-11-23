@@ -4059,8 +4059,9 @@ local okMonster, errMonster = pcall(function()
 
    local function refreshMonsterFilterUI()
        local isMonster = monsterFilterMode == "Monster"
-       local monsterActive = states.MonsterWarp and isMonster
-       local npcActive = states.MonsterWarp and not isMonster
+       -- ON/OFF reflects the running toggle only; changing the target filter must not clear MONSTER status.
+       local monsterActive = states.MonsterWarp == true
+       local npcActive = states.MonsterWarp == true and not isMonster
        monsterFilterBtn.Text = monsterActive and "👾 MONSTER: ON" or "👾 MONSTER"
        npcFilterBtn.Text = npcActive and "🧑 NPC: ON" or "🧑 NPC"
        monsterFilterBtn.BackgroundColor3 = monsterActive and GREEN.on or (isMonster and GREEN.off or Color3.fromRGB(65, 74, 63))
