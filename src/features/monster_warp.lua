@@ -683,6 +683,11 @@ local okMonster, errMonster = pcall(function()
            part.TopSurface = Enum.SurfaceType.Smooth
            part.BottomSurface = Enum.SurfaceType.Smooth
            part.Parent = workspace
+           if _tjMovementController
+               and not _tjMovementController:ClaimPlatform("MONSTER", part) then
+               part:Destroy()
+               return nil
+           end
            monsterPlatform = part
        end
        return monsterPlatform
@@ -700,11 +705,10 @@ local okMonster, errMonster = pcall(function()
    local function destroyMonsterPlatform()
        local old = monsterPlatform
        monsterPlatform = nil
-       if old then
-           task.delay(1, function()
-               if old.Parent then pcall(function() old:Destroy() end) end
-           end)
+       if _tjMovementController then
+           _tjMovementController:ReleasePlatform("MONSTER", old)
        end
+       if old and old.Parent then pcall(function() old:Destroy() end) end
    end
 
    local function getMonsterTracks(target)
@@ -787,6 +791,7 @@ local okMonster, errMonster = pcall(function()
    -- วางตัวละครบนเป้าหมาย "ทุกเฟรม" (เดิมทำทุก 0.12 วิ ระหว่างนั้นฟิสิกส์ดึง/ตก จึงสั่นเป็นจังหวะ)
    local function monsterGlueStep()
        if not states.MonsterWarp then return end
+       if not _tjMovementController or not _tjMovementController:IsOwner("MONSTER") then return end
        local target = monsterCurrent
        local targetRoot = target and target.root
        if not targetRoot or not targetRoot.Parent then return end
@@ -794,7 +799,7 @@ local okMonster, errMonster = pcall(function()
        if not character or character ~= monsterOwner then return end
        local myRoot = character:FindFirstChild("HumanoidRootPart")
        if not myRoot then return end
-       _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.3 -- บอก Fly ว่าตอนนี้ MONSTER คุมตำแหน่งอยู่
+       _tjMovementController:SetPositionLock("MONSTER", os.clock() + 0.3) -- บอก Fly ว่าตอนนี้ MONSTER คุมตำแหน่งอยู่
        local destination = targetRoot.CFrame * MONSTER_FOLLOW_OFFSET
        local orbiting = monsterOrbitOn and monsterFilterMode == "Monster"
        local nowClock = os.clock()
@@ -831,12 +836,21 @@ local okMonster, errMonster = pcall(function()
    end
 
    stopMonsterWarp = function(returnHome)
-       if not states.MonsterWarp and not monsterWarpWasOn then return end
+       if not states.MonsterWarp and not monsterWarpWasOn then
+           if _tjMovementController then
+               _tjMovementController:ClearPositionLock("MONSTER")
+               _tjMovementController:ReleasePlatform("MONSTER")
+               _tjMovementController:Release("MONSTER")
+           end
+           return
+       end
        states.MonsterWarp = false
        monsterCurrent = nil
        monsterLastRoot = nil
        monsterTrackedTarget = nil
-       _G.TAYJAY_POS_LOCK_UNTIL = nil
+       if _tjMovementController then
+           _tjMovementController:ClearPositionLock("MONSTER")
+       end
        monsterDodgeUntil, monsterWasDodging, monsterLastMyHealth = 0, false, nil
        monsterNoclipList = {}
        monsterRestoreCollision()
@@ -856,6 +870,9 @@ local okMonster, errMonster = pcall(function()
        monsterOwner = nil
        monsterWarpWasOn = false
        destroyMonsterPlatform()
+       if _tjMovementController then
+           _tjMovementController:Release("MONSTER")
+       end
        updateMonsterWarpVisual()
    end
 
@@ -871,20 +888,30 @@ local okMonster, errMonster = pcall(function()
        if monsterWarpStarting then return end
        monsterWarpStarting = true
 
-       -- Only one warp controller may move the local character at a time.
-       -- Allow the original player-WARP loop to return to its saved home before capturing this mode's home.
-       if states.KillAura then states.KillAura = false end
-       if states.DNWarp then syncButtonState("DNWarp", false) end
-       if states.AutoWarp then syncButtonState("AutoWarp", false) end
-       updateKaBtnDisplay()
-              setMonsterPanelStatus("👾 MONSTER WARP: SWITCHING", "กำลังหยุดระบบ WARP ผู้เล่นก่อนเริ่มค้นหา Monster...", 0, 1)
-       task.wait(0.20)
+       -- Atomically take movement ownership. The previous WARP owner must return
+       -- home, disconnect both physics writers and restore collision before this succeeds.
+       setMonsterPanelStatus("👾 MONSTER WARP: SWITCHING", "กำลังหยุด WARP และคืนค่า Collision ก่อนเริ่ม...", 0, 1)
+       local movementReady = _tjMovementController
+           and _tjMovementController:Acquire("MONSTER", function(previous)
+               if previous == "PLAYER_WARP" or previous == "CONFLICT"
+                   or states.KillAura or states.DNWarp or states.AutoWarp then
+                   if type(_G.TAYJAY_WARP_STOP_NOW) ~= "function" then return false end
+                   return _G.TAYJAY_WARP_STOP_NOW(true) == true
+               end
+               return true
+           end)
+       if not movementReady then
+           monsterWarpStarting = false
+           setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ยังยึดสิทธิ์ WARP อยู่ • ไม่เริ่มซ้อนระบบ", 0, 1)
+           return
+       end
 
        local character = LocalPlayer.Character
        local root = character and character:FindFirstChild("HumanoidRootPart")
        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
        if not character or not root or not humanoid or humanoid.Health <= 0 then
            monsterWarpStarting = false
+           if _tjMovementController then _tjMovementController:Release("MONSTER") end
            setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ไม่พบตัวละครที่พร้อมใช้งาน", 0, 1)
            return
        end
