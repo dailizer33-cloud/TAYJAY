@@ -205,56 +205,8 @@ local function distanceTo(player)
 end
 
 
--- WALK attack is routed through TargetService:BindAttack and the main AttackRemote.
+-- WALK uses the original nearest-living-player attack path from the supplied reference file.
 
--- Resolve only explicit attacker attribution exposed by the game.
--- Roblox has no universal damage-attacker API; unsupported games fall back to WALK's nearest target.
-local function resolveAttackerValue(value)
-    if not value then return nil end
-    if value:IsA("Player") and isPlayerValid(value) and value ~= LocalPlayer then
-        return value
-    end
-    if value:IsA("Model") then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character == value then return player end
-        end
-    end
-    return nil
-end
-
-function TargetService:FindRetaliationTarget()
-    local character = LocalPlayer.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return nil end
-
-    for _, tagName in ipairs({"creator", "Creator", "attacker", "Attacker", "LastAttacker"}) do
-        local tag = humanoid:FindFirstChild(tagName) or character:FindFirstChild(tagName)
-        if tag and tag:IsA("ObjectValue") then
-            local player = resolveAttackerValue(tag.Value)
-            if player then
-                local dist = distanceTo(player)
-                if dist then
-                    self.RetaliationTarget = player
-                    return player
-                end
-            end
-        end
-    end
-
-    for _, attributeName in ipairs({"LastAttackerUserId", "AttackerUserId", "creatorUserId"}) do
-        local userId = tonumber(humanoid:GetAttribute(attributeName) or character:GetAttribute(attributeName))
-        if userId then
-            local player = Players:GetPlayerByUserId(userId)
-            if player and player ~= LocalPlayer and distanceTo(player) then
-                self.RetaliationTarget = player
-                return player
-            end
-        end
-    end
-
-    self.RetaliationTarget = nil
-    return nil
-end
 function TargetService:FindNearestFromPosition(origin, maxDist, skipBlacklist)
     if typeof(origin) ~= "Vector3" then return nil end
     local bestPlayer, bestChar, bestDist = nil, nil, tonumber(maxDist) or math.huge
@@ -403,36 +355,12 @@ function TargetService:EnsureCombatOwner()
 
 
         if statesRef.NormalKillAura then
-            -- Keep WALK's primary target continuously bound to the nearest living,
-            -- non-blacklisted player. Death/removal naturally selects the next nearest.
-            local nearestPlayer, nearestChar = TargetService:FindNearest(math.huge, true)
-            TargetService.WalkTarget = nearestPlayer
-
-            -- Keep retaliation separate from the nearest-player target.
-            -- Share the attack cooldown by alternating lanes when the attacker
-            -- differs from the nearest target, so neither role replaces the other.
-            local attacker = TargetService:FindRetaliationTarget()
-            local attackerChar
-            if attacker then
-                local attackerDistance
-                attackerDistance, attackerChar = distanceTo(attacker)
-            end
-            if attackerChar and nearestChar and attacker ~= nearestPlayer then
-                local lane = TargetService._combatLane or "walk"
-                local chosenChar = lane == "retaliation" and attackerChar or nearestChar
-                local ok, attacked = pcall(attackFn, chosenChar)
-                if ok and attacked == true then
-                    TargetService._combatLane = lane == "retaliation" and "walk" or "retaliation"
-                end
-            elseif attackerChar then
-                pcall(attackFn, attackerChar)
-            elseif nearestChar then
+            -- Match the supplied WALK reference: nearest living player within 25 studs.
+            -- Recompute every Heartbeat so a dead/removed target is replaced immediately.
+            local _, nearestChar = TargetService:FindNearest(25, false)
+            if nearestChar then
                 pcall(attackFn, nearestChar)
             end
-        else
-            TargetService.WalkTarget = nil
-            TargetService.RetaliationTarget = nil
-            TargetService._combatLane = "walk"
         end
     end)
     owner:Own(conn)
