@@ -3958,22 +3958,44 @@ local okMonster, errMonster = pcall(function()
        return alive and candidate.root ~= nil
    end
 
-   local function nearestMonster(origin, ignoreModel)
-       local best, bestDistance = nil, math.huge
-       for _, candidate in ipairs(monsterCandidates) do
-           if candidate.model ~= ignoreModel and isMonsterAlive(candidate) then
-               local distance = (candidate.root.Position - origin).Magnitude
-               if distance < bestDistance then
-                   best = candidate
-                   bestDistance = distance
-               end
-           end
-       end
-       return best
-   end
+    -- Priority: Boss > Event > Ladybug > Aphid > Orb collection > other monsters.
+    -- Orb remains a collection phase (not a Monster model candidate).
+    local function getMonsterPriority(candidate)
+        if not candidate or not candidate.model then return 99 end
+        local model = candidate.model
+        local name = string.lower(tostring(model.Name or ""))
+        if string.find(name, "boss", 1, true)
+            or currentGuiNames[normalizeKey(model.Name)] ~= nil then
+            return 1
+        end
+        local node = model
+        while node and node ~= workspace and node ~= game do
+            local nodeName = string.lower(tostring(node.Name or ""))
+            if string.find(nodeName, "event", 1, true) then return 2 end
+            node = node.Parent
+        end
+        if string.find(name, "ladybug", 1, true) then return 3 end
+        if string.find(name, "aphid", 1, true) then return 4 end
+        return 6
+    end
 
-   -- ค้นหาเฉพาะ ACRON SUGAR ORB ขนาดใหญ่ ไม่กรองด้วยระยะทาง
-   local function findLargeAcronSugarOrb()
+    local function nearestMonster(origin, ignoreModel)
+        local best, bestPriority, bestDistance = nil, math.huge, math.huge
+        for _, candidate in ipairs(monsterCandidates) do
+            if candidate.model ~= ignoreModel and isMonsterAlive(candidate) then
+                local priority = getMonsterPriority(candidate)
+                local distance = (candidate.root.Position - origin).Magnitude
+                if priority < bestPriority or (priority == bestPriority and distance < bestDistance) then
+                    best = candidate
+                    bestPriority = priority
+                    bestDistance = distance
+                end
+            end
+        end
+        return best
+    end
+
+       local function findLargeAcronSugarOrb()
        local descendants = workspace:GetDescendants()
        for _, obj in ipairs(descendants) do
            if obj:IsA("Model") or obj:IsA("BasePart") then
@@ -4516,6 +4538,17 @@ local okMonster, errMonster = pcall(function()
                            target = nearestMonster(origin, nil)
                            monsterCurrent = target
                            monsterNextSelectAt = now + 0.7
+                       end
+
+                       -- Recheck priority while locked: switch only when a higher-priority class appears.
+                       if target and isMonsterAlive(target) then
+                           local origin = monsterHome and monsterHome.Position or myRoot.Position
+                           local preferred = nearestMonster(origin, nil)
+                           if preferred and getMonsterPriority(preferred) < getMonsterPriority(target) then
+                               target = preferred
+                               monsterCurrent = preferred
+                               monsterLastRoot = nil
+                           end
                        end
 
                        if target and target ~= monsterTrackedTarget then
