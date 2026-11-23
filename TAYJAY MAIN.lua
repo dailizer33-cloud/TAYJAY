@@ -1089,6 +1089,55 @@ local function distanceTo(player)
     return (myRoot.Position - root.Position).Magnitude, char, hum
 end
 
+
+-- Resolve only explicit attacker attribution exposed by the game.
+-- Roblox has no universal damage-attacker API; unsupported games fall back to WALK's nearest target.
+local function resolveAttackerValue(value)
+    if not value then return nil end
+    if value:IsA("Player") and isPlayerValid(value) and value ~= LocalPlayer then
+        return value
+    end
+    if value:IsA("Model") then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character == value then return player end
+        end
+    end
+    return nil
+end
+
+function TargetService:FindRetaliationTarget()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return nil end
+
+    for _, tagName in ipairs({"creator", "Creator", "attacker", "Attacker", "LastAttacker"}) do
+        local tag = humanoid:FindFirstChild(tagName) or character:FindFirstChild(tagName)
+        if tag and tag:IsA("ObjectValue") then
+            local player = resolveAttackerValue(tag.Value)
+            if player then
+                local dist = distanceTo(player)
+                if dist then
+                    self.RetaliationTarget = player
+                    return player
+                end
+            end
+        end
+    end
+
+    for _, attributeName in ipairs({"LastAttackerUserId", "AttackerUserId", "creatorUserId"}) do
+        local userId = tonumber(humanoid:GetAttribute(attributeName) or character:GetAttribute(attributeName))
+        if userId then
+            local player = Players:GetPlayerByUserId(userId)
+            if player and player ~= LocalPlayer and distanceTo(player) then
+                self.RetaliationTarget = player
+                return player
+            end
+        end
+    end
+
+    self.RetaliationTarget = nil
+    return nil
+end
 function TargetService:FindNearestFromPosition(origin, maxDist, skipBlacklist)
     if typeof(origin) ~= "Vector3" then return nil end
     local bestPlayer, bestChar, bestDist = nil, nil, tonumber(maxDist) or math.huge
@@ -1236,10 +1285,24 @@ function TargetService:EnsureCombatOwner()
         end
 
         if statesRef.NormalKillAura then
-            local _, char = TargetService:FindNearest(math.huge, false)
-            if char then
-                pcall(attackFn, char)
+            -- Keep WALK's primary target continuously bound to the nearest living,
+            -- non-blacklisted player. Death/removal naturally selects the next nearest.
+            local nearestPlayer, nearestChar = TargetService:FindNearest(math.huge, true)
+            TargetService.WalkTarget = nearestPlayer
+
+            -- Retaliation is tracked separately and never overwrites WalkTarget.
+            local attacker = TargetService:FindRetaliationTarget()
+            if attacker then
+                local _, attackerChar = distanceTo(attacker)
+                if attackerChar then
+                    pcall(attackFn, attackerChar)
+                end
+            elseif nearestChar then
+                pcall(attackFn, nearestChar)
             end
+        else
+            TargetService.WalkTarget = nil
+            TargetService.RetaliationTarget = nil
         end
     end)
     owner:Own(conn)
@@ -2055,7 +2118,7 @@ pcall(function()
        end
    end
 end)
-local ATTACK_COOLDOWN = 1 / 40
+local ATTACK_COOLDOWN = 1 / 15
 local lastAttackAt = 0
 local attackCallBusy = false
 local function tryAttackTarget(targetCharacter)
@@ -3334,8 +3397,8 @@ local okMonster, errMonster = pcall(function()
    -- is NOT evidence that a Model is a monster: player avatars and map props
    -- may also contain Humanoids.
    local MONSTER_NAME_HINTS = {
-       "monster", "mob", "enemy", "boss", "creature", "ant",
-       "scorpion", "worm", "bug", "moth", "larva", "mantis",
+       "monster", "mob", "enemy", "boss", "creature", "ant", "beetle",
+       "spider", "scorpion", "worm", "bug", "moth", "larva", "mantis",
        "crab", "slime", "dragon", "zombie", "insect", "mothstand", "void moth",
        "voidmoth", "蝎",
        -- แมลงเพิ่มเติม (เกม Bug Evolution): เช่น GiantVoidMosquito, Hornet, Wasp
@@ -3398,8 +3461,8 @@ local okMonster, errMonster = pcall(function()
    local monsterNextSelectAt = 0
    local monsterWarpWasOn = false
    local monsterWarpStarting = false
-   local MONSTER_SCAN_MIN_INTERVAL = 0.64 -- 20% faster scan cycle
-   local MONSTER_FOLLOW_INTERVAL = 0.096 -- 20% faster target follow
+   local MONSTER_SCAN_MIN_INTERVAL = 0.8
+   local MONSTER_FOLLOW_INTERVAL = 0.12
    local MONSTER_PLATFORM_SIZE = Vector3.new(16, 1, 16)
    local MONSTER_FEET_DROP = 3
    local MONSTER_STUCK_SECONDS = 10   -- HP ไม่เปลี่ยนนานเท่านี้ = ตีไม่เข้า (ของตกแต่ง/อมตะ/เข้าไม่ถึง) → ข้าม
@@ -3778,11 +3841,6 @@ local okMonster, errMonster = pcall(function()
 
    local function isMonsterAlive(candidate)
        if not candidate or not candidate.model or not candidate.model.Parent then return false end
-       if candidate.isBuff then
-           local obj=candidate.model
-           candidate.root=obj:IsA("BasePart") and obj or (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart",true))
-           return candidate.root~=nil and candidate.root.Parent~=nil
-       end
        local model = candidate.model
        -- ต้องเป็นกลุ่มที่เลือกอยู่เท่านั้น (Monster หรือ NPC) ไม่ปนกัน
        if candidate.kind ~= monsterFilterMode then return false end
@@ -3818,68 +3876,6 @@ local okMonster, errMonster = pcall(function()
        end
        return best
    end
-   -- MAIN-only buff priority: use Monster Warp's existing movement ownership.
-   local MONSTER_BUFF_WORDS = {"buff","boost","shield","potion","powerup","power_up","power-up","aura","magnet","haste","rage","heal","invinc","regen","bless"}
-   local monsterBuffScanAt, monsterBuffCache = 0, {}
-   local function readMonsterExp()
-       local stats=LocalPlayer:FindFirstChild("leaderstats")
-       if stats then
-           for _,v in ipairs(stats:GetChildren()) do
-               local n=string.lower(v.Name)
-               if (v:IsA("IntValue") or v:IsA("NumberValue")) and (n:find("exp",1,true) or n:find("power",1,true)) then return tonumber(v.Value) end
-           end
-       end
-       local pg=LocalPlayer:FindFirstChildOfClass("PlayerGui")
-       if pg then
-           for _,o in ipairs(pg:GetDescendants()) do
-               if o:IsA("TextLabel") or o:IsA("TextButton") then
-                   local t=tostring(o.Text or ""); local u=string.upper(t)
-                   if (u:find("EXP",1,true) or u:find("POWER",1,true)) and t:find("/",1,true) then
-                       local left=t:match("([%d,%.]+)%s*/")
-                       if left then local value=tonumber((left:gsub(",",""))); if value then return value end end
-                   end
-               end
-           end
-       end
-       return nil
-   end
-   local function getBuffRoot(obj)
-       if not obj or not obj.Parent then return nil end
-       if obj:IsA("BasePart") then return obj end
-       if obj:IsA("Model") then return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart",true) end
-       return nil
-   end
-   local function scanMonsterBuffs()
-       local now=os.clock()
-       if now-monsterBuffScanAt<1 then return monsterBuffCache end
-       monsterBuffScanAt=now
-       local found={}
-       for _,obj in ipairs(workspace:GetDescendants()) do
-           if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent then
-               local name=string.lower(tostring(obj.Name or "")); local match=false
-               for _,word in ipairs(MONSTER_BUFF_WORDS) do if name:find(word,1,true) then match=true break end end
-               if match then
-                   local root=getBuffRoot(obj)
-                   if root and root.Parent and not obj:FindFirstAncestorOfClass("Tool") then
-                       found[#found+1]={model=obj,root=root,name=obj.Name,kind="Buff",isBuff=true}
-                   end
-               end
-           end
-       end
-       monsterBuffCache=found
-       return found
-   end
-   local function nearestMonsterBuff(origin)
-       local best,dist=nil,math.huge
-       for _,c in ipairs(scanMonsterBuffs()) do
-           if c.model.Parent and c.root.Parent then
-               local d=(c.root.Position-origin).Magnitude
-               if d<dist then best,dist=c,d end
-           end
-       end
-       return best
-   end
-
 
    local function setMonsterPanelStatus(titleText, infoText, hp, maxHp)
        if monsterFilterMode == "NPC" then
@@ -4243,232 +4239,6 @@ local okMonster, errMonster = pcall(function()
        monsterResumeGeneration = monsterResumeGeneration + 1
        toggleMonsterMode("NPC")
    end))
-   -- AUTO REBIRTH: ปุ่มแยกในตาราง MONSTER/NPC, ไม่ใช้ Movement
-   do
-   local okAR, errAR = pcall(function()
-       local GuiService = game:GetService("GuiService")
-       local VirtualInputManager
-       pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
-       local unpackArgs = table.unpack or unpack
-       local REBIRTH_INTERVAL, POST_RESPAWN_PAUSE, FIND_COOLDOWN = 3, 3, 5
-       local DEFAULT_ON, REMOTE_NAME, REMOTE_ARGS = false, nil, nil
-       local enabled, loopRunning, reportedMissing = false, false, false
-       local rebirthRemote, rebirthButton, btn = nil, nil, nil
-       local lastFindAt, lastCharAt, lastVisualKey = -100, -100, ""
-
-       local function hasWord(value)
-           local key = string.lower(tostring(value or ""))
-           return string.find(key, "rebirth", 1, true) ~= nil
-       end
-       local function guiShown(obj)
-           local ownerGui = obj:FindFirstAncestorWhichIsA("ScreenGui")
-           if not ownerGui or not ownerGui.Enabled or ownerGui == screenGui then return false end
-           local parent = obj
-           while parent and parent ~= ownerGui do
-               if parent:IsA("GuiObject") and not parent.Visible then return false end
-               parent = parent.Parent
-           end
-           return true
-       end
-       local function buttonUsable(obj)
-           return obj ~= nil and obj.Parent ~= nil and obj.AbsoluteSize.X > 0 and guiShown(obj)
-       end
-       local NOISE = { "data", "info", "update", "effect", "notif", "price", "cost", "check", "ui", "get", "list" }
-       local function scoreRemoteName(name)
-           local key = string.lower(name)
-           if REMOTE_NAME then return key == string.lower(REMOTE_NAME) and 10 or 0 end
-           if key == "rebirth" then return 3 end
-           if not hasWord(key) then return 0 end
-           for _, noise in ipairs(NOISE) do
-               if string.find(key, noise, 1, true) then return 1 end
-           end
-           return 2
-       end
-       local function findRemote()
-           local best, bestScore, ties = nil, 0, {}
-           for _, obj in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
-               if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                   local score = scoreRemoteName(obj.Name)
-                   if score > bestScore then best, bestScore, ties = obj, score, { obj }
-                   elseif score == bestScore and score > 0 then ties[#ties + 1] = obj end
-               end
-           end
-           if best and #ties > 1 then
-               local names = {}
-               for _, remote in ipairs(ties) do names[#names + 1] = remote:GetFullName() end
-               pcall(function() print("[TAYJAY REBIRTH] พบหลาย remote ที่ใกล้เคียง (ใช้ตัวแรก): " .. table.concat(names, " | ")) end)
-           end
-           return best
-       end
-       local function fireRemote(remote)
-           local args = REMOTE_ARGS or {}
-           if remote:IsA("RemoteEvent") then return pcall(function() remote:FireServer(unpackArgs(args)) end) end
-           task.spawn(function() pcall(function() remote:InvokeServer(unpackArgs(args)) end) end)
-           return true
-       end
-       local function findButton()
-           local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-           if not playerGui then return nil end
-           for _, obj in ipairs(playerGui:GetDescendants()) do
-               if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and #obj.Text > 0 and #obj.Text <= 30 then
-                   local value = obj.Text:gsub("<[^>]*>", "")
-                   if hasWord(value) and guiShown(obj) then
-                       local target = obj:IsA("GuiButton") and obj or obj:FindFirstAncestorWhichIsA("GuiButton")
-                       if target and target.AbsoluteSize.X > 0 then return target end
-                   end
-               end
-           end
-           return nil
-       end
-       local function activateButton(target)
-           local fired = false
-           if type(getconnections) == "function" then
-               for _, signalName in ipairs({ "Activated", "MouseButton1Click", "TouchTap" }) do
-                   local okSig, signal = pcall(function() return target[signalName] end)
-                   if okSig and signal then
-                       local okConn, connections = pcall(getconnections, signal)
-                       if okConn and type(connections) == "table" then
-                           for _, conn in ipairs(connections) do
-                               if pcall(function() conn:Fire() end) then fired = true end
-                           end
-                       end
-                   end
-               end
-           end
-           if fired then return true end
-           if not VirtualInputManager then return false end
-           local position, size = target.AbsolutePosition, target.AbsoluteSize
-           local x, y = position.X + size.X / 2, position.Y + size.Y / 2
-           local ownerGui = target:FindFirstAncestorWhichIsA("ScreenGui")
-           if ownerGui and not ownerGui.IgnoreGuiInset then
-               local okInset, inset = pcall(function() return GuiService:GetGuiInset() end)
-               if okInset and inset then x = x + inset.X; y = y + inset.Y end
-           end
-           return pcall(function()
-               if UserInputService.TouchEnabled then
-                   VirtualInputManager:SendTouchEvent(92, 0, x, y)
-                   task.wait(0.03)
-                   VirtualInputManager:SendTouchEvent(92, 2, x, y)
-               else
-                   VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
-                   task.wait(0.03)
-                   VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
-               end
-           end)
-       end
-       local function updateVisual()
-           if not btn or not btn.Parent then return end
-           local value, color
-           if not enabled then value, color = "♻ REBIRTH", Color3.fromRGB(65, 74, 63)
-           elseif rebirthRemote or buttonUsable(rebirthButton) then value, color = "♻ REBIRTH: ON", GREEN.on
-           else value, color = "♻ REBIRTH: ไม่พบ", GREEN.warning end
-           local key = value .. "|" .. tostring(color)
-           if key == lastVisualKey then return end
-           lastVisualKey = key
-           btn.Text, btn.BackgroundColor3 = value, color
-       end
-       local function attempt()
-           local now = os.clock()
-           local char = LocalPlayer.Character
-           local hum = char and char:FindFirstChildOfClass("Humanoid")
-           if not hum or hum.Health <= 0 or now - lastCharAt < POST_RESPAWN_PAUSE then return end
-           if not (rebirthRemote and rebirthRemote.Parent) then rebirthRemote = nil end
-           if not rebirthRemote and not buttonUsable(rebirthButton) and now - lastFindAt >= FIND_COOLDOWN then
-               lastFindAt = now
-               rebirthRemote = findRemote()
-               rebirthButton = nil
-               if not rebirthRemote then rebirthButton = findButton() end
-               if rebirthRemote then pcall(function() print("[TAYJAY REBIRTH] ใช้ remote: " .. rebirthRemote:GetFullName()) end)
-               elseif rebirthButton then pcall(function() print("[TAYJAY REBIRTH] ใช้ปุ่ม: " .. rebirthButton:GetFullName()) end)
-               elseif not reportedMissing then
-                   reportedMissing = true
-                   pcall(function() print("[TAYJAY REBIRTH] ไม่พบ remote หรือปุ่ม rebirth (ตั้ง REMOTE_NAME ถ้ารู้ชื่อ)") end)
-               end
-           end
-           if rebirthRemote then
-               if not fireRemote(rebirthRemote) then rebirthRemote = nil end
-           elseif buttonUsable(rebirthButton) then activateButton(rebirthButton) end
-       end
-       local function startLoop()
-           if loopRunning then return end
-           loopRunning = true
-           task.spawn(function()
-               while enabled and btn and btn.Parent and not _G.TAYJAY_STOPPED do
-                   pcall(attempt)
-                   updateVisual()
-                   task.wait(REBIRTH_INTERVAL)
-               end
-               loopRunning = false
-               if _G.TAYJAY_STOPPED or not (btn and btn.Parent) then enabled = false end
-               pcall(updateVisual)
-           end)
-       end
-       trackConnection(LocalPlayer.CharacterAdded:Connect(function() lastCharAt = os.clock() end))
-       local function findPanelRoot()
-           local root = monsterFilterBtn
-           while root and root.Parent and root.Parent ~= screenGui and not root.Parent:IsA("LayerCollector") do root = root.Parent end
-           if root and root:IsA("GuiObject") and root ~= monsterFilterBtn then return root end
-           return monsterFilterBtn and monsterFilterBtn.Parent
-       end
-       local function attachButton()
-           for _ = 1, 20 do
-               if monsterFilterBtn and monsterFilterBtn.Parent and monsterFilterBtn.AbsoluteSize.X > 0 then break end
-               task.wait(0.5)
-           end
-           local root = findPanelRoot()
-           if not root or not root:IsA("GuiObject") then
-               pcall(function() warn("[TAYJAY REBIRTH] ไม่พบตาราง MONSTER สำหรับวางปุ่ม") end)
-               return
-           end
-           local newBtn = monsterFilterBtn:Clone()
-           newBtn.Name, newBtn.Text = "TayJayAutoRebirthBtn", "♻ REBIRTH"
-           newBtn.BackgroundColor3 = Color3.fromRGB(65, 74, 63)
-           local layout = root:FindFirstChildOfClass("UIListLayout") or root:FindFirstChildOfClass("UIGridLayout")
-           local k = 1
-           local uiScale = root:FindFirstChildOfClass("UIScale")
-           if uiScale and uiScale.Scale > 0 then k = uiScale.Scale end
-           local h, gap = math.clamp(monsterFilterBtn.AbsoluteSize.Y / k, 26, 44), 6
-           if layout then
-               newBtn.LayoutOrder = 9999
-               newBtn.Parent = root
-           else
-               local panelTop, lowest = root.AbsolutePosition.Y, 0
-               for _, child in ipairs(root:GetChildren()) do
-                   if child:IsA("GuiObject") and child.Visible then
-                       local bottom = (child.AbsolutePosition.Y + child.AbsoluteSize.Y - panelTop) / k
-                       if bottom > lowest then lowest = bottom end
-                   end
-               end
-               local x0 = (monsterFilterBtn.AbsolutePosition.X - root.AbsolutePosition.X) / k
-               local width = root.AbsoluteSize.X / k - 2 * x0
-               if width < 40 then x0, width = 8, root.AbsoluteSize.X / k - 16 end
-               newBtn.AnchorPoint = Vector2.new(0, 0)
-               newBtn.Position, newBtn.Size = UDim2.fromOffset(x0, lowest + gap), UDim2.fromOffset(width, h)
-               newBtn.Parent = root
-           end
-           if root.AutomaticSize == Enum.AutomaticSize.None then
-               local size = root.Size
-               root.Size = UDim2.new(size.X.Scale, size.X.Offset, size.Y.Scale, size.Y.Offset + h + gap * 2)
-           end
-           btn = newBtn
-           trackConnection(btn.Activated:Connect(function()
-               enabled = not enabled
-               if enabled then reportedMissing = false; lastFindAt = -100; startLoop() end
-               updateVisual()
-           end))
-           if DEFAULT_ON then enabled = true; startLoop() end
-           updateVisual()
-       end
-       task.spawn(attachButton)
-   end)
-   if not okAR then
-       pcall(function() warn("[TAYJAY REBIRTH] initialization failed: " .. tostring(errAR)) end)
-       pcall(function()
-           if _G.TAYJAY_DIAGNOSTIC then _G.TAYJAY_DIAGNOSTIC("ERROR", "REBIRTH: " .. tostring(errAR)) end
-       end)
-   end
-   end
-
    trackConnection(dodgeBtn.Activated:Connect(function()
        monsterDodgeOn = not monsterDodgeOn
        monsterDodgeUntil = 0
@@ -4631,40 +4401,25 @@ local okMonster, errMonster = pcall(function()
                    if followAccumulator >= MONSTER_FOLLOW_INTERVAL then
                        followAccumulator = 0
                        local target = monsterCurrent
-                       local expValue = readMonsterExp()
-                       local buffPhase = expValue ~= nil and expValue > 10000000
-                       if buffPhase then
-                           local buff = nearestMonsterBuff(myRoot.Position)
-                           if buff then
-                               target = buff
-                               monsterCurrent = buff
-                           elseif target and target.isBuff then
-                               target = nil
+                       if target then
+                           local previousRoot = target.root
+                           if not isMonsterAlive(target) then
+                               local oldPosition = previousRoot and previousRoot.Parent and previousRoot.Position or myRoot.Position
+                               local oldModel = target.model
                                monsterCurrent = nil
-                           end
-                       end
-                       if not buffPhase or not target then
-                           if target and target.isBuff then target=nil; monsterCurrent=nil end
-                           if target then
-                               local previousRoot = target.root
-                               if not isMonsterAlive(target) then
-                                   local oldPosition = previousRoot and previousRoot.Parent and previousRoot.Position or myRoot.Position
-                                   local oldModel = target.model
-                                   monsterCurrent = nil
-                                   monsterLastRoot = nil
-                                   target = nil
-                                   if now >= monsterNextSelectAt then
-                                       target = nearestMonster(oldPosition, oldModel)
-                                       monsterCurrent = target
-                                       monsterNextSelectAt = now + 0.55
-                                   end
+                               monsterLastRoot = nil
+                               target = nil
+                               if now >= monsterNextSelectAt then
+                                   target = nearestMonster(oldPosition, oldModel)
+                                   monsterCurrent = target
+                                   monsterNextSelectAt = now + 0.55
                                end
-                           elseif now >= monsterNextSelectAt then
-                               local origin = monsterHome and monsterHome.Position or myRoot.Position
-                               target = nearestMonster(origin, nil)
-                               monsterCurrent = target
-                               monsterNextSelectAt = now + 0.7
                            end
+                       elseif now >= monsterNextSelectAt then
+                           local origin = monsterHome and monsterHome.Position or myRoot.Position
+                           target = nearestMonster(origin, nil)
+                           monsterCurrent = target
+                           monsterNextSelectAt = now + 0.7
                        end
 
                        if target and target ~= monsterTrackedTarget then
@@ -4674,7 +4429,7 @@ local okMonster, errMonster = pcall(function()
                        end
 
                        local alive = target ~= nil and isMonsterAlive(target)
-                       if alive and not target.isBuff and not target.allowNoHealth then
+                       if alive and not target.allowNoHealth then
                            -- เป้าที่ "ตีได้จริง" ต้องมี HP เปลี่ยน ถ้านิ่งเกินกำหนด = ของตกแต่ง/อมตะ/เข้าไม่ถึง → ข้าม
                            local hpNow = target.health
                            if target.lastHp == nil or math.abs(hpNow - target.lastHp) > 0.01 then
@@ -4692,16 +4447,7 @@ local okMonster, errMonster = pcall(function()
                            end
                        end
 
-                       if alive and target.isBuff then
-                           local part=target.root
-                           if part and part.Parent then
-                               if type(firetouchinterest)=="function" then
-                                   pcall(firetouchinterest,myRoot,part,0)
-                                   pcall(firetouchinterest,myRoot,part,1)
-                               end
-                               setMonsterPanelStatus("⭐ BUFF PRIORITY","กำลังเก็บบัพ: "..tostring(target.name),0,1)
-                           end
-                       elseif alive then
+                       if alive then
                            local hp, maxHp = target.health, target.maxHealth
                            if monsterHiddenCharacter ~= character then
                                if monsterHiddenCharacter then setInvisibility(monsterHiddenCharacter, false) end
