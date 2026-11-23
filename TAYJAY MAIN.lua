@@ -3384,14 +3384,10 @@ local okMonster, errMonster = pcall(function()
    local monsterWarpStarting = false
    local MONSTER_SCAN_MIN_INTERVAL = 0.8
    local MONSTER_FOLLOW_INTERVAL = 0.12
-   -- Go straight to the monster's root instead of stopping several studs away.
-   local MONSTER_FOLLOW_OFFSET = CFrame.new(0, 0, 0)
    local MONSTER_PLATFORM_SIZE = Vector3.new(16, 1, 16)
    local MONSTER_FEET_DROP = 3
-   local MONSTER_SEARCH_RANGE = math.huge
    local MONSTER_STUCK_SECONDS = 10   -- HP ไม่เปลี่ยนนานเท่านี้ = ตีไม่เข้า (ของตกแต่ง/อมตะ/เข้าไม่ถึง) → ข้าม
    local MONSTER_BLOCK_SECONDS = 60   -- พักเป้าที่ถูกข้ามไว้นานเท่านี้
-   local MONSTER_SNAP_DISTANCE = 0.2  -- ขยับตัวละครเฉพาะเมื่อห่างเกินระยะนี้ (กันสั่นจากการแก้ตำแหน่งจิ๋ว ๆ)
    -- วงโคจรรอบมอนสเตอร์ (เปิด/ปิดด้วยปุ่ม ORBIT): ขยับตลอด เป้าหมายจึงเล็ง/ตีโดนยาก
    local MONSTER_ORBIT_RADIUS = 4.5   -- รัศมีวง (studs) ควรอยู่ในระยะโจมตีของเกม
    local MONSTER_ORBIT_SPEED = 2.6    -- ความเร็วเชิงมุม (rad/วินาที)
@@ -3789,7 +3785,7 @@ local okMonster, errMonster = pcall(function()
    end
 
    local function nearestMonster(origin, ignoreModel)
-       local best, bestDistance = nil, MONSTER_SEARCH_RANGE
+       local best, bestDistance = nil, math.huge
        for _, candidate in ipairs(monsterCandidates) do
            if candidate.model ~= ignoreModel and isMonsterAlive(candidate) then
                local distance = (candidate.root.Position - origin).Magnitude
@@ -3981,7 +3977,7 @@ local okMonster, errMonster = pcall(function()
        local myRoot = character:FindFirstChild("HumanoidRootPart")
        if not myRoot then return end
        _tjMovementController:SetPositionLock("MONSTER", os.clock() + 0.3) -- บอก Fly ว่าตอนนี้ MONSTER คุมตำแหน่งอยู่
-       local destination = targetRoot.CFrame * MONSTER_FOLLOW_OFFSET
+       local destination = targetRoot.CFrame
        local orbiting = monsterOrbitOn and monsterFilterMode == "Monster"
        local nowClock = os.clock()
        if monsterLastRoot ~= targetRoot then monsterEnterAt = nowClock end -- เป้าใหม่: เข้าสิงร่างทันที
@@ -4009,11 +4005,10 @@ local okMonster, errMonster = pcall(function()
        ResourceManager:RecordWrite("MonsterWarp", "Velocity")
         myRoot.AssemblyLinearVelocity = Vector3.zero
        myRoot.AssemblyAngularVelocity = Vector3.zero
-       if orbiting or monsterLastRoot ~= targetRoot or (myRoot.Position - destination.Position).Magnitude > MONSTER_SNAP_DISTANCE then
-           ResourceManager:RecordWrite("MonsterWarp", "Position")
-            myRoot.CFrame = destination
-           monsterLastRoot = targetRoot
-       end
+         -- Follow the selected table target directly; no separate approach-distance threshold.
+       ResourceManager:RecordWrite("MonsterWarp", "Position")
+       myRoot.CFrame = destination
+       monsterLastRoot = targetRoot
    end
 
    stopMonsterWarp = function(returnHome)
