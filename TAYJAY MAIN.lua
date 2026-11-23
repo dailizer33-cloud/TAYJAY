@@ -723,6 +723,151 @@ if State.isBusy == nil then State.isBusy = Main.isBusy == true end
 Main.config, Main.states = config, states
 Main.originalWalkSpeed, Main.isBusy = State.originalWalkSpeed, State.isBusy
 TJ.Main = Main
+-- TAYJAY MOVEMENT CONTROLLER V1
+-- Grants one movement writer at a time and tracks the owner of shared locks/platforms.
+local _tjMovementEnv = _G
+pcall(function()
+    if type(getgenv) == "function" then
+        local shared = getgenv()
+        if type(shared) == "table" then _tjMovementEnv = shared end
+    end
+end)
+local _tjMovementTJ = _tjMovementEnv.TJ or TJ
+if type(_tjMovementTJ) ~= "table" then _tjMovementTJ = {}; _tjMovementEnv.TJ = _tjMovementTJ end
+local _tjMovementMain = _tjMovementTJ.Main
+if type(_tjMovementMain) ~= "table" then _tjMovementMain = {}; _tjMovementTJ.Main = _tjMovementMain end
+local _tjMovementController = _tjMovementMain.MovementController
+if type(_tjMovementController) ~= "table" then
+    _tjMovementController = {}
+    _tjMovementMain.MovementController = _tjMovementController
+end
+_tjMovementController.Generation = tonumber(_tjMovementController.Generation) or 0
+_tjMovementController.Transition = false
+_tjMovementController.PlatformOwner = _tjMovementController.PlatformOwner
+_tjMovementController.Platform = _tjMovementController.Platform
+
+local function _tjInferMovementOwner()
+    local monsterOn = states and states.MonsterWarp == true
+    local playerOn = states and (states.KillAura == true or states.DNWarp == true or states.AutoWarp == true)
+    if monsterOn and playerOn then return "CONFLICT" end
+    if monsterOn then return "MONSTER" end
+    if playerOn then return "PLAYER_WARP" end
+    return nil
+end
+
+function _tjMovementController:Acquire(nextOwner, stopPrevious)
+    if nextOwner ~= "PLAYER_WARP" and nextOwner ~= "MONSTER" then
+        return false, "invalid movement owner"
+    end
+    if self.Transition then return false, "movement transition in progress" end
+
+    local observed = _tjInferMovementOwner()
+    local current = observed or self.Owner
+    if current == nextOwner and current ~= "CONFLICT" then
+        self.Owner = nextOwner
+        return true
+    end
+
+    self.Transition = true
+    if current and current ~= nextOwner then
+        if type(stopPrevious) ~= "function" then
+            self.Transition = false
+            return false, "missing previous-owner cleanup"
+        end
+        local ok, stopped = pcall(stopPrevious, current)
+        if not ok or stopped ~= true then
+            self.Transition = false
+            return false, "previous movement owner did not confirm cleanup"
+        end
+    end
+
+    if self.PlatformOwner and self.PlatformOwner ~= nextOwner then
+        local oldPlatform = self.Platform
+        if oldPlatform and oldPlatform.Parent then
+            self.Transition = false
+            return false, "previous movement platform is still active"
+        end
+        self.PlatformOwner, self.Platform = nil, nil
+        _G.TAYJAY_PLATFORM_OWNER = nil
+    end
+
+    if self.PositionLockOwner and self.PositionLockOwner ~= nextOwner then
+        self:ClearPositionLock(self.PositionLockOwner)
+    end
+
+    self.Owner = nextOwner
+    self.Generation = self.Generation + 1
+    self.ActiveSince = os.clock()
+    self.Transition = false
+    return true
+end
+
+function _tjMovementController:Release(owner)
+    if self.Transition then return false end
+    if owner and self.Owner ~= owner then return false end
+    self.Owner = nil
+    self.ActiveSince = nil
+    return true
+end
+
+function _tjMovementController:IsOwner(owner)
+    return not self.Transition and self.Owner == owner
+end
+
+function _tjMovementController:SetPositionLock(owner, untilTime)
+    if self.Transition or self.Owner ~= owner then return false end
+    self.PositionLockOwner = owner
+    _G.TAYJAY_POS_LOCK_OWNER = owner
+    _G.TAYJAY_POS_LOCK_UNTIL = tonumber(untilTime) or (os.clock() + 0.3)
+    return true
+end
+
+function _tjMovementController:ClearPositionLock(owner)
+    if not owner then return false end
+    if self.PositionLockOwner ~= owner and _G.TAYJAY_POS_LOCK_OWNER ~= owner then
+        return false
+    end
+    self.PositionLockOwner = nil
+    if _G.TAYJAY_POS_LOCK_OWNER == owner then
+        _G.TAYJAY_POS_LOCK_OWNER = nil
+        _G.TAYJAY_POS_LOCK_UNTIL = nil
+    end
+    return true
+end
+
+function _tjMovementController:ClaimPlatform(owner, platform)
+    if self.Transition or self.Owner ~= owner or not platform then return false end
+    if self.PlatformOwner and self.PlatformOwner ~= owner then
+        local previous = self.Platform
+        if previous and previous.Parent then return false end
+    end
+    self.PlatformOwner = owner
+    self.Platform = platform
+    _G.TAYJAY_PLATFORM_OWNER = owner
+    return true
+end
+
+function _tjMovementController:ReleasePlatform(owner, platform)
+    if self.PlatformOwner ~= owner then return false end
+    if platform and self.Platform and self.Platform ~= platform then return false end
+    self.PlatformOwner, self.Platform = nil, nil
+    if _G.TAYJAY_PLATFORM_OWNER == owner then _G.TAYJAY_PLATFORM_OWNER = nil end
+    return true
+end
+
+function _tjMovementController:ForceClear(reason)
+    self.Owner = nil
+    self.Transition = false
+    self.ActiveSince = nil
+    self.PositionLockOwner = nil
+    self.PlatformOwner = nil
+    self.Platform = nil
+    _G.TAYJAY_POS_LOCK_OWNER = nil
+    _G.TAYJAY_POS_LOCK_UNTIL = nil
+    _G.TAYJAY_PLATFORM_OWNER = nil
+    self.LastStopReason = tostring(reason or "RESET")
+    return true
+end
 -- =========================================================
 -- TAYJAY TARGET SERVICE V2
 -- Single source of truth for combat / warp targeting.
@@ -2361,13 +2506,29 @@ local function updateKaBtnDisplay()
 end
 updateKaBtnDisplay()
 
+local _tjStopWarpPhysicsConnections
+
 do
-   -- WARP (ปุ่มวงกลม): สุ่มหาเป้าหมายในระยะ 200 studs ไม่ต้องเลือกในสมุดสั่งตาย
+   -- WARP (ปุ่มวงกลม): ขอสิทธิ์การเคลื่อนที่ก่อนเริ่มทุกครั้ง
+   local function claimPlayerMovement()
+       if type(_tjMovementController) ~= "table" then return false end
+       return _tjMovementController:Acquire("PLAYER_WARP", function(previous)
+           if previous == "MONSTER" or previous == "CONFLICT" or states.MonsterWarp then
+               if type(stopMonsterWarp) == "function" then
+                   stopMonsterWarp(true)
+               elseif type(_G.TAYJAY_MONSTER_STOP) == "function" then
+                   _G.TAYJAY_MONSTER_STOP()
+               else
+                   return false
+               end
+           end
+           return states.MonsterWarp ~= true
+       end)
+   end
+
    trackConnection(kaCircleBtn.Activated:Connect(function()
        local turningOn = not states.KillAura
-       if turningOn and stopMonsterWarp and states.MonsterWarp then
-           stopMonsterWarp(true)
-       end
+       if turningOn and not claimPlayerMovement() then return end
        states.KillAura = not states.KillAura
        if states.KillAura then
            states.NormalKillAura = false
@@ -2377,6 +2538,10 @@ do
             selectedDeathNoteTarget = nil
             syncButtonState("DNWarp", false)
             -- อนุญาตคู่ Fly + WARP: ไม่ปิด Fly แล้ว (ตัวล็อกตำแหน่งกลางกันแย่งกันขยับ ดู TAYJAY_POS_LOCK_UNTIL)
+       end
+       if not states.KillAura and not states.DNWarp and not states.AutoWarp
+           and _tjMovementController then
+           _tjMovementController:Release("PLAYER_WARP")
        end
        updateKaBtnDisplay()
    end))
@@ -2410,9 +2575,14 @@ do
    end
    registerUiSync("DNWarp", function(isOn)
        if isOn then
-           if stopMonsterWarp and states.MonsterWarp then stopMonsterWarp(true) end
+           if not claimPlayerMovement() then
+               states.DNWarp = false
+               return
+           end
            states.KillAura = false
            if flyNowe then stopFlying() end
+       elseif not states.KillAura and not states.AutoWarp and _tjMovementController then
+           _tjMovementController:Release("PLAYER_WARP")
        end
        if _G.TAYJAY_DN_REPAINT then _G.TAYJAY_DN_REPAINT() end
        updateKaBtnDisplay()
@@ -2421,8 +2591,13 @@ do
 -- เมนู 7 (วาร์ปออโต้) ทำงานกับเป้าหมายในสมุด จึงไม่ซ้อนกับ WARP สุ่ม
    registerUiSync("AutoWarp", function(isOn)
        if isOn then
-           if stopMonsterWarp and states.MonsterWarp then stopMonsterWarp(true) end
+           if not claimPlayerMovement() then
+               states.AutoWarp = false
+               return
+           end
            states.KillAura = false
+       elseif not states.KillAura and not states.DNWarp and _tjMovementController then
+           _tjMovementController:Release("PLAYER_WARP")
        end
        updateKaBtnDisplay()
    end)
@@ -2445,7 +2620,10 @@ warpRuntimeOwner = ResourceManager:CreateOwner("WarpRuntime", function(reason)
       end
    end)
    _G.TAYJAY_FOLLOW = nil
-   _G.TAYJAY_POS_LOCK_UNTIL = nil
+   if _tjMovementController then
+       _tjMovementController:ClearPositionLock("PLAYER_WARP")
+       _tjMovementController:ReleasePlatform("PLAYER_WARP")
+   end
 end)
 
 local function destroyCircleParts()
@@ -2583,8 +2761,11 @@ local function stopWarpPhysicsConnections()
    if warpSteppedConnection then warpSteppedConnection:Disconnect(); warpSteppedConnection = nil end
    restoreWarpCollision()
    _G.TAYJAY_FOLLOW = nil
-   _G.TAYJAY_POS_LOCK_UNTIL = nil
+   if _tjMovementController then
+       _tjMovementController:ClearPositionLock("PLAYER_WARP")
+   end
 end
+_tjStopWarpPhysicsConnections = stopWarpPhysicsConnections
 
 local function startWarpPhysicsConnections()
    if warpHeartbeatConnection and warpSteppedConnection then return end
@@ -2600,7 +2781,8 @@ local function startWarpPhysicsConnections()
            local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
            local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
            if not myRootNow or not tRoot or not tHum or tHum.Health <= 0 then return end
-           _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.3
+           if not _tjMovementController or not _tjMovementController:IsOwner("PLAYER_WARP") then return end
+           _tjMovementController:SetPositionLock("PLAYER_WARP", os.clock() + 0.3)
            ResourceManager:RecordWrite("ShadowHunter", "Velocity")
            myRootNow.AssemblyLinearVelocity = Vector3.zero
            myRootNow.AssemblyAngularVelocity = Vector3.zero
@@ -2612,7 +2794,10 @@ local function startWarpPhysicsConnections()
    if not warpSteppedConnection then
        warpSteppedConnection = RunService.Stepped:Connect(function()
            local lockUntil = _G.TAYJAY_POS_LOCK_UNTIL
-           local locked = (states.KillAura or states.DNWarp) and _G.TAYJAY_FOLLOW ~= nil
+           local locked = _tjMovementController
+               and _tjMovementController:IsOwner("PLAYER_WARP")
+               and (states.KillAura or states.DNWarp) and _G.TAYJAY_FOLLOW ~= nil
+               and _G.TAYJAY_POS_LOCK_OWNER == "PLAYER_WARP"
                and lockUntil ~= nil and os.clock() < lockUntil
            if not locked then restoreWarpCollision(); return end
            local char = LocalPlayer.Character
@@ -2681,6 +2866,11 @@ local shadowThread = task.spawn(function()
            part.TopSurface = Enum.SurfaceType.Smooth
            part.BottomSurface = Enum.SurfaceType.Smooth
            part.Parent = workspace
+           if _tjMovementController
+               and not _tjMovementController:ClaimPlatform("PLAYER_WARP", part) then
+               part:Destroy()
+               return nil
+           end
            warpPlatform = part
            if warpRuntimeOwner then
                warpRuntimeOwner:Own(part)
@@ -2689,12 +2879,18 @@ local shadowThread = task.spawn(function()
        return warpPlatform
    end
    local function placePlatformUnder(position)
-       ensurePlatform().CFrame = CFrame.new(position.X, position.Y - WARP_FEET_DROP - WARP_PLATFORM_SIZE.Y / 2, position.Z)
+       local platform = ensurePlatform()
+       if platform then
+           platform.CFrame = CFrame.new(position.X, position.Y - WARP_FEET_DROP - WARP_PLATFORM_SIZE.Y / 2, position.Z)
+       end
    end
    -- ลบพื้นกันตกทันทีเมื่อ WARP ปิดหรือเปลี่ยนตัวละคร
    local function destroyPlatform()
        local part = warpPlatform
        warpPlatform = nil
+       if _tjMovementController then
+           _tjMovementController:ReleasePlatform("PLAYER_WARP", part)
+       end
        if part and part.Parent then pcall(function() part:Destroy() end) end
    end
 
@@ -2707,9 +2903,36 @@ local shadowThread = task.spawn(function()
    local function goHome(myRoot)
        if warpHome and warpOwner and myRoot and warpOwner == LocalPlayer.Character then
            myRoot.Anchored = false
+           myRoot.AssemblyLinearVelocity = Vector3.zero
+           myRoot.AssemblyAngularVelocity = Vector3.zero
            myRoot.CFrame = warpHome
            placePlatformUnder(warpHome.Position)
        end
+   end
+
+   -- Synchronous stop handshake used when MONSTER takes movement ownership and by STOP ALL.
+   -- It disconnects WARP writers, restores collision, returns home and removes its platform
+   -- before another movement controller is allowed to start.
+   _G.TAYJAY_WARP_STOP_NOW = function(returnHome)
+       states.KillAura = false
+       states.DNWarp = false
+       states.AutoWarp = false
+       _G.TAYJAY_FOLLOW = nil
+       if _tjStopWarpPhysicsConnections then
+           _tjStopWarpPhysicsConnections()
+       end
+       local character = LocalPlayer.Character
+       local root = character and character:FindFirstChild("HumanoidRootPart")
+       if returnHome ~= false then goHome(root) end
+       warpHome, warpOwner, randomWarpTarget = nil, nil, nil
+       warpRestUntil = 0
+       warpWasOn = false
+       destroyPlatform()
+       stopShadowHunterVisuals()
+       if type(TargetService) == "table" and TargetService.Source == "warp" then
+           TargetService:Unlock("movement_owner_switch")
+       end
+       return true
    end
 
    while screenGui.Parent do
@@ -2762,6 +2985,10 @@ local shadowThread = task.spawn(function()
            -- เก็บ warpOwner ไว้ตรวจจับการเกิดใหม่ แล้วค่อยลบฐานเมื่อเปลี่ยนตัวละคร
            warpHome, randomWarpTarget = nil, nil
            warpWasOn = false
+       end
+       if not (states.KillAura or states.DNWarp or states.AutoWarp)
+           and _tjMovementController then
+           _tjMovementController:Release("PLAYER_WARP")
        end
 
        if not shadowEnabled then
@@ -3611,6 +3838,11 @@ local okMonster, errMonster = pcall(function()
            part.TopSurface = Enum.SurfaceType.Smooth
            part.BottomSurface = Enum.SurfaceType.Smooth
            part.Parent = workspace
+           if _tjMovementController
+               and not _tjMovementController:ClaimPlatform("MONSTER", part) then
+               part:Destroy()
+               return nil
+           end
            monsterPlatform = part
        end
        return monsterPlatform
@@ -3628,11 +3860,10 @@ local okMonster, errMonster = pcall(function()
    local function destroyMonsterPlatform()
        local old = monsterPlatform
        monsterPlatform = nil
-       if old then
-           task.delay(1, function()
-               if old.Parent then pcall(function() old:Destroy() end) end
-           end)
+       if _tjMovementController then
+           _tjMovementController:ReleasePlatform("MONSTER", old)
        end
+       if old and old.Parent then pcall(function() old:Destroy() end) end
    end
 
    local function getMonsterTracks(target)
@@ -3715,6 +3946,7 @@ local okMonster, errMonster = pcall(function()
    -- วางตัวละครบนเป้าหมาย "ทุกเฟรม" (เดิมทำทุก 0.12 วิ ระหว่างนั้นฟิสิกส์ดึง/ตก จึงสั่นเป็นจังหวะ)
    local function monsterGlueStep()
        if not states.MonsterWarp then return end
+       if not _tjMovementController or not _tjMovementController:IsOwner("MONSTER") then return end
        local target = monsterCurrent
        local targetRoot = target and target.root
        if not targetRoot or not targetRoot.Parent then return end
@@ -3722,7 +3954,7 @@ local okMonster, errMonster = pcall(function()
        if not character or character ~= monsterOwner then return end
        local myRoot = character:FindFirstChild("HumanoidRootPart")
        if not myRoot then return end
-       _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.3 -- บอก Fly ว่าตอนนี้ MONSTER คุมตำแหน่งอยู่
+       _tjMovementController:SetPositionLock("MONSTER", os.clock() + 0.3) -- บอก Fly ว่าตอนนี้ MONSTER คุมตำแหน่งอยู่
        local destination = targetRoot.CFrame * MONSTER_FOLLOW_OFFSET
        local orbiting = monsterOrbitOn and monsterFilterMode == "Monster"
        local nowClock = os.clock()
@@ -3759,12 +3991,21 @@ local okMonster, errMonster = pcall(function()
    end
 
    stopMonsterWarp = function(returnHome)
-       if not states.MonsterWarp and not monsterWarpWasOn then return end
+       if not states.MonsterWarp and not monsterWarpWasOn then
+           if _tjMovementController then
+               _tjMovementController:ClearPositionLock("MONSTER")
+               _tjMovementController:ReleasePlatform("MONSTER")
+               _tjMovementController:Release("MONSTER")
+           end
+           return
+       end
        states.MonsterWarp = false
        monsterCurrent = nil
        monsterLastRoot = nil
        monsterTrackedTarget = nil
-       _G.TAYJAY_POS_LOCK_UNTIL = nil
+       if _tjMovementController then
+           _tjMovementController:ClearPositionLock("MONSTER")
+       end
        monsterDodgeUntil, monsterWasDodging, monsterLastMyHealth = 0, false, nil
        monsterNoclipList = {}
        monsterRestoreCollision()
@@ -3784,6 +4025,9 @@ local okMonster, errMonster = pcall(function()
        monsterOwner = nil
        monsterWarpWasOn = false
        destroyMonsterPlatform()
+       if _tjMovementController then
+           _tjMovementController:Release("MONSTER")
+       end
        updateMonsterWarpVisual()
    end
 
@@ -3799,20 +4043,30 @@ local okMonster, errMonster = pcall(function()
        if monsterWarpStarting then return end
        monsterWarpStarting = true
 
-       -- Only one warp controller may move the local character at a time.
-       -- Allow the original player-WARP loop to return to its saved home before capturing this mode's home.
-       if states.KillAura then states.KillAura = false end
-       if states.DNWarp then syncButtonState("DNWarp", false) end
-       if states.AutoWarp then syncButtonState("AutoWarp", false) end
-       updateKaBtnDisplay()
-              setMonsterPanelStatus("👾 MONSTER WARP: SWITCHING", "กำลังหยุดระบบ WARP ผู้เล่นก่อนเริ่มค้นหา Monster...", 0, 1)
-       task.wait(0.20)
+       -- Atomically take movement ownership. The previous WARP owner must return
+       -- home, disconnect both physics writers and restore collision before this succeeds.
+       setMonsterPanelStatus("👾 MONSTER WARP: SWITCHING", "กำลังหยุด WARP และคืนค่า Collision ก่อนเริ่ม...", 0, 1)
+       local movementReady = _tjMovementController
+           and _tjMovementController:Acquire("MONSTER", function(previous)
+               if previous == "PLAYER_WARP" or previous == "CONFLICT"
+                   or states.KillAura or states.DNWarp or states.AutoWarp then
+                   if type(_G.TAYJAY_WARP_STOP_NOW) ~= "function" then return false end
+                   return _G.TAYJAY_WARP_STOP_NOW(true) == true
+               end
+               return true
+           end)
+       if not movementReady then
+           monsterWarpStarting = false
+           setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ยังยึดสิทธิ์ WARP อยู่ • ไม่เริ่มซ้อนระบบ", 0, 1)
+           return
+       end
 
        local character = LocalPlayer.Character
        local root = character and character:FindFirstChild("HumanoidRootPart")
        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
        if not character or not root or not humanoid or humanoid.Health <= 0 then
            monsterWarpStarting = false
+           if _tjMovementController then _tjMovementController:Release("MONSTER") end
            setMonsterPanelStatus("👾 MONSTER WARP: WAIT", "ไม่พบตัวละครที่พร้อมใช้งาน", 0, 1)
            return
        end
@@ -6475,7 +6729,16 @@ _G.TAYJAY_STOP_ALL = function()
     if _G.TAYJAY_STOPPED then return end
     _G.TAYJAY_STOPPED = true
 
-    -- Stop every registered Owner first (Fly, Warp, Global, etc.).
+    -- Release movement modes synchronously before their Owners cancel background loops.
+    -- This guarantees return-home, collision restoration and platform cleanup are completed first.
+    pcall(function()
+        if type(_G.TAYJAY_MONSTER_STOP) == "function" then _G.TAYJAY_MONSTER_STOP() end
+    end)
+    pcall(function()
+        if type(_G.TAYJAY_WARP_STOP_NOW) == "function" then _G.TAYJAY_WARP_STOP_NOW(true) end
+    end)
+
+    -- Stop every registered Owner only after movement cleanup has completed.
     pcall(function()
         if ResourceManager and ResourceManager.StopAllOwners then
             ResourceManager:StopAllOwners("STOP_ALL")
@@ -6532,7 +6795,12 @@ _G.TAYJAY_STOP_ALL = function()
     states.DNWarp = false
     pcall(updateKaBtnDisplay)
     _G.TAYJAY_POS_LOCK_UNTIL = nil
+    _G.TAYJAY_POS_LOCK_OWNER = nil
+    _G.TAYJAY_PLATFORM_OWNER = nil
     _G.TAYJAY_FOLLOW = nil
+    pcall(function()
+        if _tjMovementController then _tjMovementController:ForceClear("STOP_ALL") end
+    end)
     pcall(function() if _G.TAYJAY_MM2_STOP then _G.TAYJAY_MM2_STOP() end end)
     -- FPS restoration is owned by ResourceManager -> FPS Owner -> Cleanup Bags.
     pcall(function()
