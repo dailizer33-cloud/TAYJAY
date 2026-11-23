@@ -67,6 +67,7 @@ local okRun, errRun = xpcall(function()
 		ORB_BLACKLIST_NOEXP=28,     -- เก็บแล้วไม่ได้ EXP
 		ORB_BLACKLIST_EMERGENCY=22, -- เป้าใกล้จุดวาร์ปฉุกเฉิน
 		EXP_CHECK=false, EXP_FAIL_LIMIT=3,
+		EXP_MONSTER_THRESHOLD=10000000, -- เริ่มฟาร์มมอนเมื่อ EXP มากกว่า 10M
 		AUTO_NOCLIP=true, STATUS_POLL=0.25, RECALL_COOLDOWN=2.0,
 		EMERGENCY_WARP_PAUSE=7, -- พักเมื่อวาร์ปฉุกเฉินถี่
 		SAVE_FILE="TayJay_AntFarm_V26.json",
@@ -101,6 +102,7 @@ local okRun, errRun = xpcall(function()
 		followName=nil, followSince=0, relocateUntil=0,
 		bagMode=false, bagUntil=0, bagRatio=0, sellPoint=nil, sellScanAt=-1e9, sellClicks=0,
 		combatOn=false, autoAttackOn=false, selected="ITEM", collapsed=false,
+		expMonsterMode=false,
 	}
 
 	-- Namespaces to keep Luau register count low
@@ -2049,48 +2051,42 @@ local okRun, errRun = xpcall(function()
 		return ok
 	end
 	function F.nextEnabledTarget(rootPos)
-		-- ลำดับ: Event/Boss → Quest/Buff → สลับ Orb↔มอน (ไม่รอคิวว่าง)
-		local soft=CFG.ITEM_STREAK_SOFT or 8
-		local hard=CFG.ITEM_STREAK_HARD or 14
-		local streak=ST.itemStreak or 0
+		local exp=F.readCurrentExp()
+		local monsterPhase=exp and exp>(CFG.EXP_MONSTER_THRESHOLD or 10000000)
 
-		-- 1) Event / Boss ก่อนเสมอ (เมื่อเปิด MONSTER WARP)
-		if ST.combatOn and (CFG.EVENT_FIRST~=false or CFG.BOSS_FIRST~=false) then
+		-- EXP มากกว่า 10M: เปลี่ยนเป็นฟาร์มมอนตามลำดับความสำคัญเดิม
+		if monsterPhase then
+			if not ST.expMonsterMode then
+				ST.expMonsterMode=true
+				ST.itemStreak=0
+				if F.setCombat then F.setCombat(true) end
+			end
 			local m=F.monsterTarget(rootPos)
-			if m then
-				local g=RADAR.groups.MONSTER[RADAR.objectGroup[m] or ""]
-				local kind=F.isBossOrEvent(m,g)
-				if kind=="EVENT" or kind=="BOSS" then
-					ST.itemStreak=0
-					return "MONSTER",m
+			if m then return "MONSTER",m end
+			return nil,nil
+		end
+
+		-- EXP ยังไม่เกิน 10M หรืออ่านค่าไม่ได้: ฟาร์ม ITEM/ORB เท่านั้น
+		if ST.expMonsterMode then
+			ST.expMonsterMode=false
+			ST.itemStreak=0
+			if F.setCombat then F.setCombat(false) end
+		end
+
+		-- บังคับเปิดเป้าหมายเก็บทุกกลุ่มที่ตรวจพบ เพื่อไม่ให้ Orb บางชนิดถูกข้าม
+		for key,g in pairs(RADAR.groups.ITEM) do
+			for _,obj in ipairs(g.objects) do
+				if obj and obj.Parent then
+					RADAR.enabled[key]=true
+					break
 				end
 			end
 		end
 
-		-- 2) บังคับสลับไปมอนหลังเก็บ orb ครบ soft/hard (ไม่นั่งรอคิว)
-		if ST.combatOn and CFG.MONSTER_INTERLEAVE~=false and streak>=soft then
-			local m=F.monsterTarget(rootPos)
-			if m then
-				ST.itemStreak=0
-				return "MONSTER",m
-			end
-			-- ถ้า soft แล้วยังไม่มีมอน แต่ streak ยัง < hard ให้เก็บ orb ต่อได้
-			if streak>=hard then
-				-- hard แล้ว: ถ้ายังไม่มีมอน ค่อยกลับไป orb (ไม่ return nil)
-			end
-		end
-
-		-- 3) เก็บ orb / buff / quest item
 		local item=F.nearestEnabled("ITEM",rootPos)
 		if item then
-			ST.itemStreak=streak+1
+			ST.itemStreak=(ST.itemStreak or 0)+1
 			return "ITEM",item
-		end
-
-		-- 4) ไม่มี orb → ตีมอนทันที (ไม่รอ)
-		if ST.combatOn then
-			local m=F.monsterTarget(rootPos)
-			if m then ST.itemStreak=0; return "MONSTER",m end
 		end
 		return nil,nil
 	end
