@@ -192,6 +192,19 @@ function TargetService:Clear(reason)
     return self:Unlock(reason or "clear")
 end
 
+local function distanceTo(player)
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local char = player and player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not myRoot or not root or not hum or hum.Health <= 0 then
+        return nil
+    end
+    return (myRoot.Position - root.Position).Magnitude, char, hum
+end
+
+
 -- Resolve only explicit attacker attribution exposed by the game.
 -- Roblox has no universal damage-attacker API; unsupported games fall back to WALK's nearest target.
 local function resolveAttackerValue(value)
@@ -240,19 +253,6 @@ function TargetService:FindRetaliationTarget()
     self.RetaliationTarget = nil
     return nil
 end
-
-local function distanceTo(player)
-    local myChar = LocalPlayer.Character
-    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    local char = player and player.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if not myRoot or not root or not hum or hum.Health <= 0 then
-        return nil
-    end
-    return (myRoot.Position - root.Position).Magnitude, char, hum
-end
-
 function TargetService:FindNearestFromPosition(origin, maxDist, skipBlacklist)
     if typeof(origin) ~= "Vector3" then return nil end
     local bestPlayer, bestChar, bestDist = nil, nil, tonumber(maxDist) or math.huge
