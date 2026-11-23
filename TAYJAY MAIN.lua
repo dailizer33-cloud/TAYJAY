@@ -3194,7 +3194,7 @@ local okMonster, errMonster = pcall(function()
 
    local monsterPanel = Instance.new("Frame", screenGui)
    monsterPanel.Name = "TayJayMonsterTargetPanel"
-   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 180)
+   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 207)
    monsterPanel.Position = UI_LAYOUT.MonsterTargetPanel
    monsterPanel.BackgroundColor3 = GREEN.dark
    monsterPanel.BackgroundTransparency = 0.03
@@ -3299,10 +3299,24 @@ local okMonster, errMonster = pcall(function()
 
    local claimPlaytimeBusy = false
 
+   local rebirthToggle = Instance.new("TextButton", monsterPanel)
+   rebirthToggle.Name = "MonsterRebirthToggle"
+   rebirthToggle.Size = UDim2.new(1, -18, 0, 22)
+   rebirthToggle.Position = UDim2.fromOffset(9, 128)
+   rebirthToggle.BackgroundColor3 = Color3.fromRGB(39, 174, 119)
+   rebirthToggle.Text = "REBIRTH BACKGROUND: ON"
+   rebirthToggle.TextColor3 = WHITE_TEXT
+   rebirthToggle.Font = Enum.Font.GothamBold
+   rebirthToggle.TextSize = 11
+   rebirthToggle.Active = true
+   Instance.new("UICorner", rebirthToggle).CornerRadius = UDim.new(0, 7)
+   local rebirthEnabled = true
+   local rebirthStatus = "REBIRTH: SCANNING"
+
    local monsterCountLabel = Instance.new("TextLabel", monsterPanel)
    monsterCountLabel.Name = "MonsterFilterCount"
    monsterCountLabel.Size = UDim2.new(1, -18, 0, 14)
-   monsterCountLabel.Position = UDim2.fromOffset(9, 128)
+   monsterCountLabel.Position = UDim2.fromOffset(154, 128)
    monsterCountLabel.BackgroundTransparency = 1
    monsterCountLabel.RichText = true
    monsterCountLabel.Text = "👾 Monster: 0  |  🧑 NPC: 0"
@@ -3314,7 +3328,7 @@ local okMonster, errMonster = pcall(function()
    local monsterInfo = Instance.new("TextLabel", monsterPanel)
    monsterInfo.Name = "MonsterTargetInfo"
    monsterInfo.Size = UDim2.new(1, -18, 0, 28)
-   monsterInfo.Position = UDim2.fromOffset(9, 145)
+   monsterInfo.Position = UDim2.fromOffset(9, 169)
    monsterInfo.Size = UDim2.new(1, -18, 0, 30)
    monsterInfo.BackgroundTransparency = 1
    monsterInfo.Text = "ปิดอยู่ • กด MONSTER เพื่อเริ่มค้นหา"
@@ -3325,6 +3339,148 @@ local okMonster, errMonster = pcall(function()
    monsterInfo.TextSize = 11
    monsterInfo.TextWrapped = true
    monsterInfo.TextXAlignment = Enum.TextXAlignment.Left
+
+   -- Rebirth logic copied from Tayjay Farm.lua; original Farm file remains untouched.
+   -- Independent background worker: does not require MONSTER/WARP movement to be enabled.
+   local RB_WORDS = {"REBIRTH","REBORN","PRESTIGE","เกิดใหม่","รีเบิร์ธ","รีบิร์ธ"}
+   local RB_CONFIRM = {"TAP AGAIN","CONFIRM","YES","ตกลง","ยืนยัน","อีกครั้ง"}
+   local RB_NOT_READY = {"NOT READY","NEED MORE","REQUIRE","ไม่พร้อม","ยังไม่พอ"}
+   local rbScanAt, rbTryAt, rbOpenAt, rbBlockedUntil = 0, 0, 0, 0
+   local rbFails, rbBurstCount, rbBurstStart = 0, 0, 0
+   local rbUI = {}
+
+   local function rbHas(text, words)
+       text = string.upper(tostring(text or ""))
+       for _, word in ipairs(words) do if string.find(text, word, 1, true) then return true end end
+       return false
+   end
+   local function rbText(obj)
+       if not (obj and obj.Parent) then return "" end
+       local out = {string.upper(obj.Name or "")}
+       pcall(function()
+           if obj:IsA("TextLabel") or obj:IsA("TextButton") then table.insert(out, string.upper(obj.Text or "")) end
+           for _, d in ipairs(obj:GetDescendants()) do
+               if d:IsA("TextLabel") or d:IsA("TextButton") then table.insert(out, string.upper(d.Text or "")) end
+           end
+       end)
+       return table.concat(out, " ")
+   end
+   local function rbPair(value)
+       local raw = tostring(value or ""):upper():gsub(",", ""):gsub("%s+", "")
+       local a, sa, b, sb = raw:match("([%d%.]+)([KMBT]?)/([%d%.]+)([KMBT]?)")
+       if not a then return nil end
+       local scale = {K=1e3,M=1e6,B=1e9,T=1e12}
+       return tonumber(a)*(scale[sa] or 1), tonumber(b)*(scale[sb] or 1)
+   end
+   local function rbClick(btn)
+       if not (btn and btn.Parent and btn:IsA("GuiButton")) then return false end
+       local ok = pcall(function() btn:Activate() end)
+       if type(getconnections) == "function" then
+           for _, ev in ipairs({"Activated","MouseButton1Click"}) do
+               pcall(function()
+                   for _, c in ipairs(getconnections(btn[ev])) do if c.Enabled ~= false then pcall(function() c:Fire() end); ok = true end end
+               end)
+           end
+       end
+       return ok
+   end
+   local function rbScan()
+       local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+       local ui = {opener=nil,first=nil,confirm=nil,power=nil,top=nil,ready=nil,evolve=nil}
+       if not pg then return ui end
+       local cam = workspace.CurrentCamera
+       local vh = cam and cam.ViewportSize.Y or 1000
+       for _, o in ipairs(pg:GetDescendants()) do
+           if o:IsA("GuiObject") and o.Visible then
+               local visible, p = true, o.Parent
+               while p and p ~= pg do
+                   if p:IsA("GuiObject") and not p.Visible then visible=false break end
+                   if p:IsA("LayerCollector") and not p.Enabled then visible=false break end
+                   p=p.Parent
+               end
+               if visible then
+                   if o:IsA("TextLabel") or o:IsA("TextButton") then
+                       local txt = tostring(o.Text or "")
+                       if string.find(txt,"/",1,true) then
+                           local cur,req = rbPair(txt)
+                           if cur and req and req>0 and (string.find(string.upper(txt),"POWER",1,true) or not ui.power) then ui.power=o end
+                           if not ui.top and o.AbsolutePosition.Y<vh*0.22 then ui.top=o end
+                       end
+                       if not ui.ready and rbHas(txt,{"READY TO REBIRTH","READY","พร้อม"}) then ui.ready=o end
+                   end
+                   if o:IsA("GuiButton") then
+                       local all,name=rbText(o),string.lower(o.Name or "")
+                       if not ui.evolve and (string.find(all,"EVOLVE",1,true) or string.find(all,"HATCH",1,true)) then ui.evolve=o end
+                       if rbHas(all,RB_CONFIRM) then ui.confirm=ui.confirm or o
+                       elseif rbHas(all,RB_WORDS) or string.find(name,"rebirth",1,true) or string.find(name,"prestige",1,true) then
+                           if string.find(all,"REBIRTH X",1,true) or string.find(all,"X2",1,true) then ui.first=ui.first or o
+                           else ui.opener=ui.opener or o end
+                       end
+                   end
+               end
+           end
+       end
+       return ui
+   end
+   local function rbReady(ui)
+       if ui.evolve then local t=rbText(ui.evolve); if rbHas(t,RB_WORDS) and not rbHas(t,RB_NOT_READY) then return true end end
+       for _,o in ipairs({ui.power,ui.top}) do
+           if o and o.Parent then local a,b=rbPair(o.Text); if a and b and b>0 then return a>=b end end
+       end
+       if ui.ready and ui.ready.Parent then
+           local t=string.upper(ui.ready.Text or "")
+           if rbHas(t,RB_NOT_READY) then return false end
+           if rbHas(t,{"READY","พร้อม"}) then return true end
+       end
+       return (ui.confirm and ui.confirm.Parent and ui.confirm.Visible) or (ui.first and ui.first.Parent and ui.first.Visible) or false
+   end
+   local function rbCount()
+       local ls=LocalPlayer:FindFirstChild("leaderstats")
+       if ls then
+           for _,v in ipairs(ls:GetChildren()) do
+               local n=string.lower(v.Name or "")
+               if v:IsA("ValueBase") and (string.find(n,"rebirth",1,true) or string.find(n,"prestige",1,true) or n=="rb") then return tonumber(v.Value) end
+           end
+       end
+       local ok,v=pcall(function() return LocalPlayer:GetAttribute("Rebirths") or LocalPlayer:GetAttribute("Rebirth") end)
+       return ok and tonumber(v) or nil
+   end
+   trackConnection(rebirthToggle.Activated:Connect(function()
+       rebirthEnabled=not rebirthEnabled
+       rebirthToggle.Text=rebirthEnabled and "REBIRTH BACKGROUND: ON" or "REBIRTH BACKGROUND: OFF"
+       rebirthToggle.BackgroundColor3=rebirthEnabled and Color3.fromRGB(39,174,119) or Color3.fromRGB(65,74,63)
+       if not rebirthEnabled then rebirthStatus="REBIRTH: PAUSED" end
+   end))
+   task.spawn(function()
+       while screenGui and screenGui.Parent do
+           if rebirthEnabled then
+               local now=os.clock()
+               if now-rbScanAt>=(now-rbTryAt<8 and 0.25 or 1.2) then rbScanAt=now; rbUI=rbScan() end
+               if now>=rbBlockedUntil and now-rbTryAt>=0.75 and rbReady(rbUI) then
+                   local pick,stage=nil,1
+                   if rbUI.confirm and rbUI.confirm.Parent and rbUI.confirm.Visible then pick,stage=rbUI.confirm,3
+                   elseif rbUI.first and rbUI.first.Parent and rbUI.first.Visible then pick,stage=rbUI.first,2
+                   elseif rbUI.opener and rbUI.opener.Parent and now-rbOpenAt>=4.5 then pick,stage=rbUI.opener,1; rbOpenAt=now end
+                   if pick and rbClick(pick) then
+                       rbTryAt=now; rebirthStatus="REBIRTH STEP "..stage.."/3"
+                       if stage==3 then
+                           if now-rbBurstStart>40 then rbBurstStart,rbBurstCount=now,0 end
+                           rbBurstCount=rbBurstCount+1
+                           if rbBurstCount>6 then rbBurstCount=0; rbBlockedUntil=now+28 end
+                           local before=rbCount()
+                           if before~=nil then task.delay(3,function()
+                               local after=rbCount()
+                               if after and after>before then rbFails=0; rebirthStatus="REBIRTH SUCCESS x"..tostring(after)
+                               else rbFails=rbFails+1; if rbFails>=3 then rbFails=0; rbBlockedUntil=os.clock()+55; rebirthStatus="REBIRTH FAILED • COOLDOWN" end end
+                           end) end
+                       end
+                   end
+               elseif not rbReady(rbUI) then rebirthStatus="REBIRTH: WAITING REQUIREMENT" end
+           end
+           rebirthToggle:SetAttribute("Status",rebirthStatus)
+           task.wait(0.28)
+       end
+   end)
 
    local MONSTER_SCAN_ROOT_NAMES = {
        "HumanoidRootPart", "RootPart", "Root", "MonsterRoot", "MainPart",
@@ -4412,8 +4568,8 @@ local okRB, errRB = pcall(function()
    local signalBad, lastSignalFireAt = false, -10
    local rapidMode = 0
    local biteButton, lastFindAt = nil, -10
-   local lastMethod, stunSeen, stunText = "-", false, ""
-   local clickAccumulator, stunCheckAt, visualAt = 0, 0, 0
+   local lastMethod = "-"
+   local clickAccumulator, visualAt = 0, 0
 
    trackConnection(LogService.MessageOut:Connect(function(message)
        if signalBad or os.clock() - lastSignalFireAt > 2 then return end
@@ -4422,175 +4578,34 @@ local okRB, errRB = pcall(function()
            or (string.find(msg, "lacking capability", 1, true) and string.find(msg, "plugin", 1, true)) then
            signalBad = true
            lastMethod = "SIGNAL BLOCKED"
-           pcall(function() warn("[TAYJAY RAPID] signal method disabled after capability error") end)
        end
    end))
 
-   local button = Instance.new("TextButton", screenGui)
-   button.Name = "TayJayRapidBiteBtn"
-   button.AnchorPoint = Vector2.new(0.5, 0.5)
-   button.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
-   button.Position = UI_LAYOUT.RapidBiteCenter
-   button.BackgroundColor3 = GREEN.off
-   button.RichText = true
-   button.Text = '<font size="25">⚔</font>\n<font size="13">RAPID</font>\n<font size="10">OFF</font>'
-   button.TextColor3 = WHITE_TEXT
-   button.Font = Enum.Font.GothamBlack
-   button.TextSize = 15
-   button.Active = true
-   button.AutoButtonColor = true
-   Instance.new("UICorner", button).CornerRadius = UDim.new(1, 0)
-   local stroke = Instance.new("UIStroke", button)
-   stroke.Color = Color3.fromRGB(255, 96, 132)
-   stroke.Thickness = 2.5
-   makeDraggable(button)
-
-   local function normalize(text)
-       local str = tostring(text or "")
-       str = str:gsub("<[^>]*>", "")
-       str = str:gsub("[^%w\128-\255]", "")
-       return string.lower(str)
-   end
-
-   local function guiShown(obj)
-       local gui = obj:FindFirstAncestorWhichIsA("ScreenGui")
-       if not gui or not gui.Enabled or gui == screenGui then return false end
-       local parent = obj
-       while parent and parent ~= gui do
-           if parent:IsA("GuiObject") and not parent.Visible then return false end
-           parent = parent.Parent
-       end
-       return true
-   end
-
-   local function findBiteButton()
-       local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-       if not playerGui then return nil end
-       for _, obj in ipairs(playerGui:GetDescendants()) do
-           if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and #obj.Text > 0 and #obj.Text <= 24 then
-               local key = normalize(obj.Text)
-               for _, want in ipairs(RAPID_TEXTS) do
-                   if key == want and guiShown(obj) then
-                       local target = obj:IsA("GuiButton") and obj or obj:FindFirstAncestorWhichIsA("GuiButton")
-                       return target or obj
-                   end
-               end
-           end
-       end
-       return nil
-   end
-
-   local function fireSignals(target)
-       if type(getconnections) ~= "function" then return false end
-       for _, signalName in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down", "TouchTap" }) do
-           local okSig, signal = pcall(function() return target[signalName] end)
-           if okSig and signal then
-               local okConn, connections = pcall(getconnections, signal)
-               if okConn and type(connections) == "table" then
-                   local fired = false
-                   for _, conn in ipairs(connections) do
-                       if pcall(function() conn:Fire() end) then fired = true end
-                   end
-                   if fired then return true end
-               end
-           end
-       end
-       return false
-   end
-
-   local function clickScreen(target)
-       if not VirtualInputManager then return false end
-       local position, size = target.AbsolutePosition, target.AbsoluteSize
-       local x, y = position.X + size.X / 2, position.Y + size.Y / 2
-       local gui = target:FindFirstAncestorWhichIsA("ScreenGui")
-       if gui and not gui.IgnoreGuiInset then
-           local okInset, inset = pcall(function() return GuiService:GetGuiInset() end)
-           if okInset and inset then y = y + inset.Y end
-       end
-       return (pcall(function()
-           if UserInputService.TouchEnabled then
-               VirtualInputManager:SendTouchEvent(91, 0, x, y)
-               VirtualInputManager:SendTouchEvent(91, 2, x, y)
-           else
-               VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
-               VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
-           end
-       end))
-   end
-
-   local function biteOnce()
-       local now = os.clock()
-       if (not biteButton or not biteButton.Parent) and now - lastFindAt > 1.5 then
-           lastFindAt = now
-           biteButton = findBiteButton()
-           if biteButton then
-               pcall(function() print("[TAYJAY RAPID] attack button found: " .. biteButton:GetFullName()) end)
-           end
-       end
-       if not biteButton or not biteButton.Parent then lastMethod = "NO BUTTON" return false end
-       if RAPID_METHOD ~= "signal" and clickScreen(biteButton) then lastMethod = "touch" return true end
-       if RAPID_METHOD ~= "touch" and not signalBad then
-           lastSignalFireAt = os.clock()
-           if fireSignals(biteButton) then lastMethod = "signal" return true end
-       end
-       lastMethod = "NO INPUT"
-       return false
-   end
-
-   local function scanStun()
-       local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-       if not playerGui then return false end
-       for _, obj in ipairs(playerGui:GetDescendants()) do
-           if obj:IsA("TextLabel") and #obj.Text > 0 and #obj.Text <= 40 and guiShown(obj) then
-               local key = string.lower(obj.Text)
-               for _, word in ipairs(STUN_WORDS) do
-                   if string.find(key, word, 1, true) then return true, obj.Text end
-               end
-           end
-       end
-       return false
-   end
-
    local function updateVisual()
-       local line3, color = "OFF", GREEN.off
-       if rapidMode == 1 then
-           line3, color = "ON • " .. lastMethod, GREEN.on
-       elseif rapidMode == 2 then
-           if stunSeen then line3, color = "AUTO • STUN! " .. lastMethod, GREEN.on
-           else line3, color = "AUTO • รอมึน", GREEN.warning end
-       end
-       button.BackgroundColor3 = color
+       local line3 = rapidMode == 1 and ("ON • " .. lastMethod) or "OFF"
+       button.BackgroundColor3 = rapidMode == 1 and GREEN.on or GREEN.off
        button.Text = '<font size="25">⚔</font>\n<font size="13">RAPID</font>\n<font size="9">' .. line3 .. '</font>'
    end
 
    trackConnection(button.Activated:Connect(function()
-       rapidMode = (rapidMode + 1) % 3
-       clickAccumulator, stunSeen, stunCheckAt = 0, false, 0
-       if rapidMode ~= 0 then lastFindAt = -10 end
+       rapidMode = rapidMode == 1 and 0 or 1
+       clickAccumulator = 0
+       if rapidMode == 1 then lastFindAt = -10 else lastMethod = "RELEASED" end
        updateVisual()
    end))
 
    trackConnection(RunService.Heartbeat:Connect(function(dt)
        if rapidMode == 0 then clickAccumulator = 0 return end
        local now = os.clock()
-       if rapidMode == 2 and now >= stunCheckAt then
-           stunCheckAt = now + 0.3
-           local seen, text = scanStun()
-           if seen and not stunSeen then print("[TAYJAY RAPID] stun text detected: " .. tostring(text)) end
-           stunSeen, stunText = seen, text or ""
+       clickAccumulator = clickAccumulator + dt
+       local interval = 1 / RAPID_CPS
+       local clicks = 0
+       while clickAccumulator >= interval and clicks < 3 do
+           clickAccumulator = clickAccumulator - interval
+           clicks = clicks + 1
+           biteOnce()
        end
-       if rapidMode == 2 and not stunSeen then clickAccumulator = 0 end
-       if rapidMode == 1 or stunSeen then
-           clickAccumulator = clickAccumulator + dt
-           local interval = 1 / RAPID_CPS
-           local clicks = 0
-           while clickAccumulator >= interval and clicks < 3 do
-               clickAccumulator = clickAccumulator - interval
-               clicks = clicks + 1
-               biteOnce()
-           end
-           if clickAccumulator > interval * 3 then clickAccumulator = 0 end
-       end
+       if clickAccumulator > interval * 3 then clickAccumulator = 0 end
        if now >= visualAt then visualAt = now + 0.25; updateVisual() end
    end))
 
