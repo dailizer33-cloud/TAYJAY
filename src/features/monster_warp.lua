@@ -887,7 +887,15 @@ local okMonster, errMonster = pcall(function()
        updateMonsterWarpVisual()
    end
 
+   local monsterResumeLatched = false
+   local monsterResumeMode = nil
+   local monsterResumeGeneration = 0
+   local monsterResumeCancelled = false
+
    _G.TAYJAY_MONSTER_STOP = function()
+       monsterResumeCancelled = true
+       monsterResumeLatched = false
+       monsterResumeGeneration = monsterResumeGeneration + 1
        stopMonsterWarp(true)
    end
 
@@ -975,8 +983,18 @@ local okMonster, errMonster = pcall(function()
            startMonsterWarp()
        end
    end
-   trackConnection(monsterFilterBtn.Activated:Connect(function() toggleMonsterMode("Monster") end))
-   trackConnection(npcFilterBtn.Activated:Connect(function() toggleMonsterMode("NPC") end))
+   trackConnection(monsterFilterBtn.Activated:Connect(function()
+       monsterResumeCancelled = true
+       monsterResumeLatched = false
+       monsterResumeGeneration = monsterResumeGeneration + 1
+       toggleMonsterMode("Monster")
+   end))
+   trackConnection(npcFilterBtn.Activated:Connect(function()
+       monsterResumeCancelled = true
+       monsterResumeLatched = false
+       monsterResumeGeneration = monsterResumeGeneration + 1
+       toggleMonsterMode("NPC")
+   end))
    trackConnection(dodgeBtn.Activated:Connect(function()
        monsterDodgeOn = not monsterDodgeOn
        monsterDodgeUntil = 0
@@ -1052,6 +1070,52 @@ local okMonster, errMonster = pcall(function()
    end))
    trackConnection(LocalPlayer.CharacterAdded:Connect(function()
        if states.MonsterWarp then stopMonsterWarp(false) end
+   end))
+
+   -- Resume Monster Warp after evolve/rebirth without taking movement from another warp.
+   trackConnection(LocalPlayer.CharacterRemoving:Connect(function()
+       monsterResumeCancelled = false
+       monsterResumeLatched = states.MonsterWarp == true
+       monsterResumeMode = monsterResumeLatched and monsterFilterMode or nil
+       monsterResumeGeneration = monsterResumeGeneration + 1
+   end))
+   trackConnection(LocalPlayer.CharacterAdded:Connect(function(char)
+       if not monsterResumeLatched or monsterResumeCancelled then return end
+       local myGeneration = monsterResumeGeneration
+       task.spawn(function()
+           local root = char:WaitForChild("HumanoidRootPart", 15)
+           local humanoid = char:WaitForChild("Humanoid", 15)
+           if not root or not humanoid then
+               if monsterResumeGeneration == myGeneration then monsterResumeLatched = false end
+               return
+           end
+           task.wait(1.5)
+           for attempt = 1, 8 do
+               if monsterResumeCancelled or _G.TAYJAY_STOPPED
+                   or monsterResumeGeneration ~= myGeneration
+                   or not monsterResumeLatched then return end
+               if states.MonsterWarp then
+                   monsterResumeLatched = false
+                   return
+               end
+               local otherWarpActive = states.KillAura or states.DNWarp or states.AutoWarp
+               local movementOwner = _tjMovementController and _tjMovementController.Owner
+               local transitioning = _tjMovementController and _tjMovementController.Transition
+               if not otherWarpActive and not transitioning
+                   and (movementOwner == nil or movementOwner == "MONSTER") then
+                   if monsterResumeMode and monsterFilterMode ~= monsterResumeMode then
+                       pcall(setMonsterFilter, monsterResumeMode)
+                   end
+                   pcall(startMonsterWarp)
+                   if states.MonsterWarp then
+                       monsterResumeLatched = false
+                       return
+                   end
+               end
+               if attempt < 8 then task.wait(1) end
+           end
+           if monsterResumeGeneration == myGeneration then monsterResumeLatched = false end
+       end)
    end))
 
    trackConnection(RunService.Heartbeat:Connect(monsterGlueStep))
