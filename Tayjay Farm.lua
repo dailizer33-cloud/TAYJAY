@@ -1837,13 +1837,14 @@ local okRun, errRun = xpcall(function()
 		if not q or q.done or q.kind~=kind then return false end
 		return F.questMatch(name)
 	end
-	function F.nearestEnabled(kind,rootPos)
+	function F.nearestEnabled(kind,rootPos,onlyBuff)
 		local best,bestRank,bestBucket,bestDist=nil,math.huge,-math.huge,math.huge
 		local now=os.clock()
 		local avoid=CFG.GUARD and ST.hp<CFG.CAUTION_HP
 		for key,g in pairs(RADAR.groups[kind]) do
 			local qBoost=F.questBoost(kind,g.name)
-			if RADAR.enabled[key] or (qBoost and CFG.QUEST_OVERRIDE) then
+			if (not onlyBuff or (kind=="ITEM" and g.buff==true))
+				and (RADAR.enabled[key] or (qBoost and CFG.QUEST_OVERRIDE)) then
 				for _,obj in ipairs(g.objects) do
 					local bl=ST.voidBlacklist[obj]
 					if obj and obj.Parent and not (bl and now<bl) then
@@ -2060,6 +2061,11 @@ local okRun, errRun = xpcall(function()
 				ST.expMonsterMode=true
 				ST.itemStreak=0
 				if F.setCombat then F.setCombat(true) end
+			end
+			-- เก็บบัฟก่อนมอนสเตอร์เป็นลำดับ 1 ระหว่าง Monster Phase
+			if CFG.AUTO_COLLECT_BUFFS~=false then
+				local buff=F.nearestEnabled("ITEM",rootPos,true)
+				if buff then return "ITEM",buff end
 			end
 			local m=F.monsterTarget(rootPos)
 			if m then return "MONSTER",m end
