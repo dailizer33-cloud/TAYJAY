@@ -122,7 +122,16 @@ _G.TAYJAY_STOP_ALL = function()
     if _G.TAYJAY_STOPPED then return end
     _G.TAYJAY_STOPPED = true
 
-    -- Stop every registered Owner first (Fly, Warp, Global, etc.).
+    -- Release movement modes synchronously before their Owners cancel background loops.
+    -- This guarantees return-home, collision restoration and platform cleanup are completed first.
+    pcall(function()
+        if type(_G.TAYJAY_MONSTER_STOP) == "function" then _G.TAYJAY_MONSTER_STOP() end
+    end)
+    pcall(function()
+        if type(_G.TAYJAY_WARP_STOP_NOW) == "function" then _G.TAYJAY_WARP_STOP_NOW(true) end
+    end)
+
+    -- Stop every registered Owner only after movement cleanup has completed.
     pcall(function()
         if ResourceManager and ResourceManager.StopAllOwners then
             ResourceManager:StopAllOwners("STOP_ALL")
@@ -179,7 +188,12 @@ _G.TAYJAY_STOP_ALL = function()
     states.DNWarp = false
     pcall(updateKaBtnDisplay)
     _G.TAYJAY_POS_LOCK_UNTIL = nil
+    _G.TAYJAY_POS_LOCK_OWNER = nil
+    _G.TAYJAY_PLATFORM_OWNER = nil
     _G.TAYJAY_FOLLOW = nil
+    pcall(function()
+        if _tjMovementController then _tjMovementController:ForceClear("STOP_ALL") end
+    end)
     pcall(function() if _G.TAYJAY_MM2_STOP then _G.TAYJAY_MM2_STOP() end end)
     -- FPS restoration is owned by ResourceManager -> FPS Owner -> Cleanup Bags.
     pcall(function()
