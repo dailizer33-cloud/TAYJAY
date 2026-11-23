@@ -3334,8 +3334,8 @@ local okMonster, errMonster = pcall(function()
    -- is NOT evidence that a Model is a monster: player avatars and map props
    -- may also contain Humanoids.
    local MONSTER_NAME_HINTS = {
-       "monster", "mob", "enemy", "boss", "creature", "ant", "beetle",
-       "spider", "scorpion", "worm", "bug", "moth", "larva", "mantis",
+       "monster", "mob", "enemy", "boss", "creature", "ant",
+       "scorpion", "worm", "bug", "moth", "larva", "mantis",
        "crab", "slime", "dragon", "zombie", "insect", "mothstand", "void moth",
        "voidmoth", "蝎",
        -- แมลงเพิ่มเติม (เกม Bug Evolution): เช่น GiantVoidMosquito, Hornet, Wasp
