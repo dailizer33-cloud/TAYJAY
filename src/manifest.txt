@@ -8,6 +8,7 @@ core/utils_state.lua | Core utils & state management, text contrast
 core/resource_manager.lua | Resource Manager V1 (monitor mode)
 core/cleanup.lua | Cleanup Core V1: ResourceManager -> Owner -> Bag
 core/app_state.lua | Shared config + feature states
+core/movement_controller.lua | Movement Controller V1: single owner + position lock/platform ownership
 core/target_service.lua | TargetService V2: unified lock/walk/warp targeting
 core/resource_monitor.lua | Resource declarations + monitor widget
 ui/ui_sync_draggable.lua | UI sync registry + makeDraggable
