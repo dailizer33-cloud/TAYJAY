@@ -4546,7 +4546,16 @@ end
 end
 
 -- =========================================================
--- RAPID BITE: standalone attack button
+-- =========================================================
+-- RAPID BITE (แก้แล้ว): ปุ่มโจมตีแบบแยกอิสระ
+-- วิธีใช้: แทนที่ทั้งก้อนเดิม ตั้งแต่บรรทัด "-- RAPID BITE: standalone attack button"
+--          จนถึง `end` ท้ายก้อน ด้วยโค้ดนี้
+-- สิ่งที่แก้:
+--  1) เดิม auto ลอง touch แล้วหยุดทันที -> ตอนนี้ยิง signal + touch ทั้งคู่ (RAPID_METHOD = "both")
+--  2) fireSignals เดิมหยุดที่ signal แรกที่มี handler -> ตอนนี้ยิงครบทุก signal
+--  3) ปุ่ม bite ที่จำไว้เดิมไม่เช็กว่ายังเห็นอยู่ไหม -> ตอนนี้เช็กทุกครั้ง แล้วค้นใหม่ถ้าหาย/ซ่อน
+--  4) ค้นหาปุ่มโดยเลือกตัวที่เป็นปุ่มจริงก่อน (ไม่ใช่ป้ายข้อความเฉยๆ) และรองรับชื่อ Object = "Bite"
+--  5) touch ส่ง Begin แล้วส่ง End ตามหลัง 0.02 วิ (เดิมส่งพร้อมกันในเฟรมเดียว) และส่งสูงสุด 1 ครั้ง/เฟรม
 -- =========================================================
 do
 local okRB, errRB = pcall(function()
@@ -4555,100 +4564,229 @@ local okRB, errRB = pcall(function()
    local VirtualInputManager = nil
    pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
 
-   local RAPID_CPS = 5
+   local RAPID_CPS = 20
+   local RAPID_METHOD = "both"               -- "both" | "touch" | "signal"
    local RAPID_TEXTS = { "bite" }
+   local STUN_WORDS = { "stun", "daze", "dizzy", "vulnerab", "exhaust", "weaken", "มึน", "สตัน" }
 
+   local signalBad, lastSignalFireAt = false, -10
    local rapidMode = 0
    local biteButton, lastFindAt = nil, -10
-   local lastMethod = "SEARCHING"
-   local clickAccumulator, visualAt = 0, 0
+   local lastMethod, stunSeen, stunText = "-", false, ""
+   local clickAccumulator, stunCheckAt, visualAt = 0, 0, 0
 
-   -- Dedicated visible RAPID control. Keep it independent from the Monster panel.
-   local button = Instance.new("TextButton")
+   trackConnection(LogService.MessageOut:Connect(function(message)
+       if signalBad or os.clock() - lastSignalFireAt > 2 then return end
+       local msg = string.lower(tostring(message or ""))
+       if string.find(msg, "current thread cannot access", 1, true)
+           or (string.find(msg, "lacking capability", 1, true) and string.find(msg, "plugin", 1, true)) then
+           signalBad = true
+           lastMethod = "SIGNAL BLOCKED"
+           pcall(function() warn("[TAYJAY RAPID] signal method disabled after capability error") end)
+       end
+   end))
+
+   local button = Instance.new("TextButton", screenGui)
    button.Name = "TayJayRapidBiteBtn"
-   button.Size = UDim2.fromOffset(68, 68)
-   button.Position = UDim2.new(0, 174, 1, -112)
-   button.AnchorPoint = Vector2.new(0, 0)
+   button.AnchorPoint = Vector2.new(0.5, 0.5)
+   button.Size = UDim2.fromOffset(UI_LAYOUT.ActionSize, UI_LAYOUT.ActionSize)
+   button.Position = UI_LAYOUT.RapidBiteCenter
    button.BackgroundColor3 = GREEN.off
-   button.BorderSizePixel = 0
-   button.TextColor3 = WHITE_TEXT
-   button.TextStrokeColor3 = TEXT_OUTLINE
-   button.TextStrokeTransparency = 0.35
-   button.TextSize = 12
-   button.Font = Enum.Font.GothamBold
    button.RichText = true
+   button.Text = '<font size="25">⚔</font>\n<font size="13">RAPID</font>\n<font size="10">OFF</font>'
+   button.TextColor3 = WHITE_TEXT
+   button.Font = Enum.Font.GothamBlack
+   button.TextSize = 15
    button.Active = true
    button.AutoButtonColor = true
-   button.ZIndex = 30
-   button.Parent = screenGui
    Instance.new("UICorner", button).CornerRadius = UDim.new(1, 0)
-   local rapidStroke = Instance.new("UIStroke", button)
-   rapidStroke.Color = GREEN.stroke
-   rapidStroke.Thickness = 2
+   local stroke = Instance.new("UIStroke", button)
+   stroke.Color = Color3.fromRGB(255, 96, 132)
+   stroke.Thickness = 2.5
+   makeDraggable(button)
+
+   local function normalize(text)
+       local str = tostring(text or "")
+       str = str:gsub("<[^>]*>", "")
+       str = str:gsub("[^%w\\128-\\255]", "")
+       return string.lower(str)
+   end
+
+   local function guiShown(obj)
+       local gui = obj:FindFirstAncestorWhichIsA("ScreenGui")
+       if not gui or not gui.Enabled or gui == screenGui then return false end
+       local parent = obj
+       while parent and parent ~= gui do
+           if parent:IsA("GuiObject") and not parent.Visible then return false end
+           parent = parent.Parent
+       end
+       return true
+   end
+
+   -- ปุ่มที่จำไว้ยังใช้ได้ไหม (ยังอยู่ใน GUI, มองเห็น, มีขนาดจริง)
+   local function buttonUsable(obj)
+       if not obj or not obj.Parent then return false end
+       local size = obj.AbsoluteSize
+       if size.X <= 0 or size.Y <= 0 then return false end
+       return guiShown(obj)
+   end
 
    local function findBiteButton()
        local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
        if not playerGui then return nil end
+       local fallback = nil
        for _, obj in ipairs(playerGui:GetDescendants()) do
-           if obj:IsA("GuiButton") and obj.Visible and obj.Active then
-               -- Ignore Roblox mobile controls; ImageButton does not expose a Text property.
-               if obj.Name ~= "JumpButton" and obj.Name ~= "TouchControlFrame" then
-                   local parts = { tostring(obj.Name or "") }
-                   if obj:IsA("TextButton") then
-                       parts[#parts + 1] = tostring(obj.Text or "")
+           -- ปุ่มที่ตั้งชื่อ Object ว่า Bite
+           if obj:IsA("GuiButton") and obj.AbsoluteSize.X > 0 and guiShown(obj) then
+               local nameKey = normalize(obj.Name)
+               for _, want in ipairs(RAPID_TEXTS) do
+                   if nameKey == want then return obj end
+               end
+           end
+           -- ปุ่ม/ป้ายที่ข้อความเป็น bite
+           if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and #obj.Text > 0 and #obj.Text <= 24 then
+               local key = normalize(obj.Text)
+               for _, want in ipairs(RAPID_TEXTS) do
+                   if key == want and guiShown(obj) then
+                       local target = obj:IsA("GuiButton") and obj or obj:FindFirstAncestorWhichIsA("GuiButton")
+                       if target and target.AbsoluteSize.X > 0 then return target end
+                       fallback = fallback or obj -- ป้ายที่ไม่ใช่ปุ่ม ใช้เป็นตัวสำรองเท่านั้น
                    end
-                   for _, child in ipairs(obj:GetDescendants()) do
-                       if child:IsA("TextLabel") or child:IsA("TextButton") then
-                           parts[#parts + 1] = tostring(child.Text or "")
-                       end
-                   end
-                   local text = string.lower(table.concat(parts, " "))
-                   if string.find(text, "bite", 1, true) then return obj end
                end
            end
        end
-       return nil
+       return fallback
+   end
+
+   -- ยิงทุก signal (เดิมหยุดที่ signal แรกที่มี handler)
+   local function fireSignals(target)
+       if type(getconnections) ~= "function" then return false end
+       local fired = false
+       for _, signalName in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down", "TouchTap" }) do
+           local okSig, signal = pcall(function() return target[signalName] end)
+           if okSig and signal then
+               local okConn, connections = pcall(getconnections, signal)
+               if okConn and type(connections) == "table" then
+                   for _, conn in ipairs(connections) do
+                       if pcall(function() conn:Fire() end) then fired = true end
+                   end
+               end
+           end
+       end
+       return fired
+   end
+
+   local function clickScreen(target)
+       if not VirtualInputManager then return false end
+       local position, size = target.AbsolutePosition, target.AbsoluteSize
+       local x, y = position.X + size.X / 2, position.Y + size.Y / 2
+       local gui = target:FindFirstAncestorWhichIsA("ScreenGui")
+       if gui and not gui.IgnoreGuiInset then
+           local okInset, inset = pcall(function() return GuiService:GetGuiInset() end)
+           if okInset and inset then x = x + inset.X; y = y + inset.Y end
+       end
+       local useTouch = UserInputService.TouchEnabled
+       local okDown = pcall(function()
+           if useTouch then
+               VirtualInputManager:SendTouchEvent(91, 0, x, y)
+           else
+               VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+           end
+       end)
+       if not okDown then return false end
+       -- ปล่อยนิ้วตามหลังเล็กน้อย (ไม่ส่งพร้อมกันในเฟรมเดียว) และปล่อยเสมอ แม้ปิด RAPID ไปแล้ว
+       task.delay(0.02, function()
+           pcall(function()
+               if useTouch then
+                   VirtualInputManager:SendTouchEvent(91, 2, x, y)
+               else
+                   VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+               end
+           end)
+       end)
+       return true
    end
 
    local function biteOnce()
        local now = os.clock()
-       if not (biteButton and biteButton.Parent and biteButton.Visible and biteButton.Active)
-           or now - lastFindAt >= 0.5 then
-           biteButton = findBiteButton()
-           lastFindAt = now
+       if not buttonUsable(biteButton) then
+           biteButton = nil
+           if now - lastFindAt > 0.5 then
+               lastFindAt = now
+               biteButton = findBiteButton()
+               if biteButton then
+                   pcall(function() print("[TAYJAY RAPID] attack button found: " .. biteButton:GetFullName()) end)
+               end
+           end
        end
-       if not biteButton then
-           lastMethod = "BITE NOT FOUND"
-           return false
+       if not biteButton then lastMethod = "NO BUTTON" return false end
+
+       local used = {}
+       if RAPID_METHOD ~= "touch" and not signalBad then
+           lastSignalFireAt = os.clock()
+           if fireSignals(biteButton) then used[#used + 1] = "signal" end
        end
-       local ok = pcall(function() biteButton:Activate() end)
-       lastMethod = ok and "BITE 5 CPS" or "BITE BLOCKED"
-       return ok
+       if RAPID_METHOD ~= "signal" and clickScreen(biteButton) then
+           used[#used + 1] = "touch"
+       end
+       if #used == 0 then lastMethod = "NO INPUT" return false end
+       lastMethod = table.concat(used, "+")
+       return true
+   end
+
+   local function scanStun()
+       local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+       if not playerGui then return false end
+       for _, obj in ipairs(playerGui:GetDescendants()) do
+           if obj:IsA("TextLabel") and #obj.Text > 0 and #obj.Text <= 40 and guiShown(obj) then
+               local key = string.lower(obj.Text)
+               for _, word in ipairs(STUN_WORDS) do
+                   if string.find(key, word, 1, true) then return true, obj.Text end
+               end
+           end
+       end
+       return false
    end
 
    local function updateVisual()
-       local line3 = rapidMode == 1 and ("ON • " .. lastMethod) or "OFF"
-       button.BackgroundColor3 = rapidMode == 1 and GREEN.on or GREEN.off
+       local line3, color = "OFF", GREEN.off
+       if rapidMode == 1 then
+           line3, color = "ON • " .. lastMethod, GREEN.on
+       elseif rapidMode == 2 then
+           if stunSeen then line3, color = "AUTO • STUN! " .. lastMethod, GREEN.on
+           else line3, color = "AUTO • รอมึน", GREEN.warning end
+       end
+       button.BackgroundColor3 = color
        button.Text = '<font size="25">⚔</font>\n<font size="13">RAPID</font>\n<font size="9">' .. line3 .. '</font>'
    end
 
+   -- OFF -> ON (กัดต่อเนื่อง) -> AUTO (กัดเฉพาะตอนมึน) -> OFF
    trackConnection(button.Activated:Connect(function()
-       rapidMode = rapidMode == 1 and 0 or 1
-       clickAccumulator = 0
-       if rapidMode == 1 then lastFindAt = -10 else lastMethod = "RELEASED" end
+       rapidMode = (rapidMode + 1) % 3
+       clickAccumulator, stunSeen, stunCheckAt = 0, false, 0
+       if rapidMode ~= 0 then lastFindAt = -10; biteButton = nil end
        updateVisual()
    end))
 
    trackConnection(RunService.Heartbeat:Connect(function(dt)
        if rapidMode == 0 then clickAccumulator = 0 return end
        local now = os.clock()
-       clickAccumulator = clickAccumulator + dt
-       local interval = 1 / RAPID_CPS
-       if clickAccumulator >= interval then
-           clickAccumulator = clickAccumulator - interval
-           biteOnce()
+       if rapidMode == 2 and now >= stunCheckAt then
+           stunCheckAt = now + 0.3
+           local seen, text = scanStun()
+           if seen and not stunSeen then print("[TAYJAY RAPID] stun text detected: " .. tostring(text)) end
+           stunSeen, stunText = seen, text or ""
        end
-       if clickAccumulator > interval * 2 then clickAccumulator = 0 end
+       if rapidMode == 2 and not stunSeen then clickAccumulator = 0 end
+       if rapidMode == 1 or stunSeen then
+           clickAccumulator = clickAccumulator + dt
+           local interval = 1 / RAPID_CPS
+           if clickAccumulator >= interval then
+               clickAccumulator = clickAccumulator - interval
+               if clickAccumulator > interval then clickAccumulator = 0 end
+               biteOnce() -- สูงสุด 1 ครั้ง/เฟรม
+           end
+       end
        if now >= visualAt then visualAt = now + 0.25; updateVisual() end
    end))
 
@@ -4663,7 +4801,6 @@ end
 end
 
 
--- =========================================================
 -- WALK Dynamic Target: TargetService owns nearest-target selection
 -- and the shared attack scheduler; legacy attack timing remains in Death Note.
 if type(TargetService) == "table" then
