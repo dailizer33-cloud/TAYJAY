@@ -1,5 +1,8 @@
 -- TAYJAY MOVEMENT CONTROLLER V1
 -- Grants one movement writer at a time and tracks the owner of shared locks/platforms.
+-- Keep implementation locals inside this scope to protect the main chunk's Luau register budget.
+local _tjMovementController
+do
 local _tjMovementEnv = _G
 pcall(function()
     if type(getgenv) == "function" then
@@ -11,7 +14,7 @@ local _tjMovementTJ = _tjMovementEnv.TJ or TJ
 if type(_tjMovementTJ) ~= "table" then _tjMovementTJ = {}; _tjMovementEnv.TJ = _tjMovementTJ end
 local _tjMovementMain = _tjMovementTJ.Main
 if type(_tjMovementMain) ~= "table" then _tjMovementMain = {}; _tjMovementTJ.Main = _tjMovementMain end
-local _tjMovementController = _tjMovementMain.MovementController
+_tjMovementController = _tjMovementMain.MovementController
 if type(_tjMovementController) ~= "table" then
     _tjMovementController = {}
     _tjMovementMain.MovementController = _tjMovementController
@@ -154,3 +157,4 @@ function _tjMovementController:ForceClear(reason)
     self.LastStopReason = tostring(reason or "RESET")
     return true
 end
+end -- [/TAYJAY MOVEMENT CONTROLLER LOCAL-LIMIT SCOPE]
