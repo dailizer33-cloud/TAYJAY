@@ -3398,8 +3398,8 @@ local okMonster, errMonster = pcall(function()
    local monsterNextSelectAt = 0
    local monsterWarpWasOn = false
    local monsterWarpStarting = false
-   local MONSTER_SCAN_MIN_INTERVAL = 0.8
-   local MONSTER_FOLLOW_INTERVAL = 0.12
+   local MONSTER_SCAN_MIN_INTERVAL = 0.64 -- 20% faster scan cycle
+   local MONSTER_FOLLOW_INTERVAL = 0.096 -- 20% faster target follow
    local MONSTER_PLATFORM_SIZE = Vector3.new(16, 1, 16)
    local MONSTER_FEET_DROP = 3
    local MONSTER_STUCK_SECONDS = 10   -- HP ไม่เปลี่ยนนานเท่านี้ = ตีไม่เข้า (ของตกแต่ง/อมตะ/เข้าไม่ถึง) → ข้าม
