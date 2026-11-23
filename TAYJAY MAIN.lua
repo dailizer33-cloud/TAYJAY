@@ -1176,11 +1176,12 @@ local function fireHoldUp(button)
 end
 
 local function stopHold()
-    local button = HoldSystem.biteButton
+    local wasHolding = HoldSystem.isHolding
+    local button = wasHolding and HoldSystem.biteButton or nil
     HoldSystem.isHolding = false
     HoldSystem.currentTarget = nil
     HoldSystem.lastDownAt = 0
-    fireHoldUp(button)
+    if wasHolding then fireHoldUp(button) end
 end
 
 local function startHold(targetChar)
