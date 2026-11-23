@@ -764,6 +764,17 @@ function _tjMovementController:Acquire(nextOwner, stopPrevious)
     local observed = _tjInferMovementOwner()
     local current = observed or self.Owner
     if current == nextOwner and current ~= "CONFLICT" then
+        if self.PlatformOwner and self.PlatformOwner ~= nextOwner then
+            local oldPlatform = self.Platform
+            if oldPlatform and oldPlatform.Parent then
+                return false, "previous movement platform is still active"
+            end
+            self.PlatformOwner, self.Platform = nil, nil
+            _G.TAYJAY_PLATFORM_OWNER = nil
+        end
+        if self.PositionLockOwner and self.PositionLockOwner ~= nextOwner then
+            self:ClearPositionLock(self.PositionLockOwner)
+        end
         self.Owner = nextOwner
         return true
     end
