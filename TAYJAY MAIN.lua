@@ -1288,41 +1288,31 @@ function TargetService:EnsureCombatOwner()
 
 
         if statesRef.NormalKillAura then
-            -- WALK's primary target is always the nearest living, non-blacklisted player.
+            -- Keep WALK's primary target continuously bound to the nearest living,
+            -- non-blacklisted player. Death/removal naturally selects the next nearest.
             local nearestPlayer, nearestChar = TargetService:FindNearest(math.huge, true)
             TargetService.WalkTarget = nearestPlayer
 
-            -- Retaliation is tracked separately and never overwrites the nearest target.
+            -- Keep retaliation separate from the nearest-player target.
+            -- Share the attack cooldown by alternating lanes when the attacker
+            -- differs from the nearest target, so neither role replaces the other.
             local attacker = TargetService:FindRetaliationTarget()
             local attackerChar
             if attacker then
                 local attackerDistance
                 attackerDistance, attackerChar = distanceTo(attacker)
             end
-
-            local targetChar
-            local shouldSwitchLane = false
             if attackerChar and nearestChar and attacker ~= nearestPlayer then
                 local lane = TargetService._combatLane or "walk"
-                targetChar = lane == "retaliation" and attackerChar or nearestChar
-                shouldSwitchLane = true
-            elseif attackerChar then
-                targetChar = attackerChar
-            elseif nearestChar then
-                targetChar = nearestChar
-            end
-
-            if targetChar then
-                pcall(attackFn, targetChar)
-                if shouldSwitchLane then
-                    local now = os.clock()
-                    if not TargetService._lastLaneSwitch
-                        or now - TargetService._lastLaneSwitch >= 1.2 then
-                        local lane = TargetService._combatLane or "walk"
-                        TargetService._combatLane = lane == "retaliation" and "walk" or "retaliation"
-                        TargetService._lastLaneSwitch = now
-                    end
+                local chosenChar = lane == "retaliation" and attackerChar or nearestChar
+                local ok, attacked = pcall(attackFn, chosenChar)
+                if ok and attacked == true then
+                    TargetService._combatLane = lane == "retaliation" and "walk" or "retaliation"
                 end
+            elseif attackerChar then
+                pcall(attackFn, attackerChar)
+            elseif nearestChar then
+                pcall(attackFn, nearestChar)
             end
         else
             TargetService.WalkTarget = nil
@@ -2143,7 +2133,7 @@ pcall(function()
        end
    end
 end)
-local ATTACK_COOLDOWN = 1 / 15
+local ATTACK_COOLDOWN = 1 / 40
 local lastAttackAt = 0
 local attackCallBusy = false
 local function tryAttackTarget(targetCharacter)
