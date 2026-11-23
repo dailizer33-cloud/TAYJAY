@@ -2055,7 +2055,7 @@ pcall(function()
        end
    end
 end)
-local ATTACK_COOLDOWN = 1 / 15
+local ATTACK_COOLDOWN = 1 / 40
 local lastAttackAt = 0
 local attackCallBusy = false
 local function tryAttackTarget(targetCharacter)
