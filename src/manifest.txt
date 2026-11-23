@@ -26,6 +26,7 @@ features/rapid_bite.lua | Rapid Bite attack button
 features/walk2.lua | WALK2 attack toggle
 ui/server_selector.lua | Server selector
 ui/main_menu.lua | Main menu UI
+core/movement_handoff_ui.lua | Synchronize WARP status controls after MONSTER handoff
 core/logic.lua | Logic systems (noclip, inf jump, etc.)
 features/player_esp.lua | Auto player ESP
 features/mm2.lua | MM2 role ESP + player list
