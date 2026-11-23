@@ -4209,7 +4209,7 @@ local okMonster, errMonster = pcall(function()
        local orbiting = monsterOrbPhase ~= "COLLECT" and monsterOrbitOn and monsterFilterMode == "Monster"
        local nowClock = os.clock()
        if monsterLastRoot ~= targetRoot then monsterEnterAt = nowClock end -- เป้าใหม่: เข้าสิงร่างทันที
-       local dodging = monsterDodgeOn and monsterFilterMode == "Monster" and nowClock < monsterDodgeUntil
+       local dodging = monsterOrbPhase ~= "COLLECT" and monsterDodgeOn and monsterFilterMode == "Monster" and nowClock < monsterDodgeUntil
        if dodging then
            monsterWasDodging = true
        elseif monsterWasDodging then
@@ -4331,6 +4331,10 @@ local okMonster, errMonster = pcall(function()
        monsterScanDirty = true
        monsterLastScan = 0
        monsterLastAttack = 0
+       monsterOrbPhase = "ATTACK"
+       monsterOrbItem, monsterOrbPart = nil, nil
+       monsterOrbNextSearch = os.clock() + 5
+       monsterOrbPhaseUntil, monsterOrbLastTouch = 0, 0
        monsterNextSelectAt = 0
        monsterTrackedTarget = nil
        monsterNoticeText, monsterNoticeUntil = "", 0
@@ -4564,7 +4568,7 @@ local okMonster, errMonster = pcall(function()
                                end
                            end
                            -- วนลูปโจมตีและเก็บ ACRON SUGAR ORB ขนาดใหญ่จากทั่ว Workspace
-                           if monsterOrbPhase == "ATTACK" and now >= monsterOrbNextSearch then
+                           if monsterFilterMode == "Monster" and monsterOrbPhase == "ATTACK" and now >= monsterOrbNextSearch then
                                local orb, orbPart = findLargeAcronSugarOrb()
                                if orb and orbPart then
                                    monsterOrbItem, monsterOrbPart = orb, orbPart
@@ -4574,14 +4578,14 @@ local okMonster, errMonster = pcall(function()
                                else
                                    monsterOrbNextSearch = now + 3.5
                                end
-                           elseif monsterOrbPhase == "COLLECT" then
+                           elseif monsterFilterMode == "Monster" and monsterOrbPhase == "COLLECT" then
                                if not monsterOrbItem or not monsterOrbItem.Parent or not monsterOrbPart or not monsterOrbPart.Parent
                                    or now >= monsterOrbPhaseUntil then
                                    monsterOrbItem, monsterOrbPart = nil, nil
                                    monsterOrbPhase = "RETURN"
                                    monsterOrbPhaseUntil = now + 0.7
                                end
-                           elseif monsterOrbPhase == "RETURN" and now >= monsterOrbPhaseUntil then
+                           elseif monsterFilterMode == "Monster" and monsterOrbPhase == "RETURN" and now >= monsterOrbPhaseUntil then
                                monsterOrbPhase = "ATTACK"
                                monsterOrbNextSearch = now + 5
                            end
