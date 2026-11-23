@@ -3404,8 +3404,8 @@ local okMonster, errMonster = pcall(function()
    local monsterNextSelectAt = 0
    local monsterWarpWasOn = false
    local monsterWarpStarting = false
-   local MONSTER_SCAN_MIN_INTERVAL = 0.8
-   local MONSTER_FOLLOW_INTERVAL = 0.12
+   local MONSTER_SCAN_MIN_INTERVAL = 0.45
+   local MONSTER_FOLLOW_INTERVAL = 0.06
    local MONSTER_PLATFORM_SIZE = Vector3.new(16, 1, 16)
    local MONSTER_FEET_DROP = 3
    local MONSTER_STUCK_SECONDS = 10   -- HP ไม่เปลี่ยนนานเท่านี้ = ตีไม่เข้า (ของตกแต่ง/อมตะ/เข้าไม่ถึง) → ข้าม
@@ -4335,7 +4335,7 @@ local okMonster, errMonster = pcall(function()
                    stopMonsterWarp(false)
                else
                    followAccumulator = followAccumulator + dt
-                   if (monsterScanDirty or (now - monsterLastScan) >= 2.5)
+                   if (monsterScanDirty or (now - monsterLastScan) >= 1.0)
                        and (now - monsterLastScan) >= MONSTER_SCAN_MIN_INTERVAL then
                        local count = scanMonsterModels()
                        refreshMonsterFilterUI()
@@ -4361,14 +4361,14 @@ local okMonster, errMonster = pcall(function()
                                if now >= monsterNextSelectAt then
                                    target = nearestMonster(oldPosition, oldModel)
                                    monsterCurrent = target
-                                   monsterNextSelectAt = now + 0.55
+                                   monsterNextSelectAt = now + 0.25
                                end
                            end
                        elseif now >= monsterNextSelectAt then
                            local origin = monsterHome and monsterHome.Position or myRoot.Position
                            target = nearestMonster(origin, nil)
                            monsterCurrent = target
-                           monsterNextSelectAt = now + 0.7
+                           monsterNextSelectAt = now + 0.3
                        end
 
                        if target and target ~= monsterTrackedTarget then
