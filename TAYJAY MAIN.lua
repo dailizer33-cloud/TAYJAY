@@ -3778,6 +3778,10 @@ local okMonster, errMonster = pcall(function()
 
    local function isMonsterAlive(candidate)
        if not candidate or not candidate.model or not candidate.model.Parent then return false end
+       if candidate.isBuff then
+           candidate.root=getBuffRoot(candidate.model)
+           return candidate.root~=nil and candidate.root.Parent~=nil
+       end
        local model = candidate.model
        -- ต้องเป็นกลุ่มที่เลือกอยู่เท่านั้น (Monster หรือ NPC) ไม่ปนกัน
        if candidate.kind ~= monsterFilterMode then return false end
@@ -3813,6 +3817,68 @@ local okMonster, errMonster = pcall(function()
        end
        return best
    end
+   -- MAIN-only buff priority: use Monster Warp's existing movement ownership.
+   local MONSTER_BUFF_WORDS = {"buff","boost","shield","potion","powerup","power_up","power-up","aura","magnet","haste","rage","heal","invinc","regen","bless"}
+   local monsterBuffScanAt, monsterBuffCache = 0, {}
+   local function readMonsterExp()
+       local stats=LocalPlayer:FindFirstChild("leaderstats")
+       if stats then
+           for _,v in ipairs(stats:GetChildren()) do
+               local n=string.lower(v.Name)
+               if (v:IsA("IntValue") or v:IsA("NumberValue")) and (n:find("exp",1,true) or n:find("power",1,true)) then return tonumber(v.Value) end
+           end
+       end
+       local pg=LocalPlayer:FindFirstChildOfClass("PlayerGui")
+       if pg then
+           for _,o in ipairs(pg:GetDescendants()) do
+               if o:IsA("TextLabel") or o:IsA("TextButton") then
+                   local t=tostring(o.Text or ""); local u=string.upper(t)
+                   if (u:find("EXP",1,true) or u:find("POWER",1,true)) and t:find("/",1,true) then
+                       local left=t:match("([%d,%.]+)%s*/")
+                       if left then local value=tonumber((left:gsub(",",""))); if value then return value end end
+                   end
+               end
+           end
+       end
+       return nil
+   end
+   local function getBuffRoot(obj)
+       if not obj or not obj.Parent then return nil end
+       if obj:IsA("BasePart") then return obj end
+       if obj:IsA("Model") then return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart",true) end
+       return nil
+   end
+   local function scanMonsterBuffs()
+       local now=os.clock()
+       if now-monsterBuffScanAt<1 then return monsterBuffCache end
+       monsterBuffScanAt=now
+       local found={}
+       for _,obj in ipairs(workspace:GetDescendants()) do
+           if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent then
+               local name=string.lower(tostring(obj.Name or "")); local match=false
+               for _,word in ipairs(MONSTER_BUFF_WORDS) do if name:find(word,1,true) then match=true break end end
+               if match then
+                   local root=getBuffRoot(obj)
+                   if root and root.Parent and not obj:FindFirstAncestorOfClass("Tool") then
+                       found[#found+1]={model=obj,root=root,name=obj.Name,kind="Buff",isBuff=true}
+                   end
+               end
+           end
+       end
+       monsterBuffCache=found
+       return found
+   end
+   local function nearestMonsterBuff(origin)
+       local best,dist=nil,math.huge
+       for _,c in ipairs(scanMonsterBuffs()) do
+           if c.model.Parent and c.root.Parent then
+               local d=(c.root.Position-origin).Magnitude
+               if d<dist then best,dist=c,d end
+           end
+       end
+       return best
+   end
+
 
    local function setMonsterPanelStatus(titleText, infoText, hp, maxHp)
        if monsterFilterMode == "NPC" then
@@ -4564,25 +4630,40 @@ local okMonster, errMonster = pcall(function()
                    if followAccumulator >= MONSTER_FOLLOW_INTERVAL then
                        followAccumulator = 0
                        local target = monsterCurrent
-                       if target then
-                           local previousRoot = target.root
-                           if not isMonsterAlive(target) then
-                               local oldPosition = previousRoot and previousRoot.Parent and previousRoot.Position or myRoot.Position
-                               local oldModel = target.model
-                               monsterCurrent = nil
-                               monsterLastRoot = nil
+                       local expValue = readMonsterExp()
+                       local buffPhase = expValue ~= nil and expValue > 10000000
+                       if buffPhase then
+                           local buff = nearestMonsterBuff(myRoot.Position)
+                           if buff then
+                               target = buff
+                               monsterCurrent = buff
+                           elseif target and target.isBuff then
                                target = nil
-                               if now >= monsterNextSelectAt then
-                                   target = nearestMonster(oldPosition, oldModel)
-                                   monsterCurrent = target
-                                   monsterNextSelectAt = now + 0.55
-                               end
+                               monsterCurrent = nil
                            end
-                       elseif now >= monsterNextSelectAt then
-                           local origin = monsterHome and monsterHome.Position or myRoot.Position
-                           target = nearestMonster(origin, nil)
-                           monsterCurrent = target
-                           monsterNextSelectAt = now + 0.7
+                       end
+                       if not buffPhase or not target then
+                           if target and target.isBuff then target=nil; monsterCurrent=nil end
+                           if target then
+                               local previousRoot = target.root
+                               if not isMonsterAlive(target) then
+                                   local oldPosition = previousRoot and previousRoot.Parent and previousRoot.Position or myRoot.Position
+                                   local oldModel = target.model
+                                   monsterCurrent = nil
+                                   monsterLastRoot = nil
+                                   target = nil
+                                   if now >= monsterNextSelectAt then
+                                       target = nearestMonster(oldPosition, oldModel)
+                                       monsterCurrent = target
+                                       monsterNextSelectAt = now + 0.55
+                                   end
+                               end
+                           elseif now >= monsterNextSelectAt then
+                               local origin = monsterHome and monsterHome.Position or myRoot.Position
+                               target = nearestMonster(origin, nil)
+                               monsterCurrent = target
+                               monsterNextSelectAt = now + 0.7
+                           end
                        end
 
                        if target and target ~= monsterTrackedTarget then
@@ -4592,7 +4673,7 @@ local okMonster, errMonster = pcall(function()
                        end
 
                        local alive = target ~= nil and isMonsterAlive(target)
-                       if alive and not target.allowNoHealth then
+                       if alive and not target.isBuff and not target.allowNoHealth then
                            -- เป้าที่ "ตีได้จริง" ต้องมี HP เปลี่ยน ถ้านิ่งเกินกำหนด = ของตกแต่ง/อมตะ/เข้าไม่ถึง → ข้าม
                            local hpNow = target.health
                            if target.lastHp == nil or math.abs(hpNow - target.lastHp) > 0.01 then
@@ -4610,7 +4691,16 @@ local okMonster, errMonster = pcall(function()
                            end
                        end
 
-                       if alive then
+                       if alive and target.isBuff then
+                           local part=target.root
+                           if part and part.Parent then
+                               if type(firetouchinterest)=="function" then
+                                   pcall(firetouchinterest,myRoot,part,0)
+                                   pcall(firetouchinterest,myRoot,part,1)
+                               end
+                               setMonsterPanelStatus("⭐ BUFF PRIORITY","กำลังเก็บบัพ: "..tostring(target.name),0,1)
+                           end
+                       elseif alive then
                            local hp, maxHp = target.health, target.maxHealth
                            if monsterHiddenCharacter ~= character then
                                if monsterHiddenCharacter then setInvisibility(monsterHiddenCharacter, false) end
