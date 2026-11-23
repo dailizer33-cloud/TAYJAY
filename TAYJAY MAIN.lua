@@ -897,7 +897,8 @@ pcall(function()
     end
 end)
 
-local TJ = _tjTargetEnv.TJif type(TJ) ~= "table" then
+local TJ = _tjTargetEnv.TJ
+if type(TJ) ~= "table" then
     TJ = {}
     _tjTargetEnv.TJ = TJ
 end
@@ -1796,7 +1797,8 @@ local function stopFlying(syncState)
       return
    end
 
-   flyNowe = false   verticalInput = 0
+   flyNowe = false
+   verticalInput = 0
    flyUi.setVisual(false)
 
    -- คืนค่า Humanoid / Animate ก่อนล้าง physics objects
@@ -2696,6 +2698,7 @@ local function updateCirclePosition()
        part.Transparency = 0.3
    end
 end
+
 do
    local conn = RunService.RenderStepped:Connect(function()
       if not (states.KillAura or states.AutoWarp or states.NormalKillAura or states.DNWarp) then
@@ -3594,7 +3597,8 @@ local okMonster, errMonster = pcall(function()
            for _, part in ipairs(model:GetDescendants()) do
                if part:IsA("BasePart") then
                    local size = part.Size
-                   local volume = size.X * size.Y * size.Z                   if volume > bestVolume then best, bestVolume = part, volume end
+                   local volume = size.X * size.Y * size.Z
+                   if volume > bestVolume then best, bestVolume = part, volume end
                end
            end
            return best
@@ -4493,7 +4497,8 @@ local okMonster, errMonster = pcall(function()
                                if isAttack then
                                    monsterDodgeUntil = math.max(monsterDodgeUntil, now + remaining + MONSTER_DODGE_PAD)
                                    monsterDodgeWhy = attackName
-                               end                           end
+                               end
+                           end
                            local stateWord = "POSSESS"
                            if monsterOrbitOn and monsterFilterMode == "Monster" then stateWord = "ORBIT" end
                            if monsterDodgeOn and monsterFilterMode == "Monster" and now < monsterDodgeUntil then
@@ -5404,7 +5409,8 @@ do
                        local name = string.lower(item.Name)
                        if name == "gun" or name == "sheriffgun" or name == "revolver" then return true end
                    end
-               end           end
+               end
+           end
        end
        return false
    end
@@ -6303,7 +6309,8 @@ local function v70SetPreset(name)
         if m.name == name then mode = m end
     end
     if not mode then return end
-    V70Perf.CurrentPreset = mode.name    if not mode.opts then
+    V70Perf.CurrentPreset = mode.name
+    if not mode.opts then
         v70RestoreAll()
         V70Perf.Options = {Shadows=false, Particles=false, PostEffects=false, Reflections=false, Water=false, Decals=false, Lights=false}
         _G.TAYJAY_WARP_HOLD = 0
