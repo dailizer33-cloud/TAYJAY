@@ -192,6 +192,55 @@ function TargetService:Clear(reason)
     return self:Unlock(reason or "clear")
 end
 
+-- Resolve only explicit attacker attribution exposed by the game.
+-- Roblox has no universal damage-attacker API; unsupported games fall back to WALK's nearest target.
+local function resolveAttackerValue(value)
+    if not value then return nil end
+    if value:IsA("Player") and isPlayerValid(value) and value ~= LocalPlayer then
+        return value
+    end
+    if value:IsA("Model") then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character == value then return player end
+        end
+    end
+    return nil
+end
+
+function TargetService:FindRetaliationTarget()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return nil end
+
+    for _, tagName in ipairs({"creator", "Creator", "attacker", "Attacker", "LastAttacker"}) do
+        local tag = humanoid:FindFirstChild(tagName) or character:FindFirstChild(tagName)
+        if tag and tag:IsA("ObjectValue") then
+            local player = resolveAttackerValue(tag.Value)
+            if player then
+                local dist = distanceTo(player)
+                if dist then
+                    self.RetaliationTarget = player
+                    return player
+                end
+            end
+        end
+    end
+
+    for _, attributeName in ipairs({"LastAttackerUserId", "AttackerUserId", "creatorUserId"}) do
+        local userId = tonumber(humanoid:GetAttribute(attributeName) or character:GetAttribute(attributeName))
+        if userId then
+            local player = Players:GetPlayerByUserId(userId)
+            if player and player ~= LocalPlayer and distanceTo(player) then
+                self.RetaliationTarget = player
+                return player
+            end
+        end
+    end
+
+    self.RetaliationTarget = nil
+    return nil
+end
+
 local function distanceTo(player)
     local myChar = LocalPlayer.Character
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -351,10 +400,24 @@ function TargetService:EnsureCombatOwner()
         end
 
         if statesRef.NormalKillAura then
-            local _, char = TargetService:FindNearest(math.huge, false)
-            if char then
-                pcall(attackFn, char)
+            -- Keep WALK's primary target continuously bound to the nearest living,
+            -- non-blacklisted player. Death/removal naturally selects the next nearest.
+            local nearestPlayer, nearestChar = TargetService:FindNearest(math.huge, true)
+            TargetService.WalkTarget = nearestPlayer
+
+            -- Retaliation is tracked separately and never overwrites WalkTarget.
+            local attacker = TargetService:FindRetaliationTarget()
+            if attacker then
+                local _, attackerChar = distanceTo(attacker)
+                if attackerChar then
+                    pcall(attackFn, attackerChar)
+                end
+            elseif nearestChar then
+                pcall(attackFn, nearestChar)
             end
+        else
+            TargetService.WalkTarget = nil
+            TargetService.RetaliationTarget = nil
         end
     end)
     owner:Own(conn)
