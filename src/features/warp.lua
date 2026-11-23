@@ -1,11 +1,27 @@
 
+local _tjStopWarpPhysicsConnections
+
 do
-   -- WARP (ปุ่มวงกลม): สุ่มหาเป้าหมายในระยะ 200 studs ไม่ต้องเลือกในสมุดสั่งตาย
+   -- WARP (ปุ่มวงกลม): ขอสิทธิ์การเคลื่อนที่ก่อนเริ่มทุกครั้ง
+   local function claimPlayerMovement()
+       if type(_tjMovementController) ~= "table" then return false end
+       return _tjMovementController:Acquire("PLAYER_WARP", function(previous)
+           if previous == "MONSTER" or previous == "CONFLICT" or states.MonsterWarp then
+               if type(stopMonsterWarp) == "function" then
+                   stopMonsterWarp(true)
+               elseif type(_G.TAYJAY_MONSTER_STOP) == "function" then
+                   _G.TAYJAY_MONSTER_STOP()
+               else
+                   return false
+               end
+           end
+           return states.MonsterWarp ~= true
+       end)
+   end
+
    trackConnection(kaCircleBtn.Activated:Connect(function()
        local turningOn = not states.KillAura
-       if turningOn and stopMonsterWarp and states.MonsterWarp then
-           stopMonsterWarp(true)
-       end
+       if turningOn and not claimPlayerMovement() then return end
        states.KillAura = not states.KillAura
        if states.KillAura then
            states.NormalKillAura = false
@@ -15,6 +31,10 @@ do
             selectedDeathNoteTarget = nil
             syncButtonState("DNWarp", false)
             -- อนุญาตคู่ Fly + WARP: ไม่ปิด Fly แล้ว (ตัวล็อกตำแหน่งกลางกันแย่งกันขยับ ดู TAYJAY_POS_LOCK_UNTIL)
+       end
+       if not states.KillAura and not states.DNWarp and not states.AutoWarp
+           and _tjMovementController then
+           _tjMovementController:Release("PLAYER_WARP")
        end
        updateKaBtnDisplay()
    end))
@@ -48,9 +68,14 @@ do
    end
    registerUiSync("DNWarp", function(isOn)
        if isOn then
-           if stopMonsterWarp and states.MonsterWarp then stopMonsterWarp(true) end
+           if not claimPlayerMovement() then
+               states.DNWarp = false
+               return
+           end
            states.KillAura = false
            if flyNowe then stopFlying() end
+       elseif not states.KillAura and not states.AutoWarp and _tjMovementController then
+           _tjMovementController:Release("PLAYER_WARP")
        end
        if _G.TAYJAY_DN_REPAINT then _G.TAYJAY_DN_REPAINT() end
        updateKaBtnDisplay()
@@ -59,8 +84,13 @@ do
 -- เมนู 7 (วาร์ปออโต้) ทำงานกับเป้าหมายในสมุด จึงไม่ซ้อนกับ WARP สุ่ม
    registerUiSync("AutoWarp", function(isOn)
        if isOn then
-           if stopMonsterWarp and states.MonsterWarp then stopMonsterWarp(true) end
+           if not claimPlayerMovement() then
+               states.AutoWarp = false
+               return
+           end
            states.KillAura = false
+       elseif not states.KillAura and not states.DNWarp and _tjMovementController then
+           _tjMovementController:Release("PLAYER_WARP")
        end
        updateKaBtnDisplay()
    end)
@@ -83,7 +113,10 @@ warpRuntimeOwner = ResourceManager:CreateOwner("WarpRuntime", function(reason)
       end
    end)
    _G.TAYJAY_FOLLOW = nil
-   _G.TAYJAY_POS_LOCK_UNTIL = nil
+   if _tjMovementController then
+       _tjMovementController:ClearPositionLock("PLAYER_WARP")
+       _tjMovementController:ReleasePlatform("PLAYER_WARP")
+   end
 end)
 
 local function destroyCircleParts()
@@ -221,8 +254,11 @@ local function stopWarpPhysicsConnections()
    if warpSteppedConnection then warpSteppedConnection:Disconnect(); warpSteppedConnection = nil end
    restoreWarpCollision()
    _G.TAYJAY_FOLLOW = nil
-   _G.TAYJAY_POS_LOCK_UNTIL = nil
+   if _tjMovementController then
+       _tjMovementController:ClearPositionLock("PLAYER_WARP")
+   end
 end
+_tjStopWarpPhysicsConnections = stopWarpPhysicsConnections
 
 local function startWarpPhysicsConnections()
    if warpHeartbeatConnection and warpSteppedConnection then return end
@@ -238,7 +274,8 @@ local function startWarpPhysicsConnections()
            local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
            local tHum = tChar and tChar:FindFirstChildOfClass("Humanoid")
            if not myRootNow or not tRoot or not tHum or tHum.Health <= 0 then return end
-           _G.TAYJAY_POS_LOCK_UNTIL = os.clock() + 0.3
+           if not _tjMovementController or not _tjMovementController:IsOwner("PLAYER_WARP") then return end
+           _tjMovementController:SetPositionLock("PLAYER_WARP", os.clock() + 0.3)
            ResourceManager:RecordWrite("ShadowHunter", "Velocity")
            myRootNow.AssemblyLinearVelocity = Vector3.zero
            myRootNow.AssemblyAngularVelocity = Vector3.zero
@@ -250,7 +287,10 @@ local function startWarpPhysicsConnections()
    if not warpSteppedConnection then
        warpSteppedConnection = RunService.Stepped:Connect(function()
            local lockUntil = _G.TAYJAY_POS_LOCK_UNTIL
-           local locked = (states.KillAura or states.DNWarp) and _G.TAYJAY_FOLLOW ~= nil
+           local locked = _tjMovementController
+               and _tjMovementController:IsOwner("PLAYER_WARP")
+               and (states.KillAura or states.DNWarp) and _G.TAYJAY_FOLLOW ~= nil
+               and _G.TAYJAY_POS_LOCK_OWNER == "PLAYER_WARP"
                and lockUntil ~= nil and os.clock() < lockUntil
            if not locked then restoreWarpCollision(); return end
            local char = LocalPlayer.Character
@@ -319,6 +359,11 @@ local shadowThread = task.spawn(function()
            part.TopSurface = Enum.SurfaceType.Smooth
            part.BottomSurface = Enum.SurfaceType.Smooth
            part.Parent = workspace
+           if _tjMovementController
+               and not _tjMovementController:ClaimPlatform("PLAYER_WARP", part) then
+               part:Destroy()
+               return nil
+           end
            warpPlatform = part
            if warpRuntimeOwner then
                warpRuntimeOwner:Own(part)
@@ -327,12 +372,18 @@ local shadowThread = task.spawn(function()
        return warpPlatform
    end
    local function placePlatformUnder(position)
-       ensurePlatform().CFrame = CFrame.new(position.X, position.Y - WARP_FEET_DROP - WARP_PLATFORM_SIZE.Y / 2, position.Z)
+       local platform = ensurePlatform()
+       if platform then
+           platform.CFrame = CFrame.new(position.X, position.Y - WARP_FEET_DROP - WARP_PLATFORM_SIZE.Y / 2, position.Z)
+       end
    end
    -- ลบพื้นกันตกทันทีเมื่อ WARP ปิดหรือเปลี่ยนตัวละคร
    local function destroyPlatform()
        local part = warpPlatform
        warpPlatform = nil
+       if _tjMovementController then
+           _tjMovementController:ReleasePlatform("PLAYER_WARP", part)
+       end
        if part and part.Parent then pcall(function() part:Destroy() end) end
    end
 
@@ -345,9 +396,36 @@ local shadowThread = task.spawn(function()
    local function goHome(myRoot)
        if warpHome and warpOwner and myRoot and warpOwner == LocalPlayer.Character then
            myRoot.Anchored = false
+           myRoot.AssemblyLinearVelocity = Vector3.zero
+           myRoot.AssemblyAngularVelocity = Vector3.zero
            myRoot.CFrame = warpHome
            placePlatformUnder(warpHome.Position)
        end
+   end
+
+   -- Synchronous stop handshake used when MONSTER takes movement ownership and by STOP ALL.
+   -- It disconnects WARP writers, restores collision, returns home and removes its platform
+   -- before another movement controller is allowed to start.
+   _G.TAYJAY_WARP_STOP_NOW = function(returnHome)
+       states.KillAura = false
+       states.DNWarp = false
+       states.AutoWarp = false
+       _G.TAYJAY_FOLLOW = nil
+       if _tjStopWarpPhysicsConnections then
+           _tjStopWarpPhysicsConnections()
+       end
+       local character = LocalPlayer.Character
+       local root = character and character:FindFirstChild("HumanoidRootPart")
+       if returnHome ~= false then goHome(root) end
+       warpHome, warpOwner, randomWarpTarget = nil, nil, nil
+       warpRestUntil = 0
+       warpWasOn = false
+       destroyPlatform()
+       stopShadowHunterVisuals()
+       if type(TargetService) == "table" and TargetService.Source == "warp" then
+           TargetService:Unlock("movement_owner_switch")
+       end
+       return true
    end
 
    while screenGui.Parent do
@@ -400,6 +478,10 @@ local shadowThread = task.spawn(function()
            -- เก็บ warpOwner ไว้ตรวจจับการเกิดใหม่ แล้วค่อยลบฐานเมื่อเปลี่ยนตัวละคร
            warpHome, randomWarpTarget = nil, nil
            warpWasOn = false
+       end
+       if not (states.KillAura or states.DNWarp or states.AutoWarp)
+           and _tjMovementController then
+           _tjMovementController:Release("PLAYER_WARP")
        end
 
        if not shadowEnabled then
