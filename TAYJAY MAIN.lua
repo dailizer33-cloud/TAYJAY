@@ -4196,7 +4196,7 @@ local okMonster, errMonster = pcall(function()
        if not myRoot then return end
        _tjMovementController:SetPositionLock("MONSTER", os.clock() + 0.3) -- บอก Fly ว่าตอนนี้ MONSTER คุมตำแหน่งอยู่
        local destination = targetRoot.CFrame
-       if monsterOrbPhase == "COLLECT" and monsterOrbItem and monsterOrbPart and monsterOrbPart.Parent then
+       if monsterFilterMode == "Monster" and monsterOrbPhase == "COLLECT" and monsterOrbItem and monsterOrbPart and monsterOrbPart.Parent then
            destination = CFrame.lookAt(monsterOrbPart.Position + Vector3.new(0, 2, 0), monsterOrbPart.Position)
            if os.clock() - monsterOrbLastTouch >= 0.18 then
                monsterOrbLastTouch = os.clock()
@@ -4348,6 +4348,10 @@ local okMonster, errMonster = pcall(function()
    local function setMonsterFilter(mode)
        if monsterFilterMode == mode then return end
        monsterFilterMode = mode
+       monsterOrbPhase = "ATTACK"
+       monsterOrbItem, monsterOrbPart = nil, nil
+       monsterOrbNextSearch = os.clock() + 5
+       monsterOrbPhaseUntil, monsterOrbLastTouch = 0, 0
        -- เปลี่ยนกลุ่ม → ทิ้งเป้าเดิมทันที แล้วเลือกใหม่จากกลุ่มที่เลือก
        monsterCurrent = nil
        monsterLastRoot = nil
@@ -4593,7 +4597,7 @@ local okMonster, errMonster = pcall(function()
                            if monsterOrbPhase == "COLLECT" then stateWord = "COLLECT ACRON SUGAR ORB"
                            elseif monsterOrbPhase == "RETURN" then stateWord = "RETURN TO MONSTER"
                            elseif monsterOrbitOn and monsterFilterMode == "Monster" then stateWord = "ORBIT" end
-                           if monsterDodgeOn and monsterFilterMode == "Monster" and now < monsterDodgeUntil then
+                           if monsterOrbPhase ~= "COLLECT" and monsterDodgeOn and monsterFilterMode == "Monster" and now < monsterDodgeUntil then
                                stateWord = "DODGE " .. tostring(monsterDodgeWhy)
                            end
                            setMonsterPanelStatus(
