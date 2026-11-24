@@ -13,7 +13,7 @@ local okMonster, errMonster = pcall(function()
 
    local monsterPanel = Instance.new("Frame", screenGui)
    monsterPanel.Name = "TayJayMonsterTargetPanel"
-   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 180)
+   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 205)
    monsterPanel.Position = UI_LAYOUT.MonsterTargetPanel
    monsterPanel.BackgroundColor3 = GREEN.dark
    monsterPanel.BackgroundTransparency = 0.03
@@ -118,10 +118,26 @@ local okMonster, errMonster = pcall(function()
 
    local claimPlaytimeBusy = false
 
+   -- Manual Rebirth action: server validates eligibility; no automatic retry.
+   local rebirthBusy = false
+   local rebirthLastAt = 0
+   local rebirthBtn = Instance.new("TextButton", monsterPanel)
+   rebirthBtn.Name = "RebirthBtn"
+   rebirthBtn.Size = UDim2.new(1, -18, 0, 22)
+   rebirthBtn.Position = UDim2.fromOffset(9, 128)
+   rebirthBtn.BackgroundColor3 = Color3.fromRGB(255, 145, 70)
+   rebirthBtn.Text = "REBIRTH"
+   rebirthBtn.TextColor3 = WHITE_TEXT
+   rebirthBtn.Font = Enum.Font.GothamBold
+   rebirthBtn.TextSize = 11
+   rebirthBtn.AutoButtonColor = true
+   rebirthBtn.Active = true
+   Instance.new("UICorner", rebirthBtn).CornerRadius = UDim.new(0, 7)
+
    local monsterCountLabel = Instance.new("TextLabel", monsterPanel)
    monsterCountLabel.Name = "MonsterFilterCount"
    monsterCountLabel.Size = UDim2.new(1, -18, 0, 14)
-   monsterCountLabel.Position = UDim2.fromOffset(9, 128)
+   monsterCountLabel.Position = UDim2.fromOffset(9, 153)
    monsterCountLabel.BackgroundTransparency = 1
    monsterCountLabel.RichText = true
    monsterCountLabel.Text = "👾 Monster: 0  |  🧑 NPC: 0"
@@ -133,7 +149,7 @@ local okMonster, errMonster = pcall(function()
    local monsterInfo = Instance.new("TextLabel", monsterPanel)
    monsterInfo.Name = "MonsterTargetInfo"
    monsterInfo.Size = UDim2.new(1, -18, 0, 28)
-   monsterInfo.Position = UDim2.fromOffset(9, 145)
+   monsterInfo.Position = UDim2.fromOffset(9, 169)
    monsterInfo.Size = UDim2.new(1, -18, 0, 30)
    monsterInfo.BackgroundTransparency = 1
    monsterInfo.Text = "ปิดอยู่ • กด MONSTER เพื่อเริ่มค้นหา"
@@ -1053,6 +1069,57 @@ local okMonster, errMonster = pcall(function()
            claimPlaytimeBusy = false
        end)
    end))
+   trackConnection(rebirthBtn.Activated:Connect(function()
+       local now = os.clock()
+       if rebirthBusy then return end
+       if now - rebirthLastAt < 3 then
+           rebirthBtn.Text = "WAIT..."
+           return
+       end
+
+       rebirthBusy = true
+       rebirthLastAt = now
+       rebirthBtn.Active = false
+       rebirthBtn.AutoButtonColor = false
+       rebirthBtn.Text = "REBIRTH..."
+       task.spawn(function()
+           local ok, result = pcall(function()
+               local folder = ReplicatedStorage:FindFirstChild("AntRemotes")
+                   or ReplicatedStorage:WaitForChild("AntRemotes", 5)
+               if not folder then error("AntRemotes folder not found") end
+
+               local remote = folder:FindFirstChild("Rebirth")
+                   or folder:WaitForChild("Rebirth", 5)
+               if not remote then error("Rebirth remote not found") end
+               if not remote:IsA("RemoteFunction") then
+                   error("Rebirth remote is not a RemoteFunction (" .. remote.ClassName .. ")")
+               end
+
+               return remote:InvokeServer()
+           end)
+
+           if ok then
+               if result == false then
+                   rebirthBtn.Text = "NOT READY"
+               else
+                   rebirthBtn.Text = "REBIRTH SENT"
+               end
+               print("[TAYJAY REBIRTH] InvokeServer returned: " .. tostring(result))
+           else
+               rebirthBtn.Text = "REBIRTH ERROR"
+               warn("[TAYJAY REBIRTH] " .. tostring(result))
+           end
+
+           task.wait(2.5)
+           if rebirthBtn.Parent then
+               rebirthBtn.Text = "REBIRTH"
+               rebirthBtn.Active = true
+               rebirthBtn.AutoButtonColor = true
+           end
+           rebirthBusy = false
+       end)
+   end))
+
    trackConnection(orbitBtn.Activated:Connect(function()
        monsterOrbitOn = not monsterOrbitOn
        monsterLastRoot = nil -- ให้วางตำแหน่งใหม่ทันที (กลับไปติดบนเป้าเมื่อปิดวง)
