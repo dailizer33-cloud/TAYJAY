@@ -3200,7 +3200,7 @@ local okMonster, errMonster = pcall(function()
 
    local monsterPanel = Instance.new("Frame", screenGui)
    monsterPanel.Name = "TayJayMonsterTargetPanel"
-   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 205)
+   monsterPanel.Size = UDim2.fromOffset(UI_LAYOUT.PanelW, 232)
    monsterPanel.Position = UI_LAYOUT.MonsterTargetPanel
    monsterPanel.BackgroundColor3 = GREEN.dark
    monsterPanel.BackgroundTransparency = 0.03
@@ -3308,10 +3308,25 @@ local okMonster, errMonster = pcall(function()
    -- Manual Rebirth action: server validates eligibility; no automatic retry.
    local rebirthBusy = false
    local rebirthLastAt = 0
+   local evolveBusy = false
+   local evolveLastAt = 0
+   local evolveBtn = Instance.new("TextButton", monsterPanel)
+   evolveBtn.Name = "EvolveBtn"
+   evolveBtn.Size = UDim2.new(1, -18, 0, 22)
+   evolveBtn.Position = UDim2.fromOffset(9, 128)
+   evolveBtn.BackgroundColor3 = Color3.fromRGB(70, 190, 255)
+   evolveBtn.Text = "EVOLVE / HATCH"
+   evolveBtn.TextColor3 = WHITE_TEXT
+   evolveBtn.Font = Enum.Font.GothamBold
+   evolveBtn.TextSize = 11
+   evolveBtn.AutoButtonColor = true
+   evolveBtn.Active = true
+   Instance.new("UICorner", evolveBtn).CornerRadius = UDim.new(0, 7)
+
    local rebirthBtn = Instance.new("TextButton", monsterPanel)
    rebirthBtn.Name = "RebirthBtn"
    rebirthBtn.Size = UDim2.new(1, -18, 0, 22)
-   rebirthBtn.Position = UDim2.fromOffset(9, 128)
+   rebirthBtn.Position = UDim2.fromOffset(9, 154)
    rebirthBtn.BackgroundColor3 = Color3.fromRGB(255, 145, 70)
    rebirthBtn.Text = "REBIRTH"
    rebirthBtn.TextColor3 = WHITE_TEXT
@@ -3324,7 +3339,7 @@ local okMonster, errMonster = pcall(function()
    local monsterCountLabel = Instance.new("TextLabel", monsterPanel)
    monsterCountLabel.Name = "MonsterFilterCount"
    monsterCountLabel.Size = UDim2.new(1, -18, 0, 14)
-   monsterCountLabel.Position = UDim2.fromOffset(9, 153)
+   monsterCountLabel.Position = UDim2.fromOffset(9, 179)
    monsterCountLabel.BackgroundTransparency = 1
    monsterCountLabel.RichText = true
    monsterCountLabel.Text = "👾 Monster: 0  |  🧑 NPC: 0"
@@ -3336,7 +3351,7 @@ local okMonster, errMonster = pcall(function()
    local monsterInfo = Instance.new("TextLabel", monsterPanel)
    monsterInfo.Name = "MonsterTargetInfo"
    monsterInfo.Size = UDim2.new(1, -18, 0, 28)
-   monsterInfo.Position = UDim2.fromOffset(9, 169)
+   monsterInfo.Position = UDim2.fromOffset(9, 195)
    monsterInfo.Size = UDim2.new(1, -18, 0, 30)
    monsterInfo.BackgroundTransparency = 1
    monsterInfo.Text = "ปิดอยู่ • กด MONSTER เพื่อเริ่มค้นหา"
@@ -4256,7 +4271,90 @@ local okMonster, errMonster = pcall(function()
            claimPlaytimeBusy = false
        end)
    end))
-   trackConnection(rebirthBtn.Activated:Connect(function()
+   local function invokeEvolve(source)
+        local now = os.clock()
+        if evolveBusy or now - evolveLastAt < 2 then return false end
+        evolveBusy = true
+        evolveLastAt = now
+        evolveBtn.Active = false
+        evolveBtn.AutoButtonColor = false
+        evolveBtn.Text = "EVOLVING..."
+        task.spawn(function()
+            local ok, result = pcall(function()
+                local folder = ReplicatedStorage:FindFirstChild("AntRemotes")
+                    or ReplicatedStorage:WaitForChild("AntRemotes", 5)
+                if not folder then error("AntRemotes folder not found") end
+                local remote = folder:FindFirstChild("Evolve")
+                    or folder:WaitForChild("Evolve", 5)
+                if not remote then error("Evolve remote not found") end
+                if not remote:IsA("RemoteFunction") then
+                    error("Evolve remote is not a RemoteFunction (" .. remote.ClassName .. ")")
+                end
+                return remote:InvokeServer()
+            end)
+            if ok then
+                evolveBtn.Text = "EVOLVE SENT"
+                print("[TAYJAY EVOLVE] " .. tostring(source) .. " InvokeServer returned: " .. tostring(result))
+            else
+                evolveBtn.Text = "EVOLVE ERROR"
+                warn("[TAYJAY EVOLVE] " .. tostring(result))
+            end
+            task.wait(2)
+            if evolveBtn.Parent then
+                evolveBtn.Text = "EVOLVE / HATCH"
+                evolveBtn.Active = true
+                evolveBtn.AutoButtonColor = true
+            end
+            evolveBusy = false
+        end)
+        return true
+    end
+
+    trackConnection(evolveBtn.Activated:Connect(function()
+        invokeEvolve("manual")
+    end))
+
+    -- Auto Evolve/Hatch: trigger once when the game's visible UI reports HATCH or EVOLVE.
+    local evolveAutoLatched = false
+    task.spawn(function()
+        local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+        while not _G.TAYJAY_STOPPED do
+            local ready = false
+            if states.MonsterWarp then
+                for _, obj in ipairs(playerGui:GetDescendants()) do
+                    if (obj:IsA("TextLabel") or obj:IsA("TextButton"))
+                        and not obj:IsDescendantOf(monsterPanel) and obj.Visible then
+                        local value = string.upper((obj.Text or ""):match("^%s*(.-)%s*$") or "")
+                        if value == "HATCH" or value == "EVOLVE" then
+                            local visible = true
+                            local parent = obj.Parent
+                            while parent and parent ~= playerGui do
+                                if parent:IsA("GuiObject") and not parent.Visible then
+                                    visible = false
+                                    break
+                                end
+                                if parent:IsA("ScreenGui") and not parent.Enabled then
+                                    visible = false
+                                    break
+                                end
+                                parent = parent.Parent
+                            end
+                            if visible then ready = true; break end
+                        end
+                    end
+                end
+            end
+            if not ready then
+                evolveAutoLatched = false
+            elseif not evolveAutoLatched then
+                evolveAutoLatched = true
+                invokeEvolve("auto-ready-ui")
+            end
+            task.wait(0.5)
+        end
+    end)
+
+    trackConnection(rebirthBtn.Activated:Connect(function()
        local now = os.clock()
        if rebirthBusy then return end
        if now - rebirthLastAt < 3 then
