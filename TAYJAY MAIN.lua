@@ -3435,7 +3435,7 @@ local okMonster, errMonster = pcall(function()
    local monsterNextSelectAt = 0
    local monsterWarpWasOn = false
    local monsterWarpStarting = false
-   local MONSTER_SCAN_MIN_INTERVAL = 0.45
+   local MONSTER_SCAN_MIN_INTERVAL = 0.36 -- 20% faster monster discovery
    local MONSTER_FOLLOW_INTERVAL = 0.06
    local MONSTER_PLATFORM_SIZE = Vector3.new(16, 1, 16)
    local MONSTER_FEET_DROP = 3
@@ -4122,6 +4122,112 @@ local okMonster, errMonster = pcall(function()
        monsterResumeGeneration = monsterResumeGeneration + 1
        stopMonsterWarp(true)
    end
+
+   -- Farm-derived combat input: locate BITE and Q/E buttons in the same ScreenGui.
+   local function farmTapButton(button)
+       if not button or not button.Parent or not button.Visible then return false end
+       local fired = false
+       if typeof(getconnections) == "function" then
+           for _, eventName in ipairs({"Activated", "MouseButton1Click"}) do
+               local ok, signal = pcall(function() return button[eventName] end)
+               if ok and signal then
+                   local got, connections = pcall(getconnections, signal)
+                   if got and type(connections) == "table" then
+                       for _, connection in ipairs(connections) do
+                           if pcall(function() connection:Fire() end) then fired = true end
+                       end
+                   end
+               end
+           end
+       end
+       if pcall(function() button:Activate() end) then fired = true end
+       return fired
+   end
+
+   local farmBiteButton, farmSkillButtons, farmGuiScanAt = nil, {}, 0
+   local function farmFindCombatButtons()
+       local now = os.clock()
+       if now - farmGuiScanAt < 1.5 and farmBiteButton and farmBiteButton.Parent then
+           return farmBiteButton, farmSkillButtons
+       end
+       farmGuiScanAt = now
+       local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+       if not playerGui then return nil, {} end
+       local buttons = {}
+       for _, obj in ipairs(playerGui:GetDescendants()) do
+           if (obj:IsA("TextButton") or obj:IsA("ImageButton")) and obj.Visible
+               and obj.AbsoluteSize.X > 10 and obj.AbsoluteSize.Y > 10 then
+               local label = string.upper(tostring(obj.Name) .. " " .. tostring(obj:IsA("TextButton") and obj.Text or ""))
+               if label:find("BITE", 1, true) or label:find("ATTACK", 1, true) then farmBiteButton = obj end
+               buttons[#buttons+1] = {button=obj, label=label, gui=obj:FindFirstAncestorOfClass("ScreenGui"),
+                   pos=obj.AbsolutePosition + obj.AbsoluteSize/2}
+           end
+       end
+       farmSkillButtons = {}
+       if farmBiteButton then
+           local gui = farmBiteButton:FindFirstAncestorOfClass("ScreenGui")
+           local bitePos = farmBiteButton.AbsolutePosition + farmBiteButton.AbsoluteSize/2
+           local candidates = {}
+           for _, entry in ipairs(buttons) do
+               if entry.button ~= farmBiteButton and entry.gui == gui and entry.pos.Y < bitePos.Y - 8
+                   and math.abs(entry.pos.X-bitePos.X) <= 150 and (entry.pos-bitePos).Magnitude <= 210
+                   and not entry.label:find("RUN",1,true) and not entry.label:find("JUMP",1,true)
+                   and not entry.label:find("MENU",1,true) and not entry.label:find("BITE",1,true) then
+                   candidates[#candidates+1] = entry
+               end
+           end
+           table.sort(candidates,function(a,b)
+               if math.abs(a.pos.Y-b.pos.Y)>12 then return a.pos.Y<b.pos.Y end
+               return a.pos.X<b.pos.X
+           end)
+           farmSkillButtons[1] = candidates[1] and candidates[1].button
+           farmSkillButtons[2] = candidates[2] and candidates[2].button
+       end
+       return farmBiteButton, farmSkillButtons
+   end
+
+   -- Farm-style touch collection. No guessed Collect IDs are sent to the server.
+   local farmOrbLastScan, farmOrbTouchAt = 0, 0
+   local function farmCollectNearbyOrbs()
+       local now = os.clock()
+       if now-farmOrbLastScan < 0.8 or now-farmOrbTouchAt < 0.18 then return end
+       farmOrbLastScan = now
+       if typeof(firetouchinterest) ~= "function" then return end
+       local character = LocalPlayer.Character
+       local root = character and character:FindFirstChild("HumanoidRootPart")
+       if not root then return end
+       local count = 0
+       for _, obj in ipairs(workspace:GetDescendants()) do
+           if obj:IsA("BasePart") and obj.Parent then
+               local name = string.lower(obj.Name or "")
+               if (name:find("orb",1,true) or name:find("buff",1,true) or name:find("powerup",1,true))
+                   and (obj:FindFirstChildWhichIsA("TouchTransmitter") or obj.CanTouch)
+                   and (obj.Position-root.Position).Magnitude <= 18 then
+                   pcall(firetouchinterest,root,obj,0)
+                   pcall(firetouchinterest,root,obj,1)
+                   count = count+1
+                   if count>=8 then break end
+               end
+           end
+       end
+       if count>0 then farmOrbTouchAt=now end
+   end
+
+   -- Separate worker so input automation does not stall target scan or warp follow.
+   task.spawn(function()
+       local nextBite,nextQ,nextE=0,0,0
+       while screenGui.Parent and not _G.TAYJAY_STOPPED do
+           if states.MonsterWarp and monsterFilterMode=="Monster" then
+               local now=os.clock()
+               local bite,skills=farmFindCombatButtons()
+               if now>=nextBite and bite then farmTapButton(bite); nextBite=now+0.14 end
+               if now>=nextQ and skills[1] then farmTapButton(skills[1]); nextQ=now+7 end
+               if now>=nextE and skills[2] then farmTapButton(skills[2]); nextE=now+9 end
+               farmCollectNearbyOrbs()
+           end
+           task.wait(0.05)
+       end
+   end)
 
    local function startMonsterWarp()
        if states.MonsterWarp then
