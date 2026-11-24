@@ -4307,7 +4307,77 @@ local okMonster, errMonster = pcall(function()
        end)
    end))
 
-   trackConnection(orbitBtn.Activated:Connect(function()
+   -- Auto Rebirth: detect visible game UI text REBIRTH or REBIRTH!.
+-- Ignore this module's own manual button to prevent self-triggering.
+local rebirthAutoLatched = false
+task.spawn(function()
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    while not _G.TAYJAY_STOPPED do
+        local readyTextFound = false
+        if states.MonsterWarp then
+            for _, obj in ipairs(playerGui:GetDescendants()) do
+                if (obj:IsA("TextLabel") or obj:IsA("TextButton"))
+                    and not obj:IsDescendantOf(monsterPanel)
+                    and obj.Visible then
+                    local textValue = string.upper((obj.Text or ""):match("^%s*(.-)%s*$") or "")
+                    if textValue == "REBIRTH" or textValue == "REBIRTH!" then
+                        local visible = true
+                        local parent = obj.Parent
+                        while parent and parent ~= playerGui do
+                            if parent:IsA("GuiObject") and not parent.Visible then
+                                visible = false
+                                break
+                            end
+                            if parent:IsA("ScreenGui") and not parent.Enabled then
+                                visible = false
+                                break
+                            end
+                            parent = parent.Parent
+                        end
+                        if visible then
+                            readyTextFound = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
+
+        if not readyTextFound then
+            rebirthAutoLatched = false
+        elseif not rebirthAutoLatched then
+            rebirthAutoLatched = true
+            local now = os.clock()
+            if not rebirthBusy and now - rebirthLastAt >= 3 then
+                rebirthBusy = true
+                rebirthLastAt = now
+                task.spawn(function()
+                    local ok, result = pcall(function()
+                        local folder = ReplicatedStorage:FindFirstChild("AntRemotes")
+                            or ReplicatedStorage:WaitForChild("AntRemotes", 5)
+                        if not folder then error("AntRemotes folder not found") end
+                        local remote = folder:FindFirstChild("Rebirth")
+                            or folder:WaitForChild("Rebirth", 5)
+                        if not remote then error("Rebirth remote not found") end
+                        if not remote:IsA("RemoteFunction") then
+                            error("Rebirth remote is not a RemoteFunction (" .. remote.ClassName .. ")")
+                        end
+                        return remote:InvokeServer()
+                    end)
+                    if ok then
+                        print("[TAYJAY REBIRTH] Auto InvokeServer returned: " .. tostring(result))
+                    else
+                        warn("[TAYJAY REBIRTH] Auto InvokeServer failed: " .. tostring(result))
+                    end
+                    rebirthBusy = false
+                end)
+            end
+        end
+        task.wait(0.5)
+    end
+end)
+
+trackConnection(orbitBtn.Activated:Connect(function()
        monsterOrbitOn = not monsterOrbitOn
        monsterLastRoot = nil -- ให้วางตำแหน่งใหม่ทันที (กลับไปติดบนเป้าเมื่อปิดวง)
        refreshMonsterFilterUI()
